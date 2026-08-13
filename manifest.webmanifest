@@ -1,0 +1,29 @@
+{
+  "name": "Nha Khoa Hoàng Bách",
+  "short_name": "NK Hoàng Bách",
+  "description": "Phần mềm quản lý nha khoa — bản mockup giao diện",
+  "lang": "vi",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#F4F7F6",
+  "theme_color": "#0E7E6B",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
