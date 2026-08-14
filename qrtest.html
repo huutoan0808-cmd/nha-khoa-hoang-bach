@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><title>Kiểm tra mã QR</title></head>
+<body style="font:14px system-ui;padding:16px">
+<h1>Kiểm tra bộ tạo mã QR</h1>
+<div id="out">Đang chạy…</div>
+<script src="qr.js"></script>
+<script>
+window.runQRTest = async function(){
+  const cases = [
+    'NKHB-ST1',
+    'CHAMCONG:ST1',
+    'https://huutoan0808-cmd.github.io/nha-khoa-hoang-bach/#cc=ST1-1755140000',
+    'Nhân viên: BS. Trần Minh Đức',
+    'x'.repeat(150)
+  ];
+  if (!('BarcodeDetector' in window)) return {err:'Trình duyệt không có BarcodeDetector'};
+  const det = new BarcodeDetector({formats:['qr_code']});
+  const res = [];
+  for (const text of cases){
+    const m = QR.encode(text), n = m.length, q = 4, scale = 8, size = (n+q*2)*scale;
+    const cv = document.createElement('canvas'); cv.width = cv.height = size;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0,0,size,size);
+    ctx.fillStyle = '#000';
+    for (let r=0;r<n;r++) for (let c=0;c<n;c++) if (m[r][c]) ctx.fillRect((c+q)*scale,(r+q)*scale,scale,scale);
+    let got = null, err = null;
+    try { const b = await det.detect(cv); got = b.length ? b[0].rawValue : null; }
+    catch(e){ err = ''+e; }
+    res.push({len:text.length, ver:(n-17)/4, ok: got===text, got: got===text ? 'KHỚP' : (got||err||'không đọc được')});
+  }
+  return res;
+};
+runQRTest().then(r=>{document.getElementById('out').textContent = JSON.stringify(r,null,1); window.__qr = r;});
+</script>
+</body></html>

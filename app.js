@@ -6,8 +6,11 @@ const $ = s => document.querySelector(s);
 const h = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const money = n => (Math.round(n) || 0).toLocaleString('vi-VN') + ' ₫';
-const todayISO = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
-const isoAdd = (iso, days) => { const d = new Date(iso + 'T00:00'); d.setDate(d.getDate() + days); return d.toISOString().slice(0,10); };
+const todayISO = () => isoOf(new Date());
+/* Cộng ngày theo giờ địa phương. Không dùng toISOString() vì ở múi giờ Việt Nam
+   nó quy về UTC và trả về sai 1 ngày. */
+const isoOf = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+const isoAdd = (iso, days) => { const d = new Date(iso + 'T00:00'); d.setDate(d.getDate() + days); return isoOf(d); };
 const fmtD = iso => iso ? iso.slice(8,10) + '/' + iso.slice(5,7) + '/' + iso.slice(0,4) : '—';
 const monthOf = iso => iso ? iso.slice(0,7) : '';
 const WEEKD = ['CN','T2','T3','T4','T5','T6','T7'];
@@ -182,6 +185,22 @@ function seed() {
     {id:'lb3', customerId:'c3', labName:LABS[0], type:'Máng chỉnh nha', teeth:'2 hàm', qty:2, sent:isoAdd(T,-20), due:isoAdd(T,-13), received:isoAdd(T,-13), apptId:'', note:''},
   ];
 
+  /* Nhật ký chấm công mẫu: 10 ngày làm việc gần nhất */
+  const attLog = [];
+  const IN_T = {st1:'07:52', st2:'07:58', st3:'07:55', st4:'07:48'};
+  for (let d = 12; d >= 0; d--) {
+    const day = isoAdd(T, -d);
+    if (new Date(day + 'T00:00').getDay() === 0) continue;          /* nghỉ chủ nhật */
+    staff.forEach((st, i) => {
+      if ((d + i) % 7 === 3) return;                                 /* rải vài ngày nghỉ */
+      const base = IN_T[st.id] || '08:00';
+      const late = (st.id === 'st3' && (d === 3 || d === 6)) ? '08:23' : base;   /* phụ tá đi trễ 2 hôm */
+      attLog.push({id: uid()+d+i, staffId: st.id, date: day, inAt: late,
+        outAt: d === 0 ? '' : (st.id === 'st2' ? '17:45' : '17:30'),
+        net: (d === 4 && st.id === 'st4') ? 'outside' : 'clinic', viaQR: true});
+    });
+  }
+
   const attendance = {st1:{days:9,late:0,leave:0,unpaid:0,ot:0}, st2:{days:9.5,late:0,leave:0,unpaid:0,ot:3.5}, st3:{days:8,late:2,leave:1,unpaid:0,ot:0}, st4:{days:9,late:0,leave:0,unpaid:0,ot:1}};
   const bonuses = [
     {id:'b1', date:monthOf(T)+'-01', staffId:'st1', amount:2000000, reason:'Thưởng vượt KPI implant tháng trước'},
@@ -191,8 +210,8 @@ function seed() {
     {id:'b5', date:monthOf(T)+'-08', staffId:'st3', amount:-200000, reason:'Phạt đi trễ 2 lần (nội quy)'},
   ];
 
-  return {ver:1, clinic:{name:'Nha Khoa Hoàng Bách', legal:'Công ty TNHH Nha Khoa Hoàng Bách – Gò Quao', authority:'Sở Y tế An Giang', addr:'Rạch Giá, An Giang', phone:'0297 3xxx xxx', taxCode:'', maCSKCB:''},
-    seq:{cust:1300, receipt:rno}, services, staff, customers, treatments, receipts, rx, inventory, appointments, labs, attendance, bonuses};
+  return {ver:1, clinic:{name:'Nha Khoa Hoàng Bách', legal:'Công ty TNHH Nha Khoa Hoàng Bách – Gò Quao', authority:'Sở Y tế An Giang', addr:'Rạch Giá, An Giang', phone:'0297 3xxx xxx', taxCode:'', maCSKCB:'', shiftStart:'08:00', wifiIp:''},
+    seq:{cust:1300, receipt:rno}, services, staff, customers, treatments, receipts, rx, inventory, appointments, labs, attendance, attLog, bonuses};
 }
 
 function load() {
@@ -1106,6 +1125,197 @@ SCREENS.inventory = () => {
   <div class="note-block" style="margin-top:12px">Cảnh báo tự động: <b>Quá hạn</b> (đỏ) khi HSD đã qua · <b>Sắp hết hạn</b> (vàng) khi còn ≤ 60 ngày · <b>Dưới định mức</b> (đỏ) khi tồn ≤ định mức tối thiểu.</div>`;
 };
 
+/* ---------- Chấm công bằng mã QR ---------- */
+const QR_PREFIX = 'NKHB-CC:';
+const nowHM = () => { const d = new Date(); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); };
+const Att = {
+  stream: null, timer: null,
+
+  logOf(staffId, date){ return (db.attLog||[]).find(x => x.staffId === staffId && x.date === date); },
+
+  /* Quét được mã → vào ca, quét lần nữa → ra ca */
+  async record(staffId, viaQR){
+    const st = staffById(staffId);
+    if (!st) { App.toast('Mã QR không thuộc nhân viên nào của phòng khám'); return; }
+    if (!db.attLog) db.attLog = [];
+    const date = todayISO(), t = nowHM();
+    let log = this.logOf(staffId, date);
+    const net = await this.checkNetwork();
+    if (!log) {
+      log = {id:uid(), staffId, date, inAt:t, outAt:'', net, viaQR:!!viaQR};
+      db.attLog.push(log);
+      App.toast(st.name + ' — vào ca ' + t + (net==='outside' ? ' ⚠ ngoài mạng phòng khám' : ''));
+    } else if (!log.outAt) {
+      log.outAt = t; log.netOut = net;
+      App.toast(st.name + ' — ra ca ' + t);
+    } else {
+      log.outAt = t;
+      App.toast(st.name + ' — cập nhật giờ ra ' + t);
+    }
+    save(); App.render();
+  },
+
+  /* Không đọc được tên wifi từ trình duyệt — đối chiếu địa chỉ mạng công cộng thay thế */
+  async checkNetwork(){
+    const want = (db.clinic && db.clinic.wifiIp || '').trim();
+    if (!want) return 'unknown';
+    try {
+      const ctrl = new AbortController();
+      setTimeout(() => ctrl.abort(), 4000);
+      const r = await fetch('https://api.ipify.org?format=json', {signal: ctrl.signal});
+      const j = await r.json();
+      return j.ip === want ? 'clinic' : 'outside';
+    } catch(e){ return 'unknown'; }
+  },
+
+  /* Lưu địa chỉ mạng hiện tại làm mạng phòng khám */
+  async saveClinicIp(){
+    App.toast('Đang lấy địa chỉ mạng…');
+    try {
+      const r = await fetch('https://api.ipify.org?format=json');
+      const j = await r.json();
+      db.clinic.wifiIp = j.ip; save(); App.render();
+      App.toast('Đã ghi nhận mạng phòng khám: ' + j.ip);
+    } catch(e){ App.toast('Không lấy được địa chỉ mạng (máy đang offline?)'); }
+  },
+
+  /* Máy chấm công: bật camera quét mã nhân viên */
+  scanner(){
+    App.modal('Máy chấm công — quét mã QR', `
+      <div id="scanWrap">
+        <video id="scanVid" playsinline muted style="width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:cover"></video>
+        <div id="scanMsg" class="note-block" style="margin-top:10px">Đang mở camera…</div>
+      </div>
+      <div class="f" style="margin-top:12px"><label>Hoặc nhập mã nhân viên bằng tay</label>
+        <select id="scanManual">${db.staff.map(s=>`<option value="${s.id}">${h(s.name)}</option>`).join('')}</select></div>
+      <div class="form-actions">
+        <button type="button" class="btn" onclick="Att.stopScan();App.closeModal()">Đóng</button>
+        <button type="button" class="btn primary" onclick="Att.record(document.getElementById('scanManual').value,false)">Chấm công thủ công</button>
+      </div>`);
+    this.startScan();
+  },
+  async startScan(){
+    const msg = () => document.getElementById('scanMsg');
+    if (!('BarcodeDetector' in window)) {
+      const el = msg(); if (el) el.innerHTML = 'Trình duyệt này chưa hỗ trợ quét mã QR. Hãy dùng <b>Chrome trên Android</b> hoặc <b>Safari trên iPhone (iOS 17 trở lên)</b>, hoặc chấm công thủ công bên dưới.';
+      const v = document.getElementById('scanVid'); if (v) v.style.display = 'none';
+      return;
+    }
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+      const v = document.getElementById('scanVid');
+      if (!v) { this.stopScan(); return; }
+      v.srcObject = this.stream; await v.play();
+      const el = msg(); if (el) el.textContent = 'Đưa mã QR của nhân viên vào khung hình.';
+      const det = new BarcodeDetector({formats:['qr_code']});
+      let busy = false;
+      this.timer = setInterval(async () => {
+        if (busy || !document.getElementById('scanVid')) return;
+        busy = true;
+        try {
+          const codes = await det.detect(v);
+          if (codes.length) {
+            const raw = codes[0].rawValue || '';
+            if (raw.startsWith(QR_PREFIX)) {
+              this.stopScan();
+              await this.record(raw.slice(QR_PREFIX.length), true);
+              App.closeModal();
+            } else { const e2 = msg(); if (e2) e2.textContent = 'Mã này không phải mã chấm công của phòng khám.'; }
+          }
+        } catch(e){}
+        busy = false;
+      }, 400);
+    } catch(e){
+      const el = msg(); if (el) el.textContent = 'Không mở được camera: ' + e.message + '. Hãy cho phép quyền camera, hoặc chấm công thủ công bên dưới.';
+    }
+  },
+  stopScan(){
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
+    if (this.stream) { this.stream.getTracks().forEach(t => t.stop()); this.stream = null; }
+  },
+
+  /* Mã QR cá nhân — in ra thẻ hoặc để nhân viên lưu trong máy */
+  showCard(staffId){
+    const st = staffById(staffId);
+    App.modal('Mã QR chấm công — ' + st.name, `
+      <div style="text-align:center">
+        <div style="display:inline-block;padding:10px;background:#fff;border-radius:12px;border:1px solid var(--line)">${QR.svg(QR_PREFIX + st.id, 230)}</div>
+        <div style="margin-top:10px;font-weight:700">${h(st.name)}</div>
+        <div class="sub-line">${h(st.role)} · ${h(db.clinic.name)}</div>
+      </div>
+      <div class="note-block" style="margin-top:12px">In mã này dán lên thẻ nhân viên, hoặc chụp màn hình để trong điện thoại. Đưa mã vào máy chấm công ở quầy để ghi giờ vào/ra.</div>
+      <div class="form-actions">
+        <button type="button" class="btn" onclick="App.closeModal()">Đóng</button>
+        <button type="button" class="btn primary" onclick="Att.printCard('${st.id}')">${IC.print} In thẻ</button></div>`);
+  },
+  printCard(staffId){
+    const st = staffById(staffId);
+    App.print(`<div style="text-align:center">
+      <h1>THẺ CHẤM CÔNG</h1>
+      <p style="margin:2px 0"><b>${h(db.clinic.name)}</b><br>${h(db.clinic.addr)}</p>
+      <div style="margin:14px auto">${QR.svg(QR_PREFIX + st.id, 240)}</div>
+      <p style="font-size:15px;margin:2px 0"><b>${h(st.name)}</b></p>
+      <p style="margin:2px 0">${h(st.role)}</p></div>`);
+  },
+
+  /* Sửa tay một dòng công */
+  editForm(staffId, date){
+    const log = this.logOf(staffId, date) || {inAt:'', outAt:''};
+    const st = staffById(staffId);
+    App.modal('Sửa công — ' + st.name + ' · ' + fmtD(date), `
+    <form class="form-grid" onsubmit="Att.editSave(event,'${staffId}','${date}')">
+      <div class="f"><label>Giờ vào</label><input type="time" name="inAt" value="${h(log.inAt||'')}"></div>
+      <div class="f"><label>Giờ ra</label><input type="time" name="outAt" value="${h(log.outAt||'')}"></div>
+      <div class="f full"><label>Ghi chú</label><input name="note" value="${h(log.note||'')}" placeholder="Vd: xin về sớm, đi công tác…"></div>
+      <div class="form-actions full">
+        ${this.logOf(staffId,date)?`<button type="button" class="btn danger" onclick="Att.del('${staffId}','${date}')">Xóa dòng công</button><span class="spacer"></span>`:''}
+        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu</button></div>
+    </form>`);
+  },
+  editSave(ev, staffId, date){
+    ev.preventDefault();
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    if (!db.attLog) db.attLog = [];
+    let log = this.logOf(staffId, date);
+    if (!log) { log = {id:uid(), staffId, date, net:'unknown', viaQR:false}; db.attLog.push(log); }
+    Object.assign(log, {inAt:d.inAt, outAt:d.outAt, note:d.note});
+    save(); App.closeModal(); App.render(); App.toast('Đã lưu công ✓');
+  },
+  del(staffId, date){
+    if (!confirm('Xóa dòng chấm công này?')) return;
+    db.attLog = (db.attLog||[]).filter(x => !(x.staffId===staffId && x.date===date));
+    save(); App.closeModal(); App.render(); App.toast('Đã xóa');
+  },
+
+  /* Tổng hợp tháng từ nhật ký quét — dùng cho bảng lương */
+  summary(staffId, month){
+    const logs = (db.attLog||[]).filter(x => x.staffId===staffId && monthOf(x.date)===month);
+    const start = (db.clinic && db.clinic.shiftStart) || '08:00';
+    let days = 0, late = 0, outside = 0;
+    logs.forEach(l => { if (l.inAt) { days++; if (l.inAt > start) late++; if (l.net === 'outside') outside++; } });
+    return {days, late, outside, logs};
+  },
+  settingsForm(){
+    App.modal('Cài đặt chấm công', `
+    <form class="form-grid" onsubmit="Att.settingsSave(event)">
+      <div class="f"><label>Giờ vào ca chuẩn</label><input type="time" name="shiftStart" value="${h(db.clinic.shiftStart||'08:00')}"></div>
+      <div class="f"><label>Địa chỉ mạng phòng khám</label><input name="wifiIp" value="${h(db.clinic.wifiIp||'')}" placeholder="chưa đặt"></div>
+      <div class="note-block full">Trình duyệt không đọc được tên wifi, nên phần mềm đối chiếu <b>địa chỉ mạng (IP)</b> của phòng khám thay thế: đứng ở phòng khám dùng wifi phòng khám thì IP trùng, chấm công ở nhà thì bị đánh dấu <b>ngoài mạng phòng khám</b>.
+        Bấm nút bên dưới khi đang ngồi tại phòng khám và <b>đã nối wifi phòng khám</b> để ghi nhận.</div>
+      <div class="form-actions full">
+        <button type="button" class="btn" onclick="Att.saveClinicIp()">Lấy IP hiện tại làm mạng phòng khám</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu</button></div>
+    </form>`);
+  },
+  settingsSave(ev){
+    ev.preventDefault();
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    db.clinic.shiftStart = d.shiftStart; db.clinic.wifiIp = (d.wifiIp||'').trim();
+    save(); App.closeModal(); App.render(); App.toast('Đã lưu cài đặt ✓');
+  },
+};
+
 /* ---------- Nhân sự ---------- */
 const HR = {
   tab(t){ App.state.hrTab = t; App.render(); },
@@ -1191,15 +1401,45 @@ SCREENS.hr = () => {
         <td class="r num" style="font-weight:700">${money(net)}</td></tr>`).join('')}</tbody></table></div></div>
     <div class="note-block" style="margin-top:12px">BHXH khấu trừ <b>10,5%</b> lương đóng bảo hiểm của người lao động; doanh nghiệp đóng thêm <b>21,5%</b> hạch toán chi phí.</div>`;
 
-  if (tab === 'attendance') body = `
-    <div class="card"><div class="card-h"><h2>Chấm công tháng ${M.slice(5)}/${M.slice(0,4)}</h2><span class="hint">bấm vào dòng để cập nhật</span></div>
-    <div class="tbl-wrap"><table style="min-width:700px">
-      <thead><tr><th>Nhân viên</th><th class="r">Công thực tế</th><th class="r">Đi trễ</th><th class="r">Nghỉ phép</th><th class="r">Nghỉ KP</th><th class="r">Tăng ca (h)</th><th></th></tr></thead>
-      <tbody>${db.staff.map(st => { const a = db.attendance[st.id]||{days:0,late:0,leave:0,unpaid:0,ot:0};
-        return `<tr class="clickable" onclick="HR.attForm('${st.id}')"><td><b>${h(st.name)}</b></td>
-        <td class="r num">${a.days}</td><td class="r num" ${a.late?'style="color:var(--warn);font-weight:700"':''}>${a.late}</td>
-        <td class="r num">${a.leave}</td><td class="r num" ${a.unpaid?'style="color:var(--danger);font-weight:700"':''}>${a.unpaid}</td>
-        <td class="r num">${a.ot}</td><td>${a.late>=2?'<span class="pill warn">Trễ nhiều</span>':'<span class="pill ok">Đầy đủ</span>'}</td></tr>`;}).join('')}</tbody></table></div></div>`;
+  if (tab === 'attendance') {
+    const T = todayISO(), start = db.clinic.shiftStart || '08:00';
+    const netPill = n => n==='clinic' ? '<span class="pill ok">Tại phòng khám</span>'
+      : n==='outside' ? '<span class="pill danger">Ngoài mạng phòng khám</span>' : '<span class="pill mutedp">Chưa rõ mạng</span>';
+    const today = db.staff.map(st => {
+      const l = Att.logOf(st.id, T);
+      return `<tr><td><b>${h(st.name)}</b><br><span class="sub-line">${h(st.role)}</span></td>
+        <td class="num">${l&&l.inAt ? (l.inAt + (l.inAt>start?' <span class="pill warn">trễ</span>':'')) : '—'}</td>
+        <td class="num">${l&&l.outAt ? l.outAt : '—'}</td>
+        <td>${l ? netPill(l.net) : '<span class="sub-line">chưa chấm công</span>'}</td>
+        <td style="white-space:nowrap">
+          <button class="btn small" onclick="Att.showCard('${st.id}')">Mã QR</button>
+          <button class="btn small" onclick="Att.editForm('${st.id}','${T}')">Sửa</button></td></tr>`;
+    }).join('');
+    const sum = db.staff.map(st => {
+      const s = Att.summary(st.id, M);
+      return `<tr><td><b>${h(st.name)}</b></td><td class="r num">${s.days}</td>
+        <td class="r num" ${s.late?'style="color:var(--warn);font-weight:700"':''}>${s.late}</td>
+        <td class="r num" ${s.outside?'style="color:var(--danger);font-weight:700"':''}>${s.outside}</td>
+        <td>${s.late>=2?'<span class="pill warn">Trễ nhiều</span>':s.days?'<span class="pill ok">Bình thường</span>':'<span class="pill mutedp">Chưa có dữ liệu</span>'}</td></tr>`;
+    }).join('');
+    body = `
+    <div class="page-head" style="margin-bottom:12px">
+      <button class="btn primary" onclick="Att.scanner()">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg>
+        Mở máy chấm công</button>
+      <button class="btn" onclick="Att.settingsForm()">Cài đặt</button>
+      <span class="spacer"></span>
+      <span class="sub-line">Giờ vào ca chuẩn ${h(start)}${db.clinic.wifiIp?' · mạng phòng khám đã đặt':' · chưa đặt mạng phòng khám'}</span>
+    </div>
+    <div class="card mb"><div class="card-h"><h2>Hôm nay — ${fmtD(T)}</h2><span class="hint">nhân viên quét mã QR ở quầy để ghi giờ vào / giờ ra</span></div>
+      <div class="tbl-wrap"><table style="min-width:640px">
+        <thead><tr><th>Nhân viên</th><th>Giờ vào</th><th>Giờ ra</th><th>Mạng khi chấm công</th><th></th></tr></thead>
+        <tbody>${today}</tbody></table></div></div>
+    <div class="card"><div class="card-h"><h2>Tổng hợp tháng ${M.slice(5)}/${M.slice(0,4)}</h2><span class="hint">tự cộng từ nhật ký quét mã</span></div>
+      <div class="tbl-wrap"><table style="min-width:560px">
+        <thead><tr><th>Nhân viên</th><th class="r">Số công</th><th class="r">Đi trễ</th><th class="r">Chấm ngoài phòng khám</th><th></th></tr></thead>
+        <tbody>${sum}</tbody></table></div></div>`;
+  }
 
   if (tab === 'commission') body = `
     <div class="note-block mb">Hoa hồng tính tự động từ <b>phiếu thu thực tế</b>. Bác sĩ: % theo nhóm dịch vụ (Implant 20%, Phục hình sứ 15%, Chỉnh nha 12%, còn lại 10%) · Phụ tá: 2% doanh thu ca tham gia · Lễ tân: 1% doanh thu khách mới.</div>
