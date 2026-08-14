@@ -36,13 +36,15 @@ a{color:var(--accent-ink)}
 
 /* ===== Khung ===== */
 .app{display:grid;grid-template-columns:224px 1fr;grid-template-rows:56px 1fr;min-height:100vh}
-.topbar{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30}
-.logo{display:flex;align-items:center;gap:10px;min-width:0}
+.app>*{min-width:0}
+.topbar{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30;min-width:0}
+.logo{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.logo>div{min-width:0;overflow:hidden}
 .logo-mark{width:32px;height:32px;border-radius:9px;background:var(--accent);display:grid;place-items:center;flex:none}
 .logo-mark svg{width:19px;height:19px;stroke:var(--accent-contrast)}
-.logo b{font-size:15px;letter-spacing:-.01em;white-space:nowrap}
-.logo small{display:block;font-size:11px;color:var(--muted);font-weight:400;margin-top:-2px;white-space:nowrap}
-.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.logo b{font-size:15px;letter-spacing:-.01em;white-space:nowrap;display:block;overflow:hidden;text-overflow:ellipsis}
+.logo small{display:block;font-size:11px;color:var(--muted);font-weight:400;margin-top:-2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px;flex:none}
 .icon-btn{width:36px;height:36px;border-radius:8px;display:grid;place-items:center;position:relative;flex:none}
 .icon-btn:hover{background:var(--surface2)}
 .icon-btn svg{width:18px;height:18px;stroke:var(--ink2)}

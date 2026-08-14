@@ -308,7 +308,8 @@ const App = {
       return;
     }
     $('#sideNav').innerHTML = NAV.map(n => `<button class="nav-item ${n.id===this.cur?'active':''}" onclick="App.go('${n.id}')">${n.icon} ${n.label}</button>`).join('') +
-      `<div class="nav-foot">Dữ liệu lưu trên thiết bị này.<br>Nhớ sao lưu định kỳ (nút ⬇ góc trên).</div>`;
+      `<div class="nav-foot">${(() => { const st = Sync.status(); return `<span class="pill ${st.k}">${st.t}</span>`; })()}<br>
+        <span style="font-size:11px">Nút ⟳ ở góc trên để đồng bộ ngay.</span></div>`;
     const first4 = NAV.slice(0,4), rest = NAV.slice(4);
     $('#bottomNav').innerHTML = first4.map(n => `<button class="bnav-item ${n.id===this.cur?'active':''}" onclick="App.go('${n.id}')">${n.icon}<span>${n.label}</span></button>`).join('') +
       `<button class="bnav-item ${rest.some(n=>n.id===this.cur)?'active':''}" onclick="App.openSheet()">${IC.more}<span>Thêm</span></button>`;
@@ -324,6 +325,15 @@ const App = {
   toastT:null,
   toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(this.toastT); this.toastT = setTimeout(()=>t.classList.remove('show'), 2200); },
 
+  async syncNow(){
+    if (!Cloud.configured()) { App.toast('Chưa kết nối đám mây — vào Nhân sự → Chấm công → Cài đặt'); Att.wizard(); return; }
+    if (!Cloud.loggedIn()) { App.toast('Hãy đăng nhập trước'); Att.loginForm(); return; }
+    const b = document.getElementById('syncBtn');
+    if (b) b.style.opacity = '.4';
+    await Sync.run(false);
+    await Att.sync();
+    if (b) b.style.opacity = '';
+  },
   backup(){
     const blob = new Blob([JSON.stringify(db, null, 1)], {type:'application/json'});
     const a = document.createElement('a');
@@ -419,7 +429,7 @@ SCREENS.dashboard = () => {
   const alerts = [];
   db.inventory.forEach(it => { const [k,label] = invStatus(it); if (k!=='ok') alerts.push({k, html:`<b>${h(it.name)}</b> — ${label}${it.expiry?` (HSD ${fmtD(it.expiry)})`:''}, tồn ${it.stock} ${h(it.unit)}.`}); });
   db.labs.forEach(l => { if (!l.received) { const a = db.appointments.find(x=>x.id===l.apptId); const [k,label] = labStatus(l);
-    if (a && !l.received && a.date <= isoAdd(T,2)) alerts.push({k:'danger', html:`<b>Lab ${label.toLowerCase()}:</b> ${h(l.type)} ${h(l.teeth)} của ${h(custById(l.customerId).name)} — khách hẹn ${fmtD(a.date)} mà hàng chưa về!`});
+    if (a && !l.received && a.date <= isoAdd(T,2)) alerts.push({k:'danger', html:`<b>Lab ${label.toLowerCase()}:</b> ${h(l.type)} ${h(l.teeth)} của ${h((custById(l.customerId)||{}).name||'(khách đã xóa)')} — khách hẹn ${fmtD(a.date)} mà hàng chưa về!`});
     else if (k==='danger') alerts.push({k:'danger', html:`<b>Lab trễ hẹn:</b> ${h(l.type)} ${h(l.teeth)} (${h(l.labName)}) — hẹn về ${fmtD(l.due)}.`}); }});
   db.customers.forEach(c => { const d = custDebt(c); if (d > 0) alerts.push({k:'warn', html:`<b>${h(c.name)}</b> còn công nợ ${money(d)}.`}); });
 
@@ -705,8 +715,12 @@ const Cust = {
 };
 
 SCREENS.customers = () => {
-  const q = App.state.custQ.toLowerCase();
-  const list = db.customers.filter(c => !q || c.name.toLowerCase().includes(q) || (c.phone||'').replace(/\s/g,'').includes(q.replace(/\s/g,'')) || (c.code||'').toLowerCase().includes(q));
+  const q = Combo.norm(App.state.custQ);
+  const list = !q ? db.customers : db.customers.filter(c =>
+    Combo.norm(c.name).includes(q)
+    || (c.phone||'').replace(/\s/g,'').includes(q.replace(/\s/g,''))
+    || Combo.norm(c.code||'').includes(q)
+    || Combo.norm(fullAddr(c)).includes(q));
   const rows = list.map(c => {
     const debt = custDebt(c);
     const lastV = custLastVisit(c);
@@ -774,13 +788,14 @@ SCREENS.customers = () => {
 
   return `
   <div class="page-head"><h1>Khách hàng</h1><span class="spacer"></span>
+    <button class="btn" onclick="Importer.form()">Nhập từ Google Sheet</button>
     <button class="btn primary" onclick="Cust.form()">${IC.plus} Thêm khách hàng</button>
     <div class="sub">${db.customers.length} hồ sơ · thông tin hành chính theo mẫu BA-18</div></div>
   <div class="searchbar">${IC.search}<input placeholder="Tìm theo tên, số điện thoại, mã KH..." value="${h(App.state.custQ)}"
     oninput="App.state.custQ=this.value;App.render();const i=document.querySelector('.searchbar input');i.focus();i.setSelectionRange(i.value.length,i.value.length)"></div>
   <div class="card mb"><div class="tbl-wrap"><table>
     <thead><tr><th>Khách hàng</th><th>Mã</th><th>Khám gần nhất</th><th class="r">Công nợ</th></tr></thead>
-    <tbody>${rows}</tbody></table></div></div>
+    <tbody id="custRows">${rows}</tbody></table></div></div>
   ${detail}`;
 };
 
@@ -1101,8 +1116,9 @@ const Inv = {
 };
 
 SCREENS.inventory = () => {
-  const q = App.state.invQ.toLowerCase();
-  const list = db.inventory.filter(it => !q || it.name.toLowerCase().includes(q) || (it.supplier||'').toLowerCase().includes(q));
+  const q = Combo.norm(App.state.invQ);
+  const list = !q ? db.inventory : db.inventory.filter(it =>
+    Combo.norm(it.name).includes(q) || Combo.norm(it.supplier||'').includes(q));
   const warn = db.inventory.filter(it => invStatus(it)[0] !== 'ok').length;
   const value = db.inventory.reduce((s,it)=>s+(it.buy||0)*it.stock,0);
   const rows = list.map(it => {
@@ -1399,17 +1415,25 @@ create table if not exists attendance (
 create table if not exists settings (
   key text primary key, value text, updated_at timestamptz default now());
 
+create table if not exists records (
+  id text primary key, tbl text not null, data jsonb not null,
+  deleted boolean default false, updated_at timestamptz default now());
+create index if not exists records_tbl_idx on records(tbl);
+
 alter table staff      enable row level security;
 alter table attendance enable row level security;
 alter table settings   enable row level security;
+alter table records    enable row level security;
 
 drop policy if exists p_staff on staff;
 drop policy if exists p_att   on attendance;
 drop policy if exists p_set   on settings;
+drop policy if exists p_rec   on records;
 
 create policy p_staff on staff      for all to authenticated using (true) with check (true);
 create policy p_att   on attendance for all to authenticated using (true) with check (true);
-create policy p_set   on settings   for all to authenticated using (true) with check (true);`,
+create policy p_set   on settings   for all to authenticated using (true) with check (true);
+create policy p_rec   on records    for all to authenticated using (true) with check (true);`,
 
   copy(text, btn){
     navigator.clipboard.writeText(text).then(() => {
@@ -1458,7 +1482,7 @@ create policy p_set   on settings   for all to authenticated using (true) with c
     let html = '';
     html += row(r.cfg, r.cfg ? 'Đã dán khoá kết nối' + (r.url ? ' — <code>' + h(r.url) + '</code>' : '') : 'Chưa dán Project URL / anon key — làm Bước 4');
     if (r.cfg) html += row(r.reach, r.reach ? 'Gọi tới máy chủ Supabase được' : h(r.msg));
-    if (r.reach) ['staff','attendance','settings'].forEach(t => {
+    if (r.reach) ['staff','attendance','settings','records'].forEach(t => {
       const v = r.tables[t];
       html += row(v === true ? true : v === 'locked' ? 'warn' : false,
         v === true ? `Bảng <b>${t}</b> đã có`
@@ -1983,5 +2007,8 @@ document.addEventListener('DOMContentLoaded', () => {
     rd.readAsText(f);
   });
   $('#modalBack').addEventListener('click', ev => { if (ev.target.id === 'modalBack') App.closeModal(); });
+  Sync.snapshot();
   App.render();
+  /* Có kết nối sẵn thì lặng lẽ đồng bộ khi mở app */
+  if (Cloud.configured() && Cloud.loggedIn()) setTimeout(() => { Sync.run(true).then(() => Att.sync()); }, 800);
 });
