@@ -29,6 +29,28 @@ const ICD = [
 ];
 
 const DRUGS = ['Amoxicillin 500mg','Spiramycin 3 M.IU','Metronidazol 250mg','Paracetamol 500mg','Ibuprofen 400mg','Alphachymotrypsin 4,2mg','Cefuroxim 500mg','Nước súc miệng Chlorhexidine 0,12%','Vitamin C 500mg','Efferalgan 500mg'];
+
+/* Xã/phường theo địa giới mới từ 01/07/2025 (NQ UBTVQH15) — An Giang và các tỉnh lân cận */
+const mkWards = (p, x, dk) => [].concat(
+  p ? p.split('|').map(s => 'Phường ' + s) : [],
+  x ? x.split('|').map(s => 'Xã ' + s) : [],
+  dk ? dk.split('|').map(s => 'Đặc khu ' + s) : []);
+const WARDS = {
+  'An Giang': mkWards(
+    'Bình Đức|Châu Đốc|Chi Lăng|Hà Tiên|Long Phú|Long Xuyên|Mỹ Thới|Rạch Giá|Tân Châu|Thới Sơn|Tịnh Biên|Tô Châu|Vĩnh Tế|Vĩnh Thông',
+    'An Biên|An Châu|An Cư|An Minh|An Phú|Ba Chúc|Bình An|Bình Giang|Bình Hòa|Bình Mỹ|Bình Sơn|Bình Thạnh Đông|Cần Đăng|Châu Phong|Châu Phú|Châu Thành|Chợ Mới|Chợ Vàm|Cô Tô|Cù Lao Giêng|Định Hòa|Định Mỹ|Đông Hòa|Đông Hưng|Đông Thái|Giang Thành|Giồng Riềng|Gò Quao|Hòa Điền|Hòa Hưng|Hòa Lạc|Hòa Thuận|Hòn Đất|Hòn Nghệ|Hội An|Khánh Bình|Kiên Lương|Long Điền|Long Kiến|Long Thạnh|Mỹ Đức|Mỹ Hòa Hưng|Mỹ Thuận|Ngọc Chúc|Nhơn Hội|Nhơn Mỹ|Núi Cấm|Óc Eo|Ô Lâm|Phú An|Phú Hòa|Phú Hữu|Phú Lâm|Phú Tân|Sơn Hải|Sơn Kiên|Tân An|Tân Hiệp|Tân Hội|Tân Thạnh|Tây Phú|Tây Yên|Thạnh Đông|Thạnh Hưng|Thạnh Lộc|Thạnh Mỹ Tây|Thoại Sơn|Tiên Hải|Tri Tôn|U Minh Thượng|Vân Khánh|Vĩnh An|Vĩnh Bình|Vĩnh Điều|Vĩnh Gia|Vĩnh Hanh|Vĩnh Hậu|Vĩnh Hòa|Vĩnh Hòa Hưng|Vĩnh Phong|Vĩnh Thạnh Trung|Vĩnh Thuận|Vĩnh Trạch|Vĩnh Tuy|Vĩnh Xương',
+    'Kiên Hải|Phú Quốc|Thổ Châu'),
+  'Cần Thơ': mkWards(
+    'An Bình|Bình Thủy|Cái Khế|Cái Răng|Đại Thành|Hưng Phú|Khánh Hòa|Long Bình|Long Mỹ|Long Phú 1|Long Tuyền|Mỹ Quới|Mỹ Xuyên|Ngã Bảy|Ngã Năm|Ninh Kiều|Ô Môn|Phú Lợi|Phước Thới|Sóc Trăng|Tân An|Tân Lộc|Thốt Nốt|Thới An Đông|Thới Long|Thuận Hưng|Trung Nhứt|Vĩnh Châu|Vĩnh Phước|Vị Tân|Vị Thanh',
+    'An Lạc Thôn|An Ninh|An Thạnh|Châu Thành|Cờ Đỏ|Cù Lao Dung|Đại Hải|Đại Ngãi|Đông Hiệp|Đông Phước|Đông Thuận|Gia Hòa|Hiệp Hưng|Hòa An|Hòa Tú|Hỏa Lựu|Hồ Đắc Kiện|Kế Sách|Lai Hòa|Lâm Tân|Liêu Tú|Lịch Hội Thượng|Long Hưng|Long Phú|Lương Tâm|Mỹ Hương|Mỹ Phước|Mỹ Tú|Ngọc Tố|Nhơn Ái|Nhơn Mỹ|Nhu Gia|Phong Điền|Phong Nẫm|Phú Hữu|Phú Lộc|Phú Tâm|Phụng Hiệp|Phương Bình|Tài Văn|Tân Bình|Tân Hòa|Tân Long|Tân Phước Hưng|Tân Thạnh|Thạnh An|Thạnh Hòa|Thạnh Phú|Thạnh Quới|Thạnh Thới An|Thạnh Xuân|Thới An Hội|Thới Hưng|Thới Lai|Thuận Hòa|Trần Đề|Trung Hưng|Trường Khánh|Trường Long|Trường Long Tây|Trường Thành|Trường Xuân|Vĩnh Hải|Vĩnh Lợi|Vĩnh Thạnh|Vĩnh Thuận Đông|Vĩnh Trinh|Vĩnh Tường|Vĩnh Viễn|Vị Thanh 1|Vị Thủy|Xà Phiên', ''),
+  'Đồng Tháp': mkWards(
+    'Mỹ Tho|Đạo Thạnh|Mỹ Phong|Thới Sơn|Trung An|Gò Công|Long Thuận|Bình Xuân|Sơn Qui|An Bình|Hồng Ngự|Thường Lạc|Cao Lãnh|Mỹ Ngãi|Mỹ Trà|Sa Đéc|Mỹ Phước Tây|Thanh Hòa|Cai Lậy|Nhị Quý',
+    'Tân Hồng|Tân Thành|Tân Hộ Cơ|An Phước|Thường Phước|Long Khánh|Long Phú Thuận|An Hòa|Tam Nông|Phú Thọ|Tràm Chim|Phú Cường|An Long|Thanh Bình|Tân Thạnh|Bình Thành|Tân Long|Tháp Mười|Thanh Mỹ|Mỹ Quí|Đốc Binh Kiều|Trường Xuân|Phương Thịnh|Phong Mỹ|Ba Sao|Mỹ Thọ|Bình Hàng Trung|Mỹ Hiệp|Mỹ An Hưng|Tân Khánh Trung|Lấp Vò|Lai Vung|Hòa Long|Phong Hòa|Tân Dương|Phú Hựu|Tân Nhuận Đông|Tân Phú Trung|Tân Phú|Thanh Hưng|An Hữu|Mỹ Lợi|Mỹ Đức Tây|Mỹ Thiện|Hậu Mỹ|Hội Cư|Cái Bè|Mỹ Thành|Thạnh Phú|Bình Phú|Hiệp Đức|Long Tiên|Ngũ Hiệp|Tân Phước 1|Tân Phước 2|Tân Phước 3|Hưng Thạnh|Tân Hương|Châu Thành|Long Hưng|Long Định|Bình Trưng|Vĩnh Kim|Kim Sơn|Mỹ Tịnh An|Lương Hòa Lạc|Tân Thuận Bình|Chợ Gạo|An Thạnh Thủy|Bình Ninh|Vĩnh Bình|Đồng Sơn|Phú Thành|Long Bình|Vĩnh Hựu|Gò Công Đông|Tân Điền|Tân Hòa|Tân Đông|Gia Thuận|Tân Thới|Tân Phú Đông', ''),
+  'Cà Mau': mkWards(
+    'An Xuyên|Bạc Liêu|Giá Rai|Hiệp Thành|Hòa Thành|Láng Tròn|Lý Văn Lâm|Tân Thành|Vĩnh Trạch',
+    'An Trạch|Biển Bạch|Cái Đôi Vàm|Cái Nước|Châu Thới|Đá Bạc|Đầm Dơi|Đất Mới|Đất Mũi|Định Thành|Đông Hải|Gành Hào|Hòa Bình|Hồ Thị Kỷ|Hồng Dân|Hưng Hội|Hưng Mỹ|Khánh An|Khánh Bình|Khánh Hưng|Khánh Lâm|Long Điền|Lương Thế Trân|Năm Căn|Nguyễn Phích|Nguyễn Việt Khái|Ninh Quới|Ninh Thạnh Lợi|Phan Ngọc Hiển|Phong Hiệp|Phong Thạnh|Phú Mỹ|Phú Tân|Phước Long|Quách Phẩm|Sông Đốc|Tạ An Khương|Tam Giang|Tân Ân|Tân Hưng|Tân Lộc|Tân Thuận|Tân Tiến|Thanh Tùng|Thới Bình|Trần Phán|Trần Văn Thời|Trí Phải|U Minh|Vĩnh Hậu|Vĩnh Lộc|Vĩnh Lợi|Vĩnh Mỹ|Vĩnh Phước|Vĩnh Thanh', ''),
+};
+const PROVINCES = Object.keys(WARDS);
 const LABS = ['Lab Việt Tiên (Cần Thơ)','Lab Nha Việt (TP.HCM)','Lab Đại Nam (TP.HCM)','Lab Rạng Đông (Long Xuyên)'];
 const LAB_TYPES = ['Mão sứ Zirconia','Mão sứ Titan','Mão toàn sứ Emax','Dán sứ Veneer','Hàm khung','Hàm nhựa dẻo','Máng tẩy trắng','Máng chỉnh nha','Cầu răng sứ'];
 const CHAIRS = ['Ghế 1','Ghế 2'];
@@ -68,7 +90,7 @@ function seed() {
   const cM = monthOf(T);
   const customers = [
     {id:'c1', code:'KH-0412', name:'NGUYỄN THỊ MAI', dob:'1992-03-14', gender:'Nữ', phone:'0903 214 856', job:'Giáo viên', ethnic:'Kinh', nation:'Việt Nam',
-     addr1:'25, Nguyễn Trung Trực', ward:'P. Vĩnh Thanh', province:'Rạch Giá, An Giang', doiTuong:'Thu phí', bhyt:'', cccd:'091192001234',
+     addr1:'25, Nguyễn Trung Trực', ward:'Phường Rạch Giá', province:'An Giang', doiTuong:'Thu phí', bhyt:'', cccd:'091192001234',
      kinName:'Nguyễn Văn Hùng (chồng)', kinPhone:'0918 001 002', allergy:'Penicillin', source:'Facebook', createdAt:isoAdd(T,-30),
      teeth:{14:{s:'filled',note:'Trám composite '+fmtD(isoAdd(T,-14))},26:{s:'filled',note:'Trám cũ 2023 — theo dõi'},36:{s:'rct',note:'Đang điều trị tủy, kế hoạch bọc sứ'},46:{s:'caries',note:'Sâu lớn — đề xuất implant'},48:{s:'missing',note:'Đã nhổ 2021'},25:{s:'implant',note:'Implant 2024 — ổn định'}},
      record:{lyDo:'Đau nhức răng hàm dưới bên trái 5 ngày, đau tăng về đêm.', benhLy:'Đau âm ỉ răng 36 khoảng 2 tuần, 5 ngày nay đau nhiều, đau lan lên thái dương, uống thuốc giảm đau chỉ đỡ tạm.',
@@ -85,14 +107,14 @@ function seed() {
          {date:T, db:'Điều trị tủy R36 buổi 2. Hết đau tự phát.', xt:'Bơm rửa, tạo hình ống tủy, đặt Ca(OH)2, trám tạm. Hẹn buổi 3.'}
        ]}},
     {id:'c2', code:'KH-0871', name:'TRẦN VĂN HÙNG', dob:'1985-09-22', gender:'Nam', phone:'0918 552 730', job:'Kinh doanh', ethnic:'Kinh', nation:'Việt Nam',
-     addr1:'102, Trần Phú', ward:'P. Vĩnh Bảo', province:'Rạch Giá, An Giang', doiTuong:'Thu phí', bhyt:'', cccd:'091085004567',
+     addr1:'102, Trần Phú', ward:'Phường Vĩnh Thông', province:'An Giang', doiTuong:'Thu phí', bhyt:'', cccd:'091085004567',
      kinName:'Trần Thị Hoa (vợ)', kinPhone:'0917 003 004', allergy:'', source:'Khách quen giới thiệu', createdAt:isoAdd(T,-200), teeth:{}, record:{dienBien:[]}},
     {id:'c3', code:'KH-1105', name:'ĐỖ MINH CHÂU', dob:'2008-12-05', gender:'Nữ', phone:'0937 664 219', job:'Học sinh', ethnic:'Kinh', nation:'Việt Nam',
-     addr1:'88, Lạc Hồng', ward:'P. Vĩnh Lạc', province:'Rạch Giá, An Giang', doiTuong:'Thu phí', bhyt:'', cccd:'',
+     addr1:'88, Lạc Hồng', ward:'Xã Gò Quao', province:'An Giang', doiTuong:'Thu phí', bhyt:'', cccd:'',
      kinName:'Đỗ Văn Nam (cha)', kinPhone:'0937 664 219', allergy:'', source:'Walk-in', createdAt:isoAdd(T,-420),
      teeth:{}, record:{lyDo:'Chỉnh nha định kỳ.', chanDoan:'K07.3', keHoach:'Chỉnh nha mắc cài kim loại 2 hàm — tháng 14/24.', dienBien:[]}},
     {id:'c4', code:'KH-1201', name:'LÊ HOÀNG NAM', dob:'1979-01-30', gender:'Nam', phone:'0908 771 340', job:'Tài xế', ethnic:'Kinh', nation:'Việt Nam',
-     addr1:'15, Mạc Cửu', ward:'P. Vĩnh Quang', province:'Rạch Giá, An Giang', doiTuong:'Thu phí', bhyt:'', cccd:'091079008910',
+     addr1:'15, Mạc Cửu', ward:'Phường Long Xuyên', province:'An Giang', doiTuong:'Thu phí', bhyt:'', cccd:'091079008910',
      kinName:'Lê Thị Bé (vợ)', kinPhone:'0909 005 006', allergy:'Tăng huyết áp — hội chẩn trước tiểu phẫu', source:'Google Maps', createdAt:isoAdd(T,-9),
      teeth:{46:{s:'caries',note:'Sâu vỡ lớn — chờ báo giá implant'}}, record:{dienBien:[]}},
   ];
@@ -326,6 +348,51 @@ SCREENS.dashboard = () => {
 
 /* ---------- Khách hàng ---------- */
 const Cust = {
+  /* Ô chọn tỉnh + xã/phường theo địa giới mới, kèm mục "Khác — nhập tay" */
+  addrSelects(c){
+    const prov = c.province || 'An Giang';
+    const knownProv = PROVINCES.includes(prov);
+    const list = WARDS[knownProv ? prov : 'An Giang'];
+    const knownWard = knownProv && list.includes(c.ward);
+    const OTHER = '__other__';
+    return `
+      <div class="f"><label>Tỉnh, thành phố</label>
+        <select name="provinceSel" onchange="Cust.provChange(this)">
+          ${PROVINCES.map(p=>`<option value="${h(p)}"${knownProv&&prov===p?' selected':''}>${h(p)}</option>`).join('')}
+          <option value="${OTHER}"${!knownProv?' selected':''}>Khác — nhập tay</option>
+        </select>
+        <input name="provinceOther" placeholder="Nhập tỉnh/thành phố" value="${h(!knownProv?prov:'')}" style="margin-top:6px;${knownProv?'display:none':''}">
+      </div>
+      <div class="f"><label>Xã, phường</label>
+        <select name="wardSel" onchange="Cust.wardChange(this)">
+          <option value="">— chọn xã/phường —</option>
+          ${knownProv?list.map(w=>`<option value="${h(w)}"${c.ward===w?' selected':''}>${h(w)}</option>`).join(''):''}
+          <option value="${OTHER}"${c.ward&&!knownWard?' selected':''}>Khác — nhập tay</option>
+        </select>
+        <input name="wardOther" placeholder="Nhập xã/phường" value="${h(!knownWard?(c.ward||''):'')}" style="margin-top:6px;${knownWard||!c.ward?'display:none':''}">
+      </div>`;
+  },
+  provChange(sel){
+    const form = sel.form;
+    const other = form.querySelector('[name=provinceOther]');
+    const wSel = form.querySelector('[name=wardSel]');
+    const wOther = form.querySelector('[name=wardOther]');
+    const isOther = sel.value === '__other__';
+    other.style.display = isOther ? '' : 'none';
+    if (isOther) { other.focus(); wSel.innerHTML = '<option value="">— nhập tay bên dưới —</option><option value="__other__" selected>Khác — nhập tay</option>'; wOther.style.display = ''; }
+    else {
+      wSel.innerHTML = '<option value="">— chọn xã/phường —</option>' +
+        (WARDS[sel.value]||[]).map(w=>`<option value="${h(w)}">${h(w)}</option>`).join('') +
+        '<option value="__other__">Khác — nhập tay</option>';
+      wOther.style.display = 'none'; wOther.value = '';
+    }
+  },
+  wardChange(sel){
+    const other = sel.form.querySelector('[name=wardOther]');
+    const isOther = sel.value === '__other__';
+    other.style.display = isOther ? '' : 'none';
+    if (isOther) other.focus();
+  },
   form(id){
     const c = id ? custById(id) : {doiTuong:'Thu phí'};
     const f = (label, name, val, ph, type) => `<div class="f"><label>${label}</label><input name="${name}" value="${h(val||'')}" placeholder="${ph||''}" type="${type||'text'}"></div>`;
@@ -339,8 +406,7 @@ const Cust = {
       ${f('6. Dân tộc','ethnic',c.ethnic||'Kinh')}
       ${f('7. Quốc tịch','nation',c.nation||'Việt Nam')}
       ${f('8. Địa chỉ (số nhà, đường/thôn/phố)','addr1',c.addr1)}
-      ${f('Xã, phường','ward',c.ward)}
-      ${f('Tỉnh, thành phố','province',c.province||'Rạch Giá, An Giang')}
+      ${Cust.addrSelects(c)}
       <div class="f"><label>9. Đối tượng</label><select name="doiTuong">${['Thu phí','BHYT','Miễn','Khác'].map(o=>`<option${c.doiTuong===o?' selected':''}>${o}</option>`).join('')}</select></div>
       ${f('10. Số thẻ BHYT','bhyt',c.bhyt)}
       ${f('11. Số CCCD / Hộ chiếu / Định danh','cccd',c.cccd)}
@@ -355,6 +421,9 @@ const Cust = {
     ev.preventDefault();
     const d = Object.fromEntries(new FormData(ev.target).entries());
     d.name = (d.name||'').toUpperCase().trim();
+    d.province = (d.provinceSel === '__other__' ? d.provinceOther : d.provinceSel || '').trim();
+    d.ward = (d.wardSel === '__other__' ? d.wardOther : d.wardSel || '').trim();
+    delete d.provinceSel; delete d.provinceOther; delete d.wardSel; delete d.wardOther;
     if (id) { Object.assign(custById(id), d); App.toast('Đã cập nhật hồ sơ ✓'); }
     else {
       const c = Object.assign({id:uid(), code:'KH-'+(db.seq.cust++), createdAt:todayISO(), teeth:{}, record:{dienBien:[]}}, d);
