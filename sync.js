@@ -83,6 +83,52 @@ const Sync = {
     return {added, updated, removed};
   },
 
+  /* ---------- Cài đặt phòng khám & bộ đếm số phiếu ----------
+     Bộ đếm phải lấy giá trị LỚN NHẤT giữa các máy, không phải "bản mới thắng",
+     nếu không hai máy cùng lập phiếu sẽ ra trùng số. */
+  clinicSeen: null,       /* bản cài đặt lúc đồng bộ lần trước, để biết máy này có sửa gì không */
+
+  async syncMeta(){
+    const s = await Cloud.pullSettings();
+    /* Cài đặt phòng khám: chỉ ghi đè khi máy này KHÔNG sửa gì kể từ lần đồng bộ trước,
+       tránh đè mất thay đổi của máy khác. */
+    const mine = JSON.stringify(db.clinic || {});
+    const changedHere = this.clinicSeen !== null && this.clinicSeen !== mine;
+    if (changedHere || !s.clinic) {
+      await Cloud.pushSetting('clinic', mine);
+    } else if (s.clinic && s.clinic !== mine) {
+      try { db.clinic = Object.assign({}, db.clinic, JSON.parse(s.clinic)); } catch(e){}
+    }
+    this.clinicSeen = JSON.stringify(db.clinic || {});
+
+    /* Bộ đếm mã KH / số phiếu thu: luôn lấy giá trị LỚN NHẤT giữa các máy
+       để hai máy không bao giờ cấp trùng số. */
+    db.seq = db.seq || {};
+    if (s.seq) {
+      try {
+        const remote = JSON.parse(s.seq);
+        Object.keys(remote).forEach(k => { db.seq[k] = Math.max(+db.seq[k] || 0, +remote[k] || 0); });
+      } catch(e){}
+    }
+    await Cloud.pushSetting('seq', JSON.stringify(db.seq));
+  },
+
+  /* Hai máy cùng lập phiếu lúc mất mạng có thể ra trùng số phiếu thu.
+     Sau khi gộp dữ liệu, phát hiện trùng thì giữ phiếu lập trước, đánh lại số phiếu lập sau. */
+  fixDupReceipts(){
+    const seen = {}, fixed = [];
+    (db.receipts || []).slice().sort((a,b) => (a._up||0) - (b._up||0)).forEach(r => {
+      if (!r.no) return;
+      if (seen[r.no]) {
+        const old = r.no;
+        r.no = 'PT-' + (++db.seq.receipt);
+        r._up = Date.now();
+        fixed.push(old + ' → ' + r.no);
+      } else seen[r.no] = 1;
+    });
+    return fixed;
+  },
+
   /* ---------- Chạy đồng bộ ---------- */
   async run(quiet){
     if (!Cloud.configured() || !Cloud.loggedIn() || this.busy) return null;
@@ -91,6 +137,9 @@ const Sync = {
       this.stamp();
       await this.push();
       const r = await this.pull();
+      await this.syncMeta();
+      const dup = this.fixDupReceipts();
+      if (dup.length) { await this.push(); App.toast('Đã đánh lại ' + dup.length + ' số phiếu thu bị trùng: ' + dup.slice(0,3).join(', ')); }
       this.snapshot();
       save(); this.lastAt = Date.now();
       if (!quiet) App.toast(`Đồng bộ xong ✓ (thêm ${r.added}, cập nhật ${r.updated}${r.removed?', xóa '+r.removed:''})`);
