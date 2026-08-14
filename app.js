@@ -201,7 +201,6 @@ function seed() {
     });
   }
 
-  const attendance = {st1:{days:9,late:0,leave:0,unpaid:0,ot:0}, st2:{days:9.5,late:0,leave:0,unpaid:0,ot:3.5}, st3:{days:8,late:2,leave:1,unpaid:0,ot:0}, st4:{days:9,late:0,leave:0,unpaid:0,ot:1}};
   const bonuses = [
     {id:'b1', date:monthOf(T)+'-01', staffId:'st1', amount:2000000, reason:'Thưởng vượt KPI implant tháng trước'},
     {id:'b2', date:monthOf(T)+'-05', staffId:'st2', amount:1000000, reason:'Thưởng khách đánh giá 5★ (3 lượt liên tiếp)'},
@@ -211,7 +210,7 @@ function seed() {
   ];
 
   return {ver:1, clinic:{name:'Nha Khoa Hoàng Bách', legal:'Công ty TNHH Nha Khoa Hoàng Bách – Gò Quao', authority:'Sở Y tế An Giang', addr:'Rạch Giá, An Giang', phone:'0297 3xxx xxx', taxCode:'', maCSKCB:'', shiftStart:'08:00', wifiIp:''},
-    seq:{cust:1300, receipt:rno}, services, staff, customers, treatments, receipts, rx, inventory, appointments, labs, attendance, attLog, bonuses};
+    seq:{cust:1300, receipt:rno}, services, staff, customers, treatments, receipts, rx, inventory, appointments, labs, attLog, bonuses};
 }
 
 function load() {
@@ -1649,25 +1648,6 @@ const HR = {
   revenueOf(st, month){ return db.receipts.filter(r => monthOf(r.date)===month && r.doctorId===st.id).reduce((s,r)=>s+r.amount,0); },
   bonusOf(stId, month){ return db.bonuses.filter(b=>b.staffId===stId && monthOf(b.date)===month && b.amount>0).reduce((s,b)=>s+b.amount,0); },
   penaltyOf(stId, month){ return -db.bonuses.filter(b=>b.staffId===stId && monthOf(b.date)===month && b.amount<0).reduce((s,b)=>s+b.amount,0); },
-  attForm(stId){
-    const a = db.attendance[stId] || {days:0,late:0,leave:0,unpaid:0,ot:0};
-    const st = staffById(stId);
-    App.modal('Chấm công — ' + st.name, `
-    <form class="form-grid" onsubmit="HR.attSave(event,'${stId}')">
-      <div class="f"><label>Công thực tế</label><input type="number" step="0.5" name="days" value="${a.days}"></div>
-      <div class="f"><label>Đi trễ (lần)</label><input type="number" name="late" value="${a.late}"></div>
-      <div class="f"><label>Nghỉ phép</label><input type="number" step="0.5" name="leave" value="${a.leave}"></div>
-      <div class="f"><label>Nghỉ không phép</label><input type="number" step="0.5" name="unpaid" value="${a.unpaid}"></div>
-      <div class="f"><label>Tăng ca (giờ)</label><input type="number" step="0.5" name="ot" value="${a.ot}"></div>
-      <div class="form-actions full"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu</button></div>
-    </form>`);
-  },
-  attSave(ev, stId){
-    ev.preventDefault();
-    const d = Object.fromEntries(new FormData(ev.target).entries());
-    db.attendance[stId] = {days:num(d.days), late:num(d.late), leave:num(d.leave), unpaid:num(d.unpaid), ot:num(d.ot)};
-    save(); App.closeModal(); App.render(); App.toast('Đã lưu chấm công ✓');
-  },
   staffForm(id){
     const st = id ? staffById(id) : {role:'Bác sĩ điều trị', base:0, kpiTarget:0, model:{type:'svcGroup', rates:{}, def:10}};
     App.modal(id ? 'Sửa nhân viên' : 'Thêm nhân viên', `
