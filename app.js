@@ -16,17 +16,37 @@ const num = v => { const n = parseFloat(String(v == null ? '' : v).replace(/[^\d
 /* ================= Danh mục ================= */
 const SERVICE_GROUPS = ['Phục hình sứ','Phục hình tháo lắp','Trám răng','Nhổ răng','Điều trị tủy','Implant','Chỉnh nha','Nha chu','Thẩm mỹ'];
 
+/* Danh mục ICD-10 thường dùng trong răng hàm mặt */
 const ICD = [
-  ['K00.6','Rối loạn mọc răng'],['K00.7','Hội chứng mọc răng'],['K01.0','Răng ngầm'],['K01.1','Răng kẹt (răng khôn lệch)'],
-  ['K02.0','Sâu men răng'],['K02.1','Sâu ngà răng'],['K02.2','Sâu xương răng (cement)'],['K02.9','Sâu răng, không đặc hiệu'],
-  ['K03.0','Mòn răng quá mức'],['K03.6','Cao răng (vôi răng), mảng bám'],
-  ['K04.0','Viêm tủy răng'],['K04.1','Hoại tử tủy'],['K04.4','Viêm quanh chóp cấp do tủy'],['K04.5','Viêm quanh chóp mạn'],
-  ['K04.6','Áp xe quanh chóp có lỗ dò'],['K04.7','Áp xe quanh chóp không lỗ dò'],
-  ['K05.0','Viêm nướu (lợi) cấp'],['K05.1','Viêm nướu (lợi) mạn'],['K05.2','Viêm nha chu cấp'],['K05.3','Viêm nha chu mạn'],
-  ['K06.1','Phì đại nướu'],['K07.3','Lệch lạc răng (sai khớp cắn)'],['K08.1','Mất răng do tai nạn, nhổ răng, bệnh nha chu'],
-  ['K08.3','Chân răng còn sót'],['K12.0','Loét áp-tơ miệng tái diễn'],['K13.7','Tổn thương khác của niêm mạc miệng'],
-  ['S02.5','Gãy răng (chấn thương)'],['Z01.2','Khám răng miệng định kỳ'],['Z46.3','Lắp và điều chỉnh hàm giả'],['Z46.4','Lắp và điều chỉnh khí cụ chỉnh nha']
+  ['K00.0','Thiếu răng bẩm sinh (không mọc răng)'],['K00.1','Răng thừa'],['K00.2','Bất thường kích thước và hình dạng răng'],
+  ['K00.3','Răng nhiễm màu (răng đốm)'],['K00.4','Rối loạn hình thành răng'],['K00.6','Rối loạn mọc răng'],['K00.7','Hội chứng mọc răng'],
+  ['K01.0','Răng ngầm'],['K01.1','Răng kẹt (răng khôn lệch)'],
+  ['K02.0','Sâu men răng'],['K02.1','Sâu ngà răng'],['K02.2','Sâu xương răng (cement)'],['K02.3','Sâu răng ngừng tiến triển'],
+  ['K02.5','Sâu răng có lộ tủy'],['K02.8','Sâu răng khác'],['K02.9','Sâu răng, không đặc hiệu'],
+  ['K03.0','Mòn răng do nghiến (mòn mặt nhai)'],['K03.1','Mòn răng do chải răng, cơ học'],['K03.2','Mòn hóa học men răng'],
+  ['K03.3','Tiêu răng bệnh lý'],['K03.4','Tăng sản xê măng'],['K03.6','Cao răng (vôi răng), mảng bám'],['K03.7','Đổi màu mô cứng sau mọc'],
+  ['K04.0','Viêm tủy răng'],['K04.1','Hoại tử tủy'],['K04.2','Thoái hóa tủy'],['K04.3','Tạo mô cứng bất thường trong tủy'],
+  ['K04.4','Viêm quanh chóp cấp do tủy'],['K04.5','Viêm quanh chóp mạn (u hạt quanh chóp)'],
+  ['K04.6','Áp xe quanh chóp có lỗ dò'],['K04.7','Áp xe quanh chóp không lỗ dò'],['K04.8','Nang chân răng'],
+  ['K05.0','Viêm nướu (lợi) cấp'],['K05.1','Viêm nướu (lợi) mạn'],['K05.2','Viêm nha chu cấp (áp xe nha chu)'],
+  ['K05.3','Viêm nha chu mạn'],['K05.4','Thoái hóa nha chu'],['K05.5','Bệnh nha chu khác'],
+  ['K06.0','Tụt nướu (co lợi)'],['K06.1','Phì đại nướu'],['K06.2','Tổn thương nướu do chấn thương'],
+  ['K07.0','Bất thường kích thước xương hàm'],['K07.1','Bất thường tương quan hàm - nền sọ'],['K07.2','Bất thường tương quan hai cung răng'],
+  ['K07.3','Lệch lạc răng (sai khớp cắn)'],['K07.6','Rối loạn khớp thái dương hàm'],
+  ['K08.1','Mất răng do tai nạn, nhổ răng, bệnh nha chu'],['K08.2','Teo sống hàm mất răng'],['K08.3','Chân răng còn sót'],
+  ['K09.0','Nang do mọc răng'],['K09.1','Nang phát triển vùng miệng'],
+  ['K10.2','Viêm xương hàm (viêm tủy xương hàm)'],['K10.3','Viêm ổ răng khô (sau nhổ răng)'],
+  ['K11.5','Sỏi tuyến nước bọt'],['K12.0','Loét áp-tơ miệng tái diễn'],['K12.1','Viêm miệng thể khác'],
+  ['K12.2','Viêm mô tế bào và áp xe vùng miệng'],['K13.0','Bệnh của môi (viêm môi, nứt mép)'],
+  ['K13.2','Bạch sản niêm mạc miệng'],['K13.7','Tổn thương khác của niêm mạc miệng'],
+  ['K14.0','Viêm lưỡi'],['K14.3','Phì đại gai lưỡi (lưỡi bản đồ)'],
+  ['S02.5','Gãy răng (chấn thương)'],['S03.0','Trật khớp hàm'],
+  ['Z01.2','Khám răng miệng định kỳ'],['Z46.3','Lắp và điều chỉnh hàm giả'],['Z46.4','Lắp và điều chỉnh khí cụ chỉnh nha'],
+  ['Z97.2','Mang hàm giả tháo lắp']
 ];
+/* Tách mã ICD từ chuỗi hiển thị "K04.0 — Viêm tủy răng"; gõ tự do thì giữ nguyên */
+const icdCode = s => { s = String(s||'').trim(); const m = s.match(/^([A-Z]\d{2}(?:\.\d+)?)\s*[—-]/); return m ? m[1] : s; };
+const icdOptions = () => ICD.map(([c,n]) => ({t: c + ' — ' + n, s: c}));
 
 const DRUGS = ['Amoxicillin 500mg','Spiramycin 3 M.IU','Metronidazol 250mg','Paracetamol 500mg','Ibuprofen 400mg','Alphachymotrypsin 4,2mg','Cefuroxim 500mg','Nước súc miệng Chlorhexidine 0,12%','Vitamin C 500mg','Efferalgan 500mg'];
 
@@ -405,6 +425,72 @@ SCREENS.dashboard = () => {
   </div>`;
 };
 
+/* ---------- Ảnh điều trị (dán link) ---------- */
+const PHOTO_KINDS = ['Trước điều trị','Trong quá trình','Sau điều trị','Phim X-quang','Khác'];
+const Photo = {
+  /* Link Google Drive dạng chia sẻ không hiện được ảnh — đổi sang link xem trực tiếp */
+  normalize(u){
+    u = String(u || '').trim();
+    if (!u) return '';
+    let m = u.match(/drive\.google\.com\/file\/d\/([-\w]{10,})/) || u.match(/drive\.google\.com\/open\?id=([-\w]{10,})/)
+         || u.match(/drive\.google\.com\/uc\?(?:export=\w+&)?id=([-\w]{10,})/);
+    if (m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w1600';
+    m = u.match(/^https?:\/\/photos\.app\.goo\.gl\//);
+    return u;
+  },
+  form(){
+    const c = custById(App.state.custSel);
+    App.modal('Thêm ảnh điều trị — ' + c.name, `
+    <form class="form-grid" onsubmit="Photo.save(event)">
+      <div class="f full"><label>Dán link ảnh (mỗi dòng một link)</label>
+        <textarea name="urls" required placeholder="https://drive.google.com/file/d/.../view&#10;https://i.imgur.com/abc.jpg" style="min-height:96px"></textarea></div>
+      <div class="f"><label>Loại ảnh</label><select name="kind">${PHOTO_KINDS.map(k=>`<option>${k}</option>`).join('')}</select></div>
+      <div class="f"><label>Ngày chụp</label><input type="date" name="date" value="${todayISO()}"></div>
+      <div class="f full"><label>Ghi chú (răng, giai đoạn…)</label><input name="note" placeholder="Vd: R36 sau khi bọc sứ"></div>
+      <div class="note-block full">Ảnh không lưu trong máy — phần mềm chỉ lưu <b>đường link</b>. Nhớ để ảnh ở chế độ <b>ai có link đều xem được</b> thì mới hiện lên.</div>
+      <div class="form-actions full"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Thêm ảnh</button></div>
+    </form>`);
+  },
+  save(ev){
+    ev.preventDefault();
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    const c = custById(App.state.custSel);
+    if (!c.photos) c.photos = [];
+    const links = String(d.urls).split(/[\n\s]+/).map(s => s.trim()).filter(s => /^https?:\/\//i.test(s));
+    if (!links.length) { App.toast('Chưa có link hợp lệ (link phải bắt đầu bằng http)'); return; }
+    links.forEach(u => c.photos.unshift({id:uid(), url:Photo.normalize(u), raw:u, kind:d.kind, date:d.date, note:d.note}));
+    save(); App.closeModal(); App.render();
+    App.toast('Đã thêm ' + links.length + ' ảnh ✓');
+  },
+  del(pid){
+    const c = custById(App.state.custSel);
+    const p = (c.photos||[]).find(x => x.id === pid);
+    if (!p || !confirm('Gỡ ảnh này khỏi hồ sơ? (Ảnh gốc trên mạng không bị xóa)')) return;
+    c.photos = c.photos.filter(x => x.id !== pid);
+    save(); App.render(); App.toast('Đã gỡ ảnh');
+  },
+  fail(img){
+    const p = img.parentElement;
+    const url = img.dataset.raw;
+    img.outerHTML = `<div class="photo-broken">Không hiện được ảnh<br>(link riêng tư hoặc chặn nhúng)<a href="${h(url)}" target="_blank" rel="noopener" class="link-btn">Mở link →</a></div>`;
+  },
+  cardHTML(c){
+    const ps = c.photos || [];
+    const body = ps.length ? `<div class="photos">${ps.map(p => `
+      <div class="photo">
+        <a href="${h(p.raw||p.url)}" target="_blank" rel="noopener" title="Mở ảnh gốc">
+          <img class="photo-img" src="${h(p.url)}" data-raw="${h(p.raw||p.url)}" alt="${h(p.note||p.kind)}" loading="lazy" onerror="Photo.fail(this)"></a>
+        <div class="photo-meta"><span class="pm-main"><b>${h(p.kind||'Ảnh')}</b><span>${fmtD(p.date)}${p.note?' · '+h(p.note):''}</span></span>
+          <button class="pm-del" onclick="Photo.del('${p.id}')" title="Gỡ ảnh" aria-label="Gỡ ảnh">✕</button></div>
+      </div>`).join('')}</div>`
+      : '<div class="photo-empty">Chưa có ảnh. Bấm "Dán link ảnh" để thêm — chụp bằng điện thoại rồi tải lên Google Drive/Photos, copy link dán vào đây.</div>';
+    return `<div class="card mb">
+      <div class="card-h"><h2>Ảnh điều trị</h2><span class="hint">${ps.length} ảnh</span><span class="spacer"></span>
+        <button class="btn small primary" onclick="Photo.form()">${IC.plus} Dán link ảnh</button></div>
+      <div class="card-b">${body}</div></div>`;
+  },
+};
+
 /* ---------- Khách hàng ---------- */
 const Cust = {
   /* Ô chọn tỉnh + xã/phường theo địa giới mới, kèm mục "Khác — nhập tay" */
@@ -487,7 +573,10 @@ const Cust = {
   recordForm(){
     const c = custById(App.state.custSel); const r = c.record || {};
     const ta = (label,name,val,ph) => `<div class="f full"><label>${label}</label><textarea name="${name}" placeholder="${ph||''}">${h(val||'')}</textarea></div>`;
-    const icdSel = (label,name,val) => `<div class="f full"><label>${label}</label><select name="${name}"><option value="">— chọn mã ICD —</option>${ICD.map(([code,nm])=>`<option value="${code}"${val===code?' selected':''}>${code} — ${nm}</option>`).join('')}</select></div>`;
+    const icdSel = (label,name,val,ph) => `<div class="f full"><label>${label}</label>
+      ${Combo.html('cb_'+name, name, val ? icdName(val) : '', icdOptions(),
+        ph || 'Gõ tên bệnh hoặc mã ICD, vd: viem tuy, K04', null,
+        'Gõ không dấu cũng ra. Chưa có mã thì cứ ghi tên bệnh.')}</div>`;
     App.modal('Bệnh án ngoại trú RHM (BA-18) — ' + c.name, `
     <form class="form-grid" onsubmit="Cust.recordSave(event)">
       ${ta('I. Lý do vào viện, vấn đề sức khỏe','lyDo',r.lyDo)}
@@ -499,9 +588,9 @@ const Cust = {
       ${ta('Khám trong miệng','trongMieng',r.trongMieng)}
       ${ta('III.3. Xét nghiệm, cận lâm sàng','canLamSang',r.canLamSang)}
       ${ta('III.4. Tóm tắt bệnh án','tomTat',r.tomTat)}
-      ${icdSel('IV. Chẩn đoán — bệnh chính (ICD)','chanDoan',r.chanDoan)}
-      ${icdSel('Bệnh kèm theo (nếu có)','chanDoanKem',r.chanDoanKem)}
-      <div class="f full"><label>Biến chứng (nếu có)</label><input name="bienChung" value="${h(r.bienChung||'')}"></div>
+      ${icdSel('IV. Chẩn đoán — bệnh chính (kèm mã ICD)','chanDoan',r.chanDoan)}
+      ${icdSel('Bệnh kèm theo (nếu có)','chanDoanKem',r.chanDoanKem,'Gõ tên bệnh hoặc mã ICD, vd: cao rang, K03.6')}
+      ${icdSel('Biến chứng (nếu có)','bienChung',r.bienChung,'Gõ tên biến chứng hoặc mã ICD, vd: ap xe, K04.7')}
       ${ta('V. Kế hoạch điều trị','keHoach',r.keHoach)}
       <div class="f"><label>Điều trị từ ngày</label><input type="date" name="tuNgay" value="${h(r.tuNgay||'')}"></div>
       <div class="f"><label>Đến ngày</label><input type="date" name="denNgay" value="${h(r.denNgay||'')}"></div>
@@ -513,6 +602,7 @@ const Cust = {
     ev.preventDefault();
     const c = custById(App.state.custSel);
     const d = Object.fromEntries(new FormData(ev.target).entries());
+    ['chanDoan','chanDoanKem','bienChung'].forEach(k => d[k] = icdCode(d[k]));
     c.record = Object.assign({dienBien:(c.record&&c.record.dienBien)||[]}, c.record, d);
     save(); App.closeModal(); App.render(); App.toast('Đã lưu bệnh án ✓');
   },
@@ -557,7 +647,7 @@ const Cust = {
     <p><b>II.2. Tiền sử bản thân:</b> ${dot(r.tienSuBanThan || c.allergy)}<br><b>Tiền sử gia đình:</b> ${dot(r.tienSuGiaDinh)}</p>
     <p><b>III.1. Toàn thân:</b> ${dot(r.toanThan)}<br><b>III.2. Khám chuyên khoa — Ngoài miệng:</b> ${dot(r.ngoaiMieng)}<br><b>Trong miệng:</b> ${dot(r.trongMieng)}</p>
     <p><b>III.3. Cận lâm sàng:</b> ${dot(r.canLamSang)}<br><b>III.4. Tóm tắt bệnh án:</b> ${dot(r.tomTat)}</p>
-    <p><b>IV. CHẨN ĐOÁN</b><br>Bệnh chính: <b>${h(icdName(r.chanDoan))||'—'}</b><br>Bệnh kèm theo: ${h(icdName(r.chanDoanKem))||'—'}<br>Biến chứng: ${h(r.bienChung)||'—'}</p>
+    <p><b>IV. CHẨN ĐOÁN</b><br>Bệnh chính: <b>${h(icdName(r.chanDoan))||'—'}</b><br>Bệnh kèm theo: ${h(icdName(r.chanDoanKem))||'—'}<br>Biến chứng: ${h(icdName(r.bienChung))||'—'}</p>
     <p><b>V. Kế hoạch điều trị:</b><br>${h(r.keHoach||'').replace(/\n/g,'<br>')||'—'}</p>
     <h2>VI. QUÁ TRÌNH ĐIỀU TRỊ</h2>
     <table><tr><th>Ngày</th><th>Diễn biến bệnh</th><th>Xử trí</th><th>Ghi chú</th></tr>${rows}</table>
@@ -636,6 +726,7 @@ SCREENS.customers = () => {
         <div class="legend"><span><i style="background:var(--danger)"></i>Sâu</span><span><i style="background:var(--info)"></i>Trám</span><span><i style="background:var(--warn)"></i>Nội nha</span><span><i style="background:var(--accent-ink)"></i>Bọc sứ</span><span><i style="background:var(--accent)"></i>Implant</span><span><i style="background:var(--muted)"></i>Mất</span></div>
       </div>
     </div>
+    ${Photo.cardHTML(c)}
     <div class="card mb">
       <div class="card-h"><h2>Bệnh án ngoại trú (BA-18)</h2><span class="spacer"></span>
         <button class="btn small" onclick="Cust.recordForm()">Cập nhật bệnh án</button>

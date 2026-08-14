@@ -122,8 +122,9 @@ td.r,th.r{text-align:right}
 .sub-line{color:var(--muted);font-size:12px}
 
 /* Danh sách dòng */
-.row-list{display:grid}
-.row-item{display:flex;align-items:center;gap:12px;padding:10px 6px}
+.row-list{display:grid;min-width:0}
+.row-list>*{min-width:0}
+.row-item{display:flex;align-items:center;gap:12px;padding:10px 6px;min-width:0;flex-wrap:wrap}
 .row-item + .row-item{border-top:1px solid var(--line)}
 .time-chip{font-weight:700;font-size:12.5px;color:var(--accent-ink);background:var(--accent-soft);border-radius:7px;padding:4px 8px;flex:none}
 .row-item .r-main{flex:1;min-width:0}
@@ -214,6 +215,22 @@ td.r,th.r{text-align:right}
 .tooth-info{margin-top:8px;padding:10px 14px;border-radius:8px;background:var(--surface2);font-size:13px;color:var(--ink2);border:1px dashed var(--line)}
 .tooth-info b{color:var(--ink)}
 
+/* Ảnh điều trị */
+.photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.photo{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface2);display:flex;flex-direction:column}
+.photo-img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--surface2);border:none}
+.photo-broken{
+  width:100%;aspect-ratio:4/3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  font-size:11.5px;color:var(--muted);text-align:center;padding:8px;background:var(--surface2);
+}
+.photo-meta{padding:7px 9px;display:flex;align-items:flex-start;gap:6px;font-size:11.5px;border-top:1px solid var(--line)}
+.photo-meta .pm-main{flex:1;min-width:0}
+.photo-meta b{display:block;font-size:12px;font-weight:600}
+.photo-meta span{color:var(--muted)}
+.photo-meta .pm-del{color:var(--danger);font-size:14px;line-height:1;padding:2px 4px;border-radius:5px;flex:none}
+.photo-meta .pm-del:hover{background:var(--danger-soft)}
+.photo-empty{font-size:13px;color:var(--muted);padding:10px 4px}
+
 /* Dòng thời gian */
 .timeline{display:grid;margin-left:6px}
 .tl-item{position:relative;padding:0 0 16px 22px;border-left:2px solid var(--line)}
@@ -286,6 +303,10 @@ td.r,th.r{text-align:right}
   .kpis{gap:10px;grid-template-columns:repeat(2,1fr)!important}
   .kpis .kpi:last-child:nth-child(odd){grid-column:1/-1}
   .kpi .k-value{font-size:19px}
+  /* Dòng lịch hẹn: tên khách một hàng, trạng thái + nút xuống hàng dưới */
+  .row-item{gap:8px 10px}
+  .row-item .r-main{flex:1 1 55%}
+  .row-item select{flex:1 1 auto;min-width:0}
   .form-grid{grid-template-columns:1fr}
   .modal-back{padding:10px 8px}
   .bottom-nav{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:40;background:var(--surface);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
