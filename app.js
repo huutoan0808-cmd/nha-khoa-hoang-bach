@@ -176,19 +176,20 @@ function seed() {
 }
 
 function load() {
+  db = null;
   try { const raw = localStorage.getItem(DB_KEY); if (raw) db = JSON.parse(raw); } catch(e){ db = null; }
-  if (!db || !db.customers) db = seed();
+  if (!db || !Array.isArray(db.customers)) db = seed();
   migrate(); save();
 }
 function save() { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
-/* Nâng cấp dữ liệu cũ: tách ô "địa chỉ" gộp thành số nhà + đường */
+/* Nâng cấp dữ liệu cũ về một ô địa chỉ duy nhất (số nhà + đường gộp chung) */
 function migrate() {
   (db.customers || []).forEach(c => {
-    if (c.addr1 && !c.street && !c.houseNo) {
-      const m = String(c.addr1).match(/^\s*([^,]+),\s*(.+)$/);
-      if (m) { c.houseNo = m[1].trim(); c.street = m[2].trim(); }
-      else { c.street = String(c.addr1).trim(); }
-      delete c.addr1;
+    if (c.addr1 && !c.street) { c.street = String(c.addr1).trim(); }
+    delete c.addr1;
+    if (c.houseNo) {
+      c.street = [String(c.houseNo).trim(), String(c.street || '').trim()].filter(Boolean).join(' ');
+      delete c.houseNo;
     }
   });
 }
@@ -196,7 +197,16 @@ function migrate() {
 /* Truy vấn */
 const custById = id => db.customers.find(c => c.id === id);
 /* Địa chỉ đầy đủ, viết theo lối quen thuộc: số nhà → đường → phường/xã → tỉnh */
-const fullAddr = c => [c.houseNo, c.street, c.ward, c.province].filter(Boolean).join(', ');
+const fullAddr = c => [c.street, c.ward, c.province].filter(Boolean).join(', ');
+/* Ô tìm khách hàng: gõ tên, số điện thoại hoặc mã KH đều ra */
+const custLabel = c => c ? c.name + ' · ' + c.code : '';
+const custOptions = () => db.customers.map(c => ({t: custLabel(c), s: c.phone || ''}));
+function pickCustomerInto(v, inp){
+  const code = String(v).split('·').pop().trim();
+  const c = db.customers.find(x => x.code === code) || db.customers.find(x => custLabel(x) === v);
+  const hid = inp.form && inp.form.querySelector('[name=customerId]');
+  if (hid) hid.value = c ? c.id : '';
+}
 const staffById = id => db.staff.find(s => s.id === id);
 const custDebt = c => {
   const billed = db.treatments.filter(t => t.customerId === c.id && t.status !== 'Báo giá').reduce((s,t) => s + t.price, 0);
@@ -280,6 +290,58 @@ const App = {
   print(html){ $('#printArea').innerHTML = html; setTimeout(()=>window.print(), 60); },
 };
 
+/* ================= Ô GÕ-ĐỂ-TÌM ================= */
+/* Gõ từ khóa → gợi ý ngay. Không có trong danh sách thì cứ gõ tự do, vẫn lưu được. */
+const Combo = {
+  reg: {},
+  /* opts: mảng chuỗi, hoặc {t:'nội dung', s:'ghi chú phải'} */
+  html(id, name, value, opts, ph, onpick, hint){
+    this.reg[id] = {opts, onpick};
+    return `<div class="combo" id="${id}">
+      <input class="combo-input" name="${h(name)}" value="${h(value||'')}" placeholder="${h(ph||'Gõ để tìm…')}"
+        autocomplete="off" role="combobox" aria-expanded="false"
+        oninput="Combo.open('${id}')" onfocus="Combo.open('${id}')" onblur="Combo.close('${id}')"
+        onkeydown="Combo.key('${id}',event)">
+      <div class="combo-list" hidden onmousedown="event.preventDefault()"></div>
+    </div>${hint?`<div class="combo-hint">${h(hint)}</div>`:''}`;
+  },
+  setOpts(id, opts){ if (this.reg[id]) this.reg[id].opts = opts; },
+  el(id){ const b = document.getElementById(id); return b && {box:b, inp:b.querySelector('.combo-input'), list:b.querySelector('.combo-list')}; },
+  /* bỏ dấu để gõ "phuong rach gia" cũng ra "Phường Rạch Giá" */
+  norm(s){ return String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d'); },
+  open(id){
+    const e = this.el(id), r = this.reg[id]; if (!e || !r) return;
+    const q = this.norm(e.inp.value.trim());
+    const items = (r.opts||[]).map(o => typeof o === 'string' ? {t:o} : o)
+      .filter(o => !q || this.norm(o.t).includes(q) || (o.s && this.norm(o.s).includes(q)))
+      .slice(0, 60);
+    e.list.innerHTML = items.length
+      ? items.map(o => `<button type="button" class="combo-item" onclick="Combo.pick('${id}',this.dataset.v)" data-v="${h(o.t)}"><b>${h(o.t)}</b>${o.s?`<span>${h(o.s)}</span>`:''}</button>`).join('')
+      : '<div class="combo-empty">Không có gợi ý — bạn cứ gõ tự do, hệ thống vẫn lưu.</div>';
+    e.list.hidden = false; e.inp.setAttribute('aria-expanded','true');
+  },
+  close(id){ const e = this.el(id); if (e) { e.list.hidden = true; e.inp.setAttribute('aria-expanded','false'); } },
+  pick(id, v){
+    const e = this.el(id), r = this.reg[id]; if (!e) return;
+    e.inp.value = v; this.close(id);
+    if (r && r.onpick) r.onpick(v, e.inp);
+  },
+  key(id, ev){
+    const e = this.el(id); if (!e || e.list.hidden) return;
+    const items = [...e.list.querySelectorAll('.combo-item')];
+    if (!items.length) return;
+    let i = items.findIndex(x => x.classList.contains('on'));
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      if (i >= 0) items[i].classList.remove('on');
+      i = ev.key === 'ArrowDown' ? (i + 1) % items.length : (i <= 0 ? items.length - 1 : i - 1);
+      items[i].classList.add('on'); items[i].scrollIntoView({block:'nearest'});
+    } else if (ev.key === 'Enter' && i >= 0) {
+      ev.preventDefault(); this.pick(id, items[i].dataset.v);
+    } else if (ev.key === 'Escape') { this.close(id); }
+  },
+};
+
 /* ================= MÀN HÌNH ================= */
 const SCREENS = {};
 
@@ -348,47 +410,19 @@ const Cust = {
   /* Ô chọn tỉnh + xã/phường theo địa giới mới, kèm mục "Khác — nhập tay" */
   addrSelects(c){
     const prov = c.province || 'An Giang';
-    const knownProv = PROVINCES.includes(prov);
-    const list = WARDS[knownProv ? prov : 'An Giang'];
-    const knownWard = knownProv && list.includes(c.ward);
-    const OTHER = '__other__';
+    const wardOpts = WARDS[prov] || [];
     return `
       <div class="f"><label>8. Địa chỉ — Tỉnh, thành phố</label>
-        <select name="provinceSel" onchange="Cust.provChange(this)">
-          ${PROVINCES.map(p=>`<option value="${h(p)}"${knownProv&&prov===p?' selected':''}>${h(p)}</option>`).join('')}
-          <option value="${OTHER}"${!knownProv?' selected':''}>Khác — nhập tay</option>
-        </select>
-        <input name="provinceOther" placeholder="Nhập tỉnh/thành phố" value="${h(!knownProv?prov:'')}" style="margin-top:6px;${knownProv?'display:none':''}">
-      </div>
+        ${Combo.html('cbProvince','province', prov, PROVINCES, 'Gõ tên tỉnh, vd: an giang',
+          Cust.onProvincePick, 'Gõ không dấu cũng ra. Không có trong danh sách thì cứ gõ tự do.')}</div>
       <div class="f"><label>Phường, xã</label>
-        <select name="wardSel" onchange="Cust.wardChange(this)">
-          <option value="">— chọn xã/phường —</option>
-          ${knownProv?list.map(w=>`<option value="${h(w)}"${c.ward===w?' selected':''}>${h(w)}</option>`).join(''):''}
-          <option value="${OTHER}"${c.ward&&!knownWard?' selected':''}>Khác — nhập tay</option>
-        </select>
-        <input name="wardOther" placeholder="Nhập xã/phường" value="${h(!knownWard?(c.ward||''):'')}" style="margin-top:6px;${knownWard||!c.ward?'display:none':''}">
-      </div>`;
+        ${Combo.html('cbWard','ward', c.ward||'', wardOpts, 'Gõ tên phường/xã, vd: rach gia', null,
+          wardOpts.length ? wardOpts.length + ' phường/xã của ' + prov : 'Gõ tự do')}</div>`;
   },
-  provChange(sel){
-    const form = sel.form;
-    const other = form.querySelector('[name=provinceOther]');
-    const wSel = form.querySelector('[name=wardSel]');
-    const wOther = form.querySelector('[name=wardOther]');
-    const isOther = sel.value === '__other__';
-    other.style.display = isOther ? '' : 'none';
-    if (isOther) { other.focus(); wSel.innerHTML = '<option value="">— nhập tay bên dưới —</option><option value="__other__" selected>Khác — nhập tay</option>'; wOther.style.display = ''; }
-    else {
-      wSel.innerHTML = '<option value="">— chọn xã/phường —</option>' +
-        (WARDS[sel.value]||[]).map(w=>`<option value="${h(w)}">${h(w)}</option>`).join('') +
-        '<option value="__other__">Khác — nhập tay</option>';
-      wOther.style.display = 'none'; wOther.value = '';
-    }
-  },
-  wardChange(sel){
-    const other = sel.form.querySelector('[name=wardOther]');
-    const isOther = sel.value === '__other__';
-    other.style.display = isOther ? '' : 'none';
-    if (isOther) other.focus();
+  onProvincePick(v){
+    Combo.setOpts('cbWard', WARDS[v] || []);
+    const w = Combo.el('cbWard');
+    if (w) { w.inp.value = ''; w.inp.placeholder = (WARDS[v] ? 'Gõ tên phường/xã của ' + v : 'Nhập phường/xã'); }
   },
   form(id){
     const c = id ? custById(id) : {doiTuong:'Thu phí'};
@@ -403,8 +437,8 @@ const Cust = {
       ${f('6. Dân tộc','ethnic',c.ethnic||'Kinh')}
       ${f('7. Quốc tịch','nation',c.nation||'Việt Nam')}
       ${Cust.addrSelects(c)}
-      ${f('Đường / ấp, thôn, khóm','street',c.street)}
-      ${f('Số nhà','houseNo',c.houseNo)}
+      <div class="f full"><label>Số nhà, đường / ấp, thôn, khóm</label>
+        <input name="street" value="${h(c.street||'')}" placeholder="Vd: 25 Nguyễn Trung Trực, hoặc Ấp Hòa Thuận"></div>
       <div class="f"><label>9. Đối tượng</label><select name="doiTuong">${['Thu phí','BHYT','Miễn','Khác'].map(o=>`<option${c.doiTuong===o?' selected':''}>${o}</option>`).join('')}</select></div>
       ${f('10. Số thẻ BHYT','bhyt',c.bhyt)}
       ${f('11. Số CCCD / Hộ chiếu / Định danh','cccd',c.cccd)}
@@ -419,9 +453,9 @@ const Cust = {
     ev.preventDefault();
     const d = Object.fromEntries(new FormData(ev.target).entries());
     d.name = (d.name||'').toUpperCase().trim();
-    d.province = (d.provinceSel === '__other__' ? d.provinceOther : d.provinceSel || '').trim();
-    d.ward = (d.wardSel === '__other__' ? d.wardOther : d.wardSel || '').trim();
-    delete d.provinceSel; delete d.provinceOther; delete d.wardSel; delete d.wardOther;
+    d.province = (d.province || '').trim();
+    d.ward = (d.ward || '').trim();
+    d.street = (d.street || '').trim();
     if (id) { Object.assign(custById(id), d); App.toast('Đã cập nhật hồ sơ ✓'); }
     else {
       const c = Object.assign({id:uid(), code:'KH-'+(db.seq.cust++), createdAt:todayISO(), teeth:{}, record:{dienBien:[]}}, d);
@@ -639,16 +673,20 @@ const Cal = {
   shift(d){ App.state.calDate = isoAdd(App.state.calDate, d); App.render(); },
   form(id){
     const a = id ? db.appointments.find(x=>x.id===id) : {date:App.state.calDate, time:'09:00', dur:30, status:'Chờ xác nhận'};
-    const custOpts = db.customers.map(c=>`<option value="${c.id}"${a.customerId===c.id?' selected':''}>${h(c.name)} (${h(c.code)})</option>`).join('');
     const labOpts = db.labs.filter(l=>!l.received).map(l=>`<option value="${l.id}"${a.labOrderId===l.id?' selected':''}>${h(l.type)} ${h(l.teeth)} — ${h(custById(l.customerId)?custById(l.customerId).name:'')}</option>`).join('');
     App.modal(id?'Sửa lịch hẹn':'Đặt lịch hẹn', `
     <form class="form-grid" onsubmit="Cal.save(event,'${id||''}')">
-      <div class="f full"><label>Khách hàng</label><select name="customerId" required><option value="">— chọn khách —</option>${custOpts}</select></div>
+      <div class="f full"><label>Khách hàng</label>
+        ${Combo.html('cbApptCust','customerName', custLabel(custById(a.customerId)), custOptions(),
+          'Gõ tên, số điện thoại hoặc mã KH', pickCustomerInto, 'Gõ không dấu cũng ra.')}
+        <input type="hidden" name="customerId" value="${h(a.customerId||'')}"></div>
       <div class="f"><label>Ngày</label><input type="date" name="date" value="${a.date}" required></div>
       <div class="f"><label>Giờ</label><input type="time" name="time" value="${a.time}" required></div>
       <div class="f"><label>Thời lượng (phút)</label><input type="number" name="dur" value="${a.dur}" min="15" step="15"></div>
       <div class="f"><label>Ghế</label><select name="chair">${CHAIRS.map(g=>`<option${a.chair===g?' selected':''}>${g}</option>`).join('')}</select></div>
-      <div class="f full"><label>Nội dung / dịch vụ</label><input name="service" value="${h(a.service||'')}" required list="svcList"><datalist id="svcList">${db.services.map(s=>`<option value="${h(s.name)}">`).join('')}</datalist></div>
+      <div class="f full"><label>Nội dung / dịch vụ</label>
+        ${Combo.html('cbApptSvc','service', a.service||'', db.services.map(s=>({t:s.name, s:s.group})),
+          'Gõ tên dịch vụ, vd: cao voi, implant', null, 'Gõ tự do cũng được.')}</div>
       <div class="f"><label>Bác sĩ</label><select name="doctorId">${db.staff.filter(s=>s.role.includes('Bác sĩ')).map(s=>`<option value="${s.id}"${a.doctorId===s.id?' selected':''}>${h(s.name)}</option>`).join('')}</select></div>
       <div class="f"><label>Trạng thái</label><select name="status">${APPT_STATUS.map(s=>`<option${a.status===s?' selected':''}>${s}</option>`).join('')}</select></div>
       <div class="f full"><label>Chờ hàng lab (nếu có)</label><select name="labOrderId"><option value="">— không —</option>${labOpts}</select></div>
@@ -660,6 +698,8 @@ const Cal = {
   save(ev, id){
     ev.preventDefault();
     const d = Object.fromEntries(new FormData(ev.target).entries());
+    if (!d.customerId) { App.toast('Hãy chọn khách hàng từ danh sách gợi ý'); return; }
+    delete d.customerName;
     d.dur = num(d.dur) || 30;
     if (id) Object.assign(db.appointments.find(x=>x.id===id), d);
     else db.appointments.push(Object.assign({id:uid()}, d));
@@ -710,14 +750,20 @@ SCREENS.calendar = () => {
 /* ---------- Điều trị & thanh toán ---------- */
 const Treat = {
   setCust(id){ App.state.treatCust = id; App.render(); },
+  onCustPick(v){
+    const code = String(v).split('·').pop().trim();
+    const c = db.customers.find(x => x.code === code);
+    if (c) Treat.setCust(c.id);
+  },
   itemForm(id){
     const t = id ? db.treatments.find(x=>x.id===id) : {status:'Báo giá', date:todayISO()};
     App.modal(id?'Sửa hạng mục điều trị':'Thêm hạng mục điều trị', `
     <form class="form-grid" onsubmit="Treat.itemSave(event,'${id||''}')">
-      <div class="f full"><label>Dịch vụ</label><select name="serviceId" required onchange="const ds=this.selectedOptions[0].dataset.s;if(ds){const s=JSON.parse(ds);document.querySelector('[name=price]').value=s.price;document.querySelector('[name=group]').value=s.group}">
-        <option value="">— chọn dịch vụ —</option>
-        ${SERVICE_GROUPS.concat(['Khác']).map(g=>`<optgroup label="${g}">${db.services.filter(s=>s.group===g).map(s=>`<option value="${s.id}" data-s='${JSON.stringify({price:s.price,group:s.group})}'${t.serviceId===s.id?' selected':''}>${h(s.name)} — ${money(s.price)}</option>`).join('')}</optgroup>`).join('')}
-      </select></div>
+      <div class="f full"><label>Dịch vụ</label>
+        ${Combo.html('cbService','name', (db.services.find(s=>s.id===t.serviceId)||{}).name || t.name || '',
+          db.services.map(s=>({t:s.name, s:s.group+' · '+money(s.price)})),
+          'Gõ tên dịch vụ, vd: implant, tram, cao voi', Treat.onServicePick,
+          'Gõ không dấu cũng ra. Dịch vụ mới thì cứ gõ rồi tự điền giá.')}</div>
       <input type="hidden" name="group" value="${h(t.group||'')}">
       <div class="f"><label>Răng / vị trí</label><input name="tooth" value="${h(t.tooth||'')}" placeholder="R36, 2 hàm..."></div>
       <div class="f"><label>Đơn giá (₫)</label><input type="number" name="price" value="${t.price||''}" required></div>
@@ -728,11 +774,20 @@ const Treat = {
         <button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu</button></div>
     </form>`);
   },
+  onServicePick(v, inp){
+    const s = db.services.find(x => x.name === v); if (!s) return;
+    const f = inp.form;
+    const price = f.querySelector('[name=price]'), grp = f.querySelector('[name=group]');
+    if (price && !num(price.value)) price.value = s.price;
+    if (grp) grp.value = s.group;
+  },
   itemSave(ev, id){
     ev.preventDefault();
     const d = Object.fromEntries(new FormData(ev.target).entries());
-    const s = db.services.find(x=>x.id===d.serviceId);
-    d.price = num(d.price); d.name = s ? s.name : 'Dịch vụ'; d.group = s ? s.group : (d.group||'Khác');
+    d.name = (d.name || '').trim();
+    const s = db.services.find(x => x.name === d.name);
+    d.serviceId = s ? s.id : '';
+    d.price = num(d.price); d.name = d.name || 'Dịch vụ'; d.group = s ? s.group : (d.group || 'Khác');
     if (id) Object.assign(db.treatments.find(x=>x.id===id), d);
     else db.treatments.push(Object.assign({id:uid(), customerId:App.state.treatCust, date:todayISO()}, d));
     save(); App.closeModal(); App.render(); App.toast('Đã lưu hạng mục ✓');
@@ -785,12 +840,11 @@ const Treat = {
   rxForm(){
     const c = custById(App.state.treatCust);
     const row = i => `<div class="form-grid full" style="grid-template-columns:2fr 1fr 2fr;gap:6px">
-      <div class="f"><input name="drug${i}" list="drugList" placeholder="Tên thuốc ${i+1}"></div>
+      <div class="f">${Combo.html('cbDrug'+i,'drug'+i,'',DRUGS,'Gõ tên thuốc '+(i+1))}</div>
       <div class="f"><input name="qty${i}" placeholder="SL (10 viên)"></div>
       <div class="f"><input name="use${i}" placeholder="Cách dùng"></div></div>`;
     App.modal('Kê đơn thuốc — ' + c.name, `
     <form onsubmit="Treat.rxSave(event)">
-      <datalist id="drugList">${DRUGS.map(d=>`<option value="${d}">`).join('')}</datalist>
       ${c.allergy?`<div class="note-block mb" style="background:var(--danger-soft);color:var(--danger)">⚠ Khách có ghi chú dị ứng: <b>${h(c.allergy)}</b></div>`:''}
       ${[0,1,2,3,4].map(row).join('')}
       <div class="form-actions"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu đơn thuốc</button></div>
@@ -868,8 +922,8 @@ SCREENS.treatment = () => {
 
   return `
   <div class="page-head"><h1>Điều trị & thanh toán</h1><span class="spacer"></span>
-    <select onchange="Treat.setCust(this.value)" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;max-width:260px">
-      ${db.customers.map(x=>`<option value="${x.id}"${x.id===cid?' selected':''}>${h(x.name)} (${h(x.code)})</option>`).join('')}</select>
+    <span style="min-width:230px;flex:1;max-width:320px">${Combo.html('cbTreatCust','treatCust', custLabel(c), custOptions(),
+      'Đổi khách: gõ tên, SĐT hoặc mã KH', Treat.onCustPick)}</span>
     <button class="btn primary" onclick="Treat.payForm()">Thu tiền</button></div>
   <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
     <div class="card kpi"><div class="k-label">Tổng kế hoạch (đã duyệt)</div><div class="k-value num">${money(total)}</div><div class="k-note">${items.length} hạng mục · ${items.filter(t=>t.status==='Báo giá').length} đang báo giá</div></div>
@@ -897,7 +951,9 @@ const Inv = {
       <div class="f"><label>Tồn kho</label><input type="number" name="stock" value="${it.stock??''}" required></div>
       <div class="f"><label>Định mức tối thiểu</label><input type="number" name="min" value="${it.min??''}"></div>
       <div class="f"><label>Hạn sử dụng</label><input type="date" name="expiry" value="${h(it.expiry||'')}"></div>
-      <div class="f full"><label>Nơi bán (nhà cung cấp)</label><input name="supplier" value="${h(it.supplier||'')}"></div>
+      <div class="f full"><label>Nơi bán (nhà cung cấp)</label>
+        ${Combo.html('cbSupplier','supplier', it.supplier||'', [...new Set(db.inventory.map(x=>x.supplier).filter(Boolean))],
+          'Gõ tên nhà cung cấp', null, 'Nhà cung cấp mới thì cứ gõ tự do.')}</div>
       <div class="f"><label>Giá nhập (₫)</label><input type="number" name="buy" value="${it.buy??''}"></div>
       <div class="f"><label>Giá bán (₫, nếu bán lẻ)</label><input type="number" name="sell" value="${it.sell??''}"></div>
       <div class="form-actions full">
@@ -1089,9 +1145,14 @@ const Lab = {
     const l = id ? db.labs.find(x=>x.id===id) : {sent:todayISO(), due:isoAdd(todayISO(),5), qty:1};
     App.modal(id?'Sửa phiếu gởi lab':'Gởi hàng lab', `
     <form class="form-grid" onsubmit="Lab.save(event,'${id||''}')">
-      <div class="f full"><label>Khách hàng</label><select name="customerId" required>${db.customers.map(c=>`<option value="${c.id}"${l.customerId===c.id?' selected':''}>${h(c.name)} (${h(c.code)})</option>`).join('')}</select></div>
-      <div class="f full"><label>Lab</label><input name="labName" list="labList" value="${h(l.labName||'')}" required><datalist id="labList">${LABS.map(x=>`<option value="${x}">`).join('')}</datalist></div>
-      <div class="f"><label>Loại răng / phục hình</label><input name="type" list="labTypeList" value="${h(l.type||'')}" required><datalist id="labTypeList">${LAB_TYPES.map(x=>`<option value="${x}">`).join('')}</datalist></div>
+      <div class="f full"><label>Khách hàng</label>
+        ${Combo.html('cbLabCust','customerName', custLabel(custById(l.customerId)), custOptions(),
+          'Gõ tên, số điện thoại hoặc mã KH', pickCustomerInto)}
+        <input type="hidden" name="customerId" value="${h(l.customerId||'')}"></div>
+      <div class="f full"><label>Lab</label>
+        ${Combo.html('cbLabName','labName', l.labName||'', LABS, 'Gõ tên lab', null, 'Lab mới thì cứ gõ tự do.')}</div>
+      <div class="f"><label>Loại răng / phục hình</label>
+        ${Combo.html('cbLabType','type', l.type||'', LAB_TYPES, 'Gõ loại phục hình')}</div>
       <div class="f"><label>Vị trí răng</label><input name="teeth" value="${h(l.teeth||'')}" placeholder="R36, R44–R46..."></div>
       <div class="f"><label>Số lượng (đơn vị)</label><input type="number" name="qty" value="${l.qty||1}" min="1"></div>
       <div class="f"><label>Ngày gởi</label><input type="date" name="sent" value="${h(l.sent||'')}" required></div>
@@ -1107,6 +1168,8 @@ const Lab = {
   save(ev, id){
     ev.preventDefault();
     const d = Object.fromEntries(new FormData(ev.target).entries());
+    if (!d.customerId) { App.toast('Hãy chọn khách hàng từ danh sách gợi ý'); return; }
+    delete d.customerName;
     d.qty = num(d.qty)||1;
     if (id) Object.assign(db.labs.find(x=>x.id===id), d);
     else db.labs.push(Object.assign({id:uid(), received:''}, d));

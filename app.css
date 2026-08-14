@@ -99,11 +99,15 @@ a{color:var(--accent-ink)}
 .kpi .k-note{font-size:12px;margin-top:2px;color:var(--muted)}
 .k-note .up{color:var(--ok);font-weight:600}
 .k-note .down{color:var(--danger);font-weight:600}
+/* min-width:0 để cột co lại được, bảng rộng cuộn trong khung chứ không đẩy tràn cả trang */
 .grid-2{display:grid;grid-template-columns:1.5fr 1fr;gap:14px;align-items:start}
-.col{display:grid;gap:14px}
+.grid-2>*{min-width:0}
+.col{display:grid;gap:14px;min-width:0}
+.card{min-width:0}
+.kpis>*{min-width:0}
 
 /* Bảng */
-.tbl-wrap{overflow-x:auto}
+.tbl-wrap{overflow-x:auto;min-width:0;max-width:100%}
 table{width:100%;border-collapse:collapse;font-size:13.5px;min-width:560px}
 th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;font-weight:600;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
 td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
@@ -160,6 +164,25 @@ td.r,th.r{text-align:right}
 .form-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
 .check-row{display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:6px 0}
 .check-row label{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--ink2)}
+
+/* Ô gõ-để-tìm (combobox) */
+.combo{position:relative}
+.combo-list{
+  position:absolute;left:0;right:0;top:100%;z-index:55;margin-top:3px;
+  background:var(--surface);border:1px solid var(--line);border-radius:9px;
+  box-shadow:0 6px 20px rgba(23,51,44,.18);max-height:230px;overflow-y:auto;
+}
+.combo-item{
+  display:flex;align-items:baseline;gap:8px;width:100%;text-align:left;
+  padding:8px 11px;font-size:13.5px;border-bottom:1px solid var(--line);
+}
+.combo-item:last-child{border-bottom:none}
+.combo-item:hover,.combo-item.on{background:var(--accent-soft);color:var(--accent-ink)}
+.combo-item b{font-weight:600;flex:1;min-width:0}
+.combo-item span{font-size:11.5px;color:var(--muted);white-space:nowrap}
+.combo-item:hover span,.combo-item.on span{color:var(--accent-ink);opacity:.75}
+.combo-empty{padding:9px 11px;font-size:12.5px;color:var(--muted)}
+.combo-hint{font-size:11px;color:var(--muted);margin-top:3px}
 
 /* Modal */
 .modal-back{position:fixed;inset:0;background:rgba(10,20,17,.5);z-index:80;display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px 12px}
