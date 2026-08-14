@@ -1,5 +1,5 @@
-const CACHE = 'nkhb-app-v5';
-const ASSETS = ['.', 'index.html', 'app.css', 'qrcode.lib.js', 'qr.js', 'wards.js', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const CACHE = 'nkhb-app-v6';
+const ASSETS = ['.', 'index.html', 'app.css', 'qrcode.lib.js', 'qr.js', 'cloud.js', 'wards.js', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });

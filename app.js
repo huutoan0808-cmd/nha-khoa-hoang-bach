@@ -84,10 +84,10 @@ function seed() {
   svc('Khác','Khám + tư vấn + chụp phim',150000); svc('Khác','Cắt chỉ / tái khám',0);
 
   const staff = [
-    {id:'st1', name:'BS. Trần Minh Đức', role:'Bác sĩ điều trị', base:20000000, kpiTarget:300000000, model:{type:'svcGroup', rates:{'Implant':20,'Phục hình sứ':15,'Chỉnh nha':12}, def:10}},
-    {id:'st2', name:'BS. Lê Thu Hằng', role:'Bác sĩ điều trị', base:18000000, kpiTarget:250000000, model:{type:'svcGroup', rates:{'Implant':20,'Phục hình sứ':15,'Chỉnh nha':12}, def:10}},
-    {id:'st3', name:'Nguyễn Văn Bình', role:'Phụ tá', base:9000000, kpiTarget:0, model:{type:'perCase', rate:2}},
-    {id:'st4', name:'Phạm Thảo Vy', role:'Lễ tân', base:8000000, kpiTarget:0, model:{type:'referral', rate:1}},
+    {id:'st1', name:'BS. Trần Minh Đức', role:'Bác sĩ điều trị', email:'', base:20000000, kpiTarget:300000000, model:{type:'svcGroup', rates:{'Implant':20,'Phục hình sứ':15,'Chỉnh nha':12}, def:10}},
+    {id:'st2', name:'BS. Lê Thu Hằng', role:'Bác sĩ điều trị', email:'', base:18000000, kpiTarget:250000000, model:{type:'svcGroup', rates:{'Implant':20,'Phục hình sứ':15,'Chỉnh nha':12}, def:10}},
+    {id:'st3', name:'Nguyễn Văn Bình', role:'Phụ tá', email:'', base:9000000, kpiTarget:0, model:{type:'perCase', rate:2}},
+    {id:'st4', name:'Phạm Thảo Vy', role:'Lễ tân', email:'', base:8000000, kpiTarget:0, model:{type:'referral', rate:1}},
   ];
 
   const cM = monthOf(T);
@@ -300,6 +300,13 @@ const App = {
 
   go(id){ this.cur = id; this.closeSheet(); this.render(); window.scrollTo({top:0}); },
   render(){
+    /* Mở từ mã QR của phòng khám → chỉ hiện màn hình chấm công */
+    if (location.hash.slice(0,3) === '#cc') {
+      document.querySelector('.sidebar').style.display = 'none';
+      document.querySelector('.bottom-nav').style.display = 'none';
+      $('#mainArea').innerHTML = Att.checkinScreen();
+      return;
+    }
     $('#sideNav').innerHTML = NAV.map(n => `<button class="nav-item ${n.id===this.cur?'active':''}" onclick="App.go('${n.id}')">${n.icon} ${n.label}</button>`).join('') +
       `<div class="nav-foot">Dữ liệu lưu trên thiết bị này.<br>Nhớ sao lưu định kỳ (nút ⬇ góc trên).</div>`;
     const first4 = NAV.slice(0,4), rest = NAV.slice(4);
@@ -1153,6 +1160,88 @@ const Att = {
       App.toast(st.name + ' — cập nhật giờ ra ' + t);
     }
     save(); App.render();
+    if (Cloud.configured() && Cloud.loggedIn()) {
+      try { await Cloud.pushAtt([log]); } catch(e){ App.toast('Đã lưu trên máy, chưa gửi lên đám mây được'); }
+    }
+  },
+
+  /* ---------- Nhân viên tự quét mã QR của phòng khám ---------- */
+  clinicUrl(){ return location.origin + location.pathname + '#cc'; },
+  clinicQR(){
+    App.modal('Mã QR chấm công của phòng khám', `
+      <div style="text-align:center">
+        <div style="display:inline-block;padding:10px;background:#fff;border-radius:12px;border:1px solid var(--line)">${QR.svg(Att.clinicUrl(), 240)}</div>
+        <div style="margin-top:10px;font-weight:700">${h(db.clinic.name)}</div>
+        <div class="sub-line">Dán mã này ở cửa hoặc quầy lễ tân</div>
+      </div>
+      <div class="note-block" style="margin-top:12px">Nhân viên đến phòng khám, nối wifi phòng khám, mở camera điện thoại quét mã này
+        → phần mềm mở ra màn hình chấm công, đăng nhập một lần là xong. Những lần sau chỉ quét và bấm.</div>
+      <div class="form-actions">
+        <button type="button" class="btn" onclick="App.closeModal()">Đóng</button>
+        <button type="button" class="btn primary" onclick="Att.printClinicQR()">${IC.print} In mã</button></div>`);
+  },
+  printClinicQR(){
+    App.print(`<div style="text-align:center">
+      <h1>CHẤM CÔNG</h1>
+      <p style="margin:2px 0"><b>${h(db.clinic.name)}</b><br>${h(db.clinic.addr)}</p>
+      <div style="margin:16px auto">${QR.svg(Att.clinicUrl(), 260)}</div>
+      <p style="font-size:13px">Nối wifi phòng khám → quét mã → chấm công</p></div>`);
+  },
+
+  /* Màn hình riêng khi mở app từ mã QR của phòng khám */
+  myStaff(){
+    const email = (Cloud.who() || '').toLowerCase();
+    return db.staff.find(s => (s.email || '').toLowerCase() === email);
+  },
+  checkinScreen(){
+    const T = todayISO();
+    let body;
+    if (!Cloud.configured()) {
+      body = `<div class="note-block">Phòng khám chưa bật cơ sở dữ liệu chung nên chưa dùng được kiểu tự quét.
+        Quản lý vào <b>Nhân sự → Chấm công → Cài đặt → Cấu hình kết nối</b> để bật.</div>`;
+    } else if (!Cloud.loggedIn()) {
+      body = `<div class="note-block">Đăng nhập một lần để phần mềm biết bạn là ai. Lần sau quét mã là chấm công được ngay.</div>
+        <div class="form-actions"><button class="btn primary" onclick="Att.loginForm()">Đăng nhập</button></div>`;
+    } else {
+      const st = this.myStaff();
+      if (!st) {
+        body = `<div class="note-block" style="background:var(--danger-soft);color:var(--danger)">
+          Tài khoản <b>${h(Cloud.who())}</b> chưa được gắn với nhân viên nào.
+          Quản lý vào <b>Nhân sự → Bảng lương → Sửa</b> để điền email này cho đúng người.</div>
+          <div class="form-actions"><button class="btn" onclick="Att.logout();App.render()">Đăng xuất</button></div>`;
+      } else {
+        const l = this.logOf(st.id, T);
+        const next = !l ? 'Chấm công vào ca' : (!l.outAt ? 'Chấm công ra ca' : 'Cập nhật giờ ra');
+        body = `
+          <div class="card mb"><div class="card-b" style="text-align:center">
+            <div class="avatar" style="width:56px;height:56px;font-size:20px;margin:0 auto 8px">${h(st.name.split(' ').slice(-1)[0].slice(0,2))}</div>
+            <div style="font-size:17px;font-weight:700">${h(st.name)}</div>
+            <div class="sub-line">${h(st.role)} · ${fmtD(T)}</div>
+            <div style="margin-top:12px;display:flex;gap:18px;justify-content:center">
+              <div><div class="sub-line">Giờ vào</div><div class="num" style="font-size:20px;font-weight:700">${l&&l.inAt?l.inAt:'—'}</div></div>
+              <div><div class="sub-line">Giờ ra</div><div class="num" style="font-size:20px;font-weight:700">${l&&l.outAt?l.outAt:'—'}</div></div>
+            </div>
+            ${l&&l.net==='outside'?'<div class="pill danger" style="margin-top:10px">Chấm ngoài mạng phòng khám</div>':''}
+          </div></div>
+          <button class="btn primary" style="width:100%;justify-content:center;padding:14px" onclick="Att.selfCheck('${st.id}')">${next}</button>
+          <div class="form-actions" style="margin-top:14px">
+            <button class="btn small" onclick="Att.sync()">Tải lại</button>
+            <span class="spacer"></span>
+            <button class="btn small" onclick="Att.logout();App.render()">Đăng xuất</button>
+            <button class="btn small" onclick="location.hash='';location.reload()">Vào phần mềm</button></div>`;
+      }
+    }
+    return `<div style="max-width:420px;margin:0 auto">
+      <div class="page-head"><h1>Chấm công</h1><div class="sub">${h(db.clinic.name)} · ${h(db.clinic.addr)}</div></div>
+      ${body}</div>`;
+  },
+  async selfCheck(staffId){
+    await this.record(staffId, true);
+    if (Cloud.loggedIn()) {
+      const T = todayISO(), l = this.logOf(staffId, T);
+      try { await Cloud.pushAtt([l]); } catch(e){ App.toast('Đã lưu trên máy, chưa gửi lên được: ' + e.message); }
+    }
+    App.render();
   },
 
   /* Không đọc được tên wifi từ trình duyệt — đối chiếu địa chỉ mạng công cộng thay thế */
@@ -1295,9 +1384,83 @@ const Att = {
     logs.forEach(l => { if (l.inAt) { days++; if (l.inAt > start) late++; if (l.net === 'outside') outside++; } });
     return {days, late, outside, logs};
   },
+  /* ---------- Kết nối đám mây ---------- */
+  cloudForm(){
+    const c = Cloud.cfg || {};
+    App.modal('Kết nối đám mây', `
+    <form class="form-grid" onsubmit="Att.cloudSave(event)">
+      <div class="f full"><label>Project URL</label><input name="url" value="${h(c.url||'')}" placeholder="https://xxxx.supabase.co" required></div>
+      <div class="f full"><label>anon public key</label><textarea name="key" required placeholder="eyJ...">${h(c.key||'')}</textarea></div>
+      <div class="note-block full">Lấy hai giá trị này trong Supabase → <b>Project Settings → API</b>.
+        Chỉ dùng khoá <b>anon public</b>, tuyệt đối không dùng <b>service_role</b>.
+        Chưa tạo dự án? Xem file <b>HUONG-DAN-KET-NOI.md</b> trong kho mã nguồn.</div>
+      <div class="form-actions full"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+        <button class="btn primary">Lưu &amp; kiểm tra</button></div>
+    </form>`);
+  },
+  async cloudSave(ev){
+    ev.preventDefault();
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    Cloud.saveCfg(d.url, d.key);
+    App.toast('Đang kiểm tra kết nối…');
+    try { await Cloud.test(); App.closeModal(); App.render(); App.toast('Kết nối thành công ✓ — giờ hãy đăng nhập'); }
+    catch(e){ App.toast('Không kết nối được: ' + e.message); }
+  },
+  loginForm(){
+    App.modal('Đăng nhập', `
+    <form class="form-grid" onsubmit="Att.doLogin(event)">
+      <div class="f full"><label>Email</label><input name="email" type="email" required autocomplete="username"></div>
+      <div class="f full"><label>Mật khẩu</label><input name="password" type="password" required autocomplete="current-password"></div>
+      <div class="note-block full">Tài khoản do quản lý tạo trong Supabase → <b>Authentication → Users</b>.</div>
+      <div class="form-actions full"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+        <button class="btn primary">Đăng nhập</button></div>
+    </form>`);
+  },
+  async doLogin(ev){
+    ev.preventDefault();
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    App.toast('Đang đăng nhập…');
+    try {
+      await Cloud.login(d.email, d.password);
+      App.closeModal(); App.render();
+      App.toast('Xin chào ' + Cloud.who());
+      Att.sync();
+    } catch(e){ App.toast('Đăng nhập không được: ' + e.message); }
+  },
+  logout(){ Cloud.logout(); App.render(); App.toast('Đã đăng xuất'); },
+
+  /* Đẩy công lên đám mây rồi lấy về bản mới nhất */
+  async sync(){
+    if (!Cloud.configured() || !Cloud.loggedIn()) return;
+    try {
+      await Cloud.pushStaff(db.staff);
+      const M = monthOf(todayISO());
+      const mine = (db.attLog||[]).filter(x => monthOf(x.date) === M);
+      if (mine.length) await Cloud.pushAtt(mine);
+      const remote = await Cloud.pullAtt(M + '-01');
+      const others = (db.attLog||[]).filter(x => monthOf(x.date) !== M);
+      db.attLog = others.concat(remote);
+      save(); App.render();
+      App.toast('Đã đồng bộ ' + remote.length + ' dòng chấm công ✓');
+    } catch(e){ App.toast('Đồng bộ lỗi: ' + e.message); }
+  },
+
   settingsForm(){
+    const conn = Cloud.configured()
+      ? (Cloud.loggedIn()
+          ? `<span class="pill ok">Đã kết nối · ${h(Cloud.who())}</span>`
+          : `<span class="pill warn">Đã cấu hình, chưa đăng nhập</span>`)
+      : `<span class="pill mutedp">Chưa kết nối — dữ liệu chỉ ở máy này</span>`;
     App.modal('Cài đặt chấm công', `
     <form class="form-grid" onsubmit="Att.settingsSave(event)">
+      <div class="f full"><label>Cơ sở dữ liệu chung</label><div>${conn}</div>
+        <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
+          <button type="button" class="btn small" onclick="Att.cloudForm()">Cấu hình kết nối</button>
+          ${Cloud.configured() ? (Cloud.loggedIn()
+            ? `<button type="button" class="btn small" onclick="Att.sync()">Đồng bộ ngay</button>
+               <button type="button" class="btn small" onclick="Att.logout()">Đăng xuất</button>`
+            : `<button type="button" class="btn small primary" onclick="Att.loginForm()">Đăng nhập</button>`) : ''}
+        </div></div>
       <div class="f"><label>Giờ vào ca chuẩn</label><input type="time" name="shiftStart" value="${h(db.clinic.shiftStart||'08:00')}"></div>
       <div class="f"><label>Địa chỉ mạng phòng khám</label><input name="wifiIp" value="${h(db.clinic.wifiIp||'')}" placeholder="chưa đặt"></div>
       <div class="note-block full">Trình duyệt không đọc được tên wifi, nên phần mềm đối chiếu <b>địa chỉ mạng (IP)</b> của phòng khám thay thế: đứng ở phòng khám dùng wifi phòng khám thì IP trùng, chấm công ở nhà thì bị đánh dấu <b>ngoài mạng phòng khám</b>.
@@ -1353,6 +1516,39 @@ const HR = {
     db.attendance[stId] = {days:num(d.days), late:num(d.late), leave:num(d.leave), unpaid:num(d.unpaid), ot:num(d.ot)};
     save(); App.closeModal(); App.render(); App.toast('Đã lưu chấm công ✓');
   },
+  staffForm(id){
+    const st = id ? staffById(id) : {role:'Bác sĩ điều trị', base:0, kpiTarget:0, model:{type:'svcGroup', rates:{}, def:10}};
+    App.modal(id ? 'Sửa nhân viên' : 'Thêm nhân viên', `
+    <form class="form-grid" onsubmit="HR.staffSave(event,'${id||''}')">
+      <div class="f full"><label>Họ và tên</label><input name="name" required value="${h(st.name||'')}"></div>
+      <div class="f"><label>Chức danh</label><input name="role" value="${h(st.role||'')}" list="roleList">
+        <datalist id="roleList">${['Bác sĩ điều trị','Phụ tá','Lễ tân','Quản lý','Kế toán'].map(r=>`<option value="${r}">`).join('')}</datalist></div>
+      <div class="f"><label>Email đăng nhập</label><input name="email" type="email" value="${h(st.email||'')}" placeholder="bsduc@hoangbach.vn"></div>
+      <div class="f"><label>Lương cứng (₫)</label><input type="number" name="base" value="${st.base||0}"></div>
+      <div class="f"><label>Chỉ tiêu KPI doanh thu (₫)</label><input type="number" name="kpiTarget" value="${st.kpiTarget||0}"></div>
+      <div class="note-block full">Email phải trùng với tài khoản đã tạo trong Supabase → <b>Authentication → Users</b>
+        thì nhân viên mới tự quét mã QR chấm công được.</div>
+      <div class="form-actions full">
+        ${id?`<button type="button" class="btn danger" onclick="HR.staffDel('${id}')">Xóa nhân viên</button><span class="spacer"></span>`:''}
+        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu</button></div>
+    </form>`);
+  },
+  staffSave(ev, id){
+    ev.preventDefault();
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    d.base = num(d.base); d.kpiTarget = num(d.kpiTarget); d.email = (d.email||'').trim();
+    if (id) Object.assign(staffById(id), d);
+    else db.staff.push(Object.assign({id:uid(), model:{type:'svcGroup', rates:{}, def:10}}, d));
+    save(); App.closeModal(); App.render(); App.toast('Đã lưu nhân viên ✓');
+  },
+  staffDel(id){
+    const st = staffById(id);
+    if (!confirm('Xóa nhân viên "' + st.name + '"? Dữ liệu chấm công, thưởng phạt của người này cũng bị xóa.')) return;
+    db.staff = db.staff.filter(x => x.id !== id);
+    db.attLog = (db.attLog||[]).filter(x => x.staffId !== id);
+    db.bonuses = (db.bonuses||[]).filter(x => x.staffId !== id);
+    save(); App.closeModal(); App.render(); App.toast('Đã xóa nhân viên');
+  },
   bonusForm(){
     App.modal('Thêm thưởng / phạt', `
     <form class="form-grid" onsubmit="HR.bonusSave(event)">
@@ -1389,16 +1585,18 @@ SCREENS.hr = () => {
       <div class="card kpi"><div class="k-label">BHXH phải nộp (32%)</div><div class="k-value num">${money(bhxhTotal)}</div><div class="k-note num">DN 21,5% + NLĐ 10,5%</div></div>
       <div class="card kpi"><div class="k-label">Trạng thái kỳ</div><div class="k-value" style="font-size:18px"><span class="pill warn">Chưa chốt</span></div><div class="k-note">tự tổng hợp từ phiếu thu, chấm công</div></div>
     </div>
-    <div class="card"><div class="card-h"><h2>Bảng lương tháng ${M.slice(5)}/${M.slice(0,4)}</h2><span class="hint">hoa hồng, thưởng, phạt tự động</span></div>
-    <div class="tbl-wrap"><table style="min-width:840px">
-      <thead><tr><th>Nhân viên</th><th class="r">Lương cứng</th><th class="r">Hoa hồng</th><th class="r">Thưởng</th><th class="r">Phạt</th><th class="r">BHXH (10,5%)</th><th class="r">Thực lãnh</th></tr></thead>
+    <div class="card"><div class="card-h"><h2>Bảng lương tháng ${M.slice(5)}/${M.slice(0,4)}</h2><span class="hint">hoa hồng, thưởng, phạt tự động</span>
+      <span class="spacer"></span><button class="btn small" onclick="HR.staffForm()">${IC.plus} Thêm nhân viên</button></div>
+    <div class="tbl-wrap"><table style="min-width:900px">
+      <thead><tr><th>Nhân viên</th><th class="r">Lương cứng</th><th class="r">Hoa hồng</th><th class="r">Thưởng</th><th class="r">Phạt</th><th class="r">BHXH (10,5%)</th><th class="r">Thực lãnh</th><th></th></tr></thead>
       <tbody>${payRows.map(({st,com,bon,pen,bhxh,net}) => `<tr>
         <td><span class="cell-who"><span class="avatar">${h(st.name.split(' ').slice(-1)[0].slice(0,2))}</span><span><b>${h(st.name)}</b><span>${h(st.role)}</span></span></span></td>
         <td class="r num">${money(st.base)}</td><td class="r num">${money(com)}</td>
         <td class="r num" style="color:var(--ok)">${bon?'+'+money(bon):'0'}</td>
         <td class="r num" style="color:var(--danger)">${pen?'−'+money(pen):'0'}</td>
         <td class="r num" style="color:var(--danger)">−${money(bhxh)}</td>
-        <td class="r num" style="font-weight:700">${money(net)}</td></tr>`).join('')}</tbody></table></div></div>
+        <td class="r num" style="font-weight:700">${money(net)}</td>
+        <td><button class="btn small" onclick="HR.staffForm('${st.id}')">Sửa</button></td></tr>`).join('')}</tbody></table></div></div>
     <div class="note-block" style="margin-top:12px">BHXH khấu trừ <b>10,5%</b> lương đóng bảo hiểm của người lao động; doanh nghiệp đóng thêm <b>21,5%</b> hạch toán chi phí.</div>`;
 
   if (tab === 'attendance') {
@@ -1427,6 +1625,7 @@ SCREENS.hr = () => {
       <button class="btn primary" onclick="Att.scanner()">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg>
         Mở máy chấm công</button>
+      <button class="btn" onclick="Att.clinicQR()">Mã QR phòng khám</button>
       <button class="btn" onclick="Att.settingsForm()">Cài đặt</button>
       <span class="spacer"></span>
       <span class="sub-line">Giờ vào ca chuẩn ${h(start)}${db.clinic.wifiIp?' · mạng phòng khám đã đặt':' · chưa đặt mạng phòng khám'}</span>
