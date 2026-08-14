@@ -1384,6 +1384,133 @@ const Att = {
     logs.forEach(l => { if (l.inAt) { days++; if (l.inAt > start) late++; if (l.net === 'outside') outside++; } });
     return {days, late, outside, logs};
   },
+  /* ---------- Trình hướng dẫn kết nối ---------- */
+  SQL: `create table if not exists staff (
+  id text primary key, name text not null, role text,
+  active boolean default true, updated_at timestamptz default now());
+
+create table if not exists attendance (
+  id uuid primary key default gen_random_uuid(),
+  staff_id text not null references staff(id) on delete cascade,
+  date date not null, in_at text, out_at text, net text, ip text,
+  via_qr boolean default true, note text, updated_at timestamptz default now(),
+  unique (staff_id, date));
+
+create table if not exists settings (
+  key text primary key, value text, updated_at timestamptz default now());
+
+alter table staff      enable row level security;
+alter table attendance enable row level security;
+alter table settings   enable row level security;
+
+drop policy if exists p_staff on staff;
+drop policy if exists p_att   on attendance;
+drop policy if exists p_set   on settings;
+
+create policy p_staff on staff      for all to authenticated using (true) with check (true);
+create policy p_att   on attendance for all to authenticated using (true) with check (true);
+create policy p_set   on settings   for all to authenticated using (true) with check (true);`,
+
+  copy(text, btn){
+    navigator.clipboard.writeText(text).then(() => {
+      App.toast('Đã sao chép ✓');
+      if (btn) { const o = btn.textContent; btn.textContent = 'Đã chép ✓'; setTimeout(() => btn.textContent = o, 1800); }
+    }).catch(() => App.toast('Máy không cho sao chép tự động — hãy bôi đen rồi chép tay'));
+  },
+  wizard(){
+    App.modal('Kết nối đám mây — làm theo 4 bước', `
+      <div style="display:grid;gap:14px">
+        <div class="rx"><div class="rx-head"><b>Bước 1 · Tạo dự án</b><span class="pill mutedp">~3 phút</span></div>
+          <div class="card-b">
+            Mở <a href="https://supabase.com/dashboard" target="_blank" rel="noopener"><b>supabase.com/dashboard</b></a>
+            → đăng nhập bằng Google → <b>New project</b>.<br>
+            <div style="margin-top:6px">Tên dự án: <code>nha-khoa-hoang-bach</code> · Vùng: <b>Southeast Asia (Singapore)</b><br>
+            Mật khẩu cơ sở dữ liệu: bấm <b>Generate</b> rồi lưu lại chỗ an toàn.</div>
+          </div></div>
+
+        <div class="rx"><div class="rx-head"><b>Bước 2 · Tạo bảng dữ liệu</b><span class="pill mutedp">~1 phút</span></div>
+          <div class="card-b">
+            Trong dự án chọn <b>SQL Editor → New query</b>, dán đoạn dưới rồi bấm <b>Run</b>.
+            <div class="form-actions" style="justify-content:flex-start;margin:8px 0">
+              <button type="button" class="btn small primary" onclick="Att.copy(Att.SQL,this)">Sao chép đoạn SQL</button></div>
+            <textarea readonly style="width:100%;min-height:120px;font-family:ui-monospace,monospace;font-size:11.5px">${h(this.SQL)}</textarea>
+          </div></div>
+
+        <div class="rx"><div class="rx-head"><b>Bước 3 · Tắt xác nhận email</b><span class="pill mutedp">~30 giây</span></div>
+          <div class="card-b">Vào <b>Authentication → Sign In / Providers → Email</b>, tắt mục <b>Confirm email</b> rồi Save.
+            <br><span class="sub-line">Để tạo tài khoản nhân viên ngay trong phần mềm mà không phải đi xác nhận email.</span></div></div>
+
+        <div class="rx"><div class="rx-head"><b>Bước 4 · Dán khoá vào phần mềm</b><span class="pill mutedp">~1 phút</span></div>
+          <div class="card-b">Vào <b>Project Settings → API</b>, chép <b>Project URL</b> và <b>anon public</b> rồi bấm nút dưới.
+            <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
+              <button type="button" class="btn small primary" onclick="Att.cloudForm()">Dán khoá kết nối</button></div>
+            <span class="sub-line">Chỉ dùng khoá <b>anon public</b>. Tuyệt đối không dùng <b>service_role</b>.</span>
+          </div></div>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn" onclick="App.closeModal()">Đóng</button>
+        <button type="button" class="btn primary" onclick="Att.checkSetup()">Kiểm tra đã xong chưa</button></div>`);
+  },
+  async checkSetup(){
+    App.toast('Đang kiểm tra…');
+    const r = await Cloud.diagnose();
+    const row = (ok, txt) => `<div class="alert-line"><span class="alert-ico ${ok===true?'info':ok==='warn'?'warn':'danger'}">${ok===true?'✓':'!'}</span><div>${txt}</div></div>`;
+    let html = '';
+    html += row(r.cfg, r.cfg ? 'Đã dán khoá kết nối' : 'Chưa dán Project URL / anon key — làm Bước 4');
+    if (r.cfg) html += row(r.reach, r.reach ? 'Gọi tới máy chủ Supabase được' : 'Không gọi tới được: ' + h(r.msg));
+    if (r.reach) ['staff','attendance','settings'].forEach(t => {
+      const v = r.tables[t];
+      html += row(v === true ? true : v === 'locked' ? 'warn' : false,
+        v === true ? `Bảng <b>${t}</b> đã có`
+        : v === 'locked' ? `Bảng <b>${t}</b> đã có và đang khoá — bình thường, đăng nhập là đọc được`
+        : `Chưa có bảng <b>${t}</b> — chạy lại đoạn SQL ở Bước 2`);
+    });
+    html += row(r.login ? true : 'warn', r.login ? 'Đã đăng nhập: <b>' + h(Cloud.who()) + '</b>' : 'Chưa đăng nhập — tạo tài khoản rồi đăng nhập ở bước dưới');
+    App.modal('Kết quả kiểm tra', html + `
+      <div class="form-actions">
+        <button type="button" class="btn" onclick="Att.wizard()">← Quay lại hướng dẫn</button>
+        <span class="spacer"></span>
+        ${r.reach ? '<button type="button" class="btn" onclick="Att.accountsForm()">Tạo tài khoản nhân viên</button>' : ''}
+        ${r.reach && !r.login ? '<button type="button" class="btn primary" onclick="Att.loginForm()">Đăng nhập</button>' : ''}
+      </div>`);
+  },
+
+  /* Tạo tài khoản đăng nhập cho nhân viên ngay trong phần mềm */
+  accountsForm(){
+    const rows = db.staff.map(s => `
+      <div class="form-grid" style="grid-template-columns:1.2fr 1.4fr 1fr;gap:8px;align-items:end">
+        <div class="f"><label>${h(s.name)}</label><input value="${h(s.role||'')}" disabled></div>
+        <div class="f"><input name="em_${s.id}" type="email" value="${h(s.email||'')}" placeholder="email đăng nhập"></div>
+        <div class="f"><input name="pw_${s.id}" placeholder="mật khẩu ≥ 6 ký tự"></div>
+      </div>`).join('');
+    App.modal('Tạo tài khoản cho nhân viên', `
+      <form onsubmit="Att.accountsSave(event)">
+        <div class="note-block mb">Điền email và mật khẩu cho từng người rồi bấm Tạo. Phần mềm sẽ tạo tài khoản trên Supabase
+          và gắn email đó vào hồ sơ nhân viên. Ai đã có tài khoản thì bỏ trống ô mật khẩu.</div>
+        ${rows}
+        <div class="form-actions"><button type="button" class="btn" onclick="App.closeModal()">Đóng</button>
+          <button class="btn primary">Tạo tài khoản</button></div>
+      </form>`);
+  },
+  async accountsSave(ev){
+    ev.preventDefault();
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    let made = 0, linked = 0; const errs = [];
+    for (const s of db.staff) {
+      const em = (d['em_' + s.id] || '').trim(), pw = (d['pw_' + s.id] || '').trim();
+      if (em && em !== s.email) { s.email = em; linked++; }
+      if (em && pw) {
+        try { await Cloud.signup(em, pw); made++; }
+        catch(e){ errs.push(s.name + ': ' + e.message); }
+      }
+    }
+    save(); App.closeModal(); App.render();
+    App.toast(`Tạo ${made} tài khoản, gắn ${linked} email` + (errs.length ? ' · ' + errs.length + ' lỗi' : ' ✓'));
+    if (errs.length) App.modal('Một số tài khoản chưa tạo được', errs.map(x => `<div class="alert-line"><span class="alert-ico danger">!</span><div>${h(x)}</div></div>`).join('')
+      + '<div class="note-block" style="margin-top:10px">Lỗi <b>email address is invalid</b> thường do email dùng đuôi lạ — thử đuôi <code>@gmail.com</code>. Lỗi <b>already registered</b> nghĩa là tài khoản đã có sẵn, không cần tạo lại.</div>'
+      + '<div class="form-actions"><button class="btn" onclick="App.closeModal()">Đóng</button></div>');
+  },
+
   /* ---------- Kết nối đám mây ---------- */
   cloudForm(){
     const c = Cloud.cfg || {};
@@ -1455,7 +1582,8 @@ const Att = {
     <form class="form-grid" onsubmit="Att.settingsSave(event)">
       <div class="f full"><label>Cơ sở dữ liệu chung</label><div>${conn}</div>
         <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
-          <button type="button" class="btn small" onclick="Att.cloudForm()">Cấu hình kết nối</button>
+          <button type="button" class="btn small primary" onclick="Att.wizard()">Hướng dẫn kết nối</button>
+          <button type="button" class="btn small" onclick="Att.checkSetup()">Kiểm tra</button>
           ${Cloud.configured() ? (Cloud.loggedIn()
             ? `<button type="button" class="btn small" onclick="Att.sync()">Đồng bộ ngay</button>
                <button type="button" class="btn small" onclick="Att.logout()">Đăng xuất</button>`

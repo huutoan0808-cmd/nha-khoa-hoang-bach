@@ -135,10 +135,33 @@ const Cloud = {
     const o = {}; rows.forEach(r => o[r.key] = r.value); return o;
   },
 
+  /* ---------- Tạo tài khoản cho nhân viên ---------- */
+  async signup(email, password){
+    return await this.req('/auth/v1/signup', {
+      method: 'POST', headers: {Authorization: 'Bearer ' + this.cfg.key},
+      body: {email: String(email).trim(), password},
+    });
+  },
+
   /* ---------- Kiểm tra kết nối ---------- */
   async test(){
-    const r = await this.req('/rest/v1/', {headers: {Authorization: 'Bearer ' + this.cfg.key}});
+    await this.req('/rest/v1/', {headers: {Authorization: 'Bearer ' + this.cfg.key}});
     return true;
+  },
+  /* Chẩn đoán từng phần: cấu hình → bảng → đăng nhập */
+  async diagnose(){
+    const r = {cfg:false, reach:false, tables:{}, login:false, msg:''};
+    if (!this.configured()) { r.msg = 'Chưa dán Project URL và anon key'; return r; }
+    r.cfg = true;
+    try { await this.test(); r.reach = true; }
+    catch(e){ r.msg = 'Không gọi được tới máy chủ: ' + e.message; return r; }
+    for (const t of ['staff','attendance','settings']) {
+      try { await this.req('/rest/v1/' + t + '?select=count&limit=1',
+        {headers:{Authorization:'Bearer '+this.cfg.key, Prefer:'count=exact'}}); r.tables[t] = true; }
+      catch(e){ r.tables[t] = /does not exist|schema cache/i.test(e.message) ? 'missing' : 'locked'; }
+    }
+    r.login = this.loggedIn();
+    return r;
   },
 };
 Cloud.load();
