@@ -11,8 +11,18 @@ const Cloud = {
     try { this.cfg = JSON.parse(localStorage.getItem(this.CFG_KEY) || 'null'); } catch(e){ this.cfg = null; }
     try { this.session = JSON.parse(localStorage.getItem(this.CFG_KEY + '_ss') || 'null'); } catch(e){ this.session = null; }
   },
+  /* Dọn URL người dùng dán: bỏ khoảng trắng, bỏ dấu / cuối,
+     và tự nhận ra khi dán nhầm link trang quản trị Supabase */
+  cleanUrl(raw){
+    let u = String(raw || '').trim().replace(/\s+/g, '');
+    const dash = u.match(/supabase\.com\/dashboard\/project\/([a-z0-9]{15,})/i);
+    if (dash) return 'https://' + dash[1] + '.supabase.co';
+    if (/^[a-z0-9]{15,}$/i.test(u)) return 'https://' + u + '.supabase.co';   /* dán mỗi mã dự án */
+    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+    return u.replace(/\/+$/, '');
+  },
   saveCfg(url, key){
-    this.cfg = {url: String(url || '').trim().replace(/\/+$/, ''), key: String(key || '').trim()};
+    this.cfg = {url: this.cleanUrl(url), key: String(key || '').trim().replace(/\s+/g, '')};
     localStorage.setItem(this.CFG_KEY, JSON.stringify(this.cfg));
   },
   saveSession(s){
@@ -143,18 +153,33 @@ const Cloud = {
     });
   },
 
-  /* ---------- Kiểm tra kết nối ---------- */
+  /* ---------- Kiểm tra kết nối ----------
+     Dùng /auth/v1/health: điểm cuối ổn định, chỉ cần khoá đúng là trả về 200,
+     không phụ thuộc đã tạo bảng hay chưa. */
   async test(){
-    await this.req('/rest/v1/', {headers: {Authorization: 'Bearer ' + this.cfg.key}});
-    return true;
+    if (!/^https:\/\/[a-z0-9-]+\.supabase\./i.test(this.cfg.url))
+      throw new Error('Project URL phải có dạng https://xxxxxxxx.supabase.co — bạn đang dán: ' + this.cfg.url);
+    if (this.cfg.key.length < 30)
+      throw new Error('Khoá quá ngắn, có vẻ dán thiếu. Bấm nút Copy cạnh dòng "anon public" rồi dán lại.');
+    try {
+      await this.req('/auth/v1/health', {headers: {Authorization: 'Bearer ' + this.cfg.key}});
+      return true;
+    } catch(e){
+      if (/No API key|Invalid API key|JWT/i.test(e.message))
+        throw new Error('Khoá không đúng. Nhớ dùng khoá "anon public", không phải service_role.');
+      if (/Failed to fetch|NetworkError|aborted/i.test(e.message))
+        throw new Error('Không ra được máy chủ — kiểm tra mạng, hoặc Project URL gõ sai.');
+      throw e;
+    }
   },
   /* Chẩn đoán từng phần: cấu hình → bảng → đăng nhập */
   async diagnose(){
     const r = {cfg:false, reach:false, tables:{}, login:false, msg:''};
     if (!this.configured()) { r.msg = 'Chưa dán Project URL và anon key'; return r; }
     r.cfg = true;
+    r.url = this.cfg.url;
     try { await this.test(); r.reach = true; }
-    catch(e){ r.msg = 'Không gọi được tới máy chủ: ' + e.message; return r; }
+    catch(e){ r.msg = e.message; return r; }
     for (const t of ['staff','attendance','settings']) {
       try { await this.req('/rest/v1/' + t + '?select=count&limit=1',
         {headers:{Authorization:'Bearer '+this.cfg.key, Prefer:'count=exact'}}); r.tables[t] = true; }

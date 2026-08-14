@@ -1456,8 +1456,8 @@ create policy p_set   on settings   for all to authenticated using (true) with c
     const r = await Cloud.diagnose();
     const row = (ok, txt) => `<div class="alert-line"><span class="alert-ico ${ok===true?'info':ok==='warn'?'warn':'danger'}">${ok===true?'✓':'!'}</span><div>${txt}</div></div>`;
     let html = '';
-    html += row(r.cfg, r.cfg ? 'Đã dán khoá kết nối' : 'Chưa dán Project URL / anon key — làm Bước 4');
-    if (r.cfg) html += row(r.reach, r.reach ? 'Gọi tới máy chủ Supabase được' : 'Không gọi tới được: ' + h(r.msg));
+    html += row(r.cfg, r.cfg ? 'Đã dán khoá kết nối' + (r.url ? ' — <code>' + h(r.url) + '</code>' : '') : 'Chưa dán Project URL / anon key — làm Bước 4');
+    if (r.cfg) html += row(r.reach, r.reach ? 'Gọi tới máy chủ Supabase được' : h(r.msg));
     if (r.reach) ['staff','attendance','settings'].forEach(t => {
       const v = r.tables[t];
       html += row(v === true ? true : v === 'locked' ? 'warn' : false,
