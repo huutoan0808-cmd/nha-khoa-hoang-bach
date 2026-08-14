@@ -30,27 +30,7 @@ const ICD = [
 
 const DRUGS = ['Amoxicillin 500mg','Spiramycin 3 M.IU','Metronidazol 250mg','Paracetamol 500mg','Ibuprofen 400mg','Alphachymotrypsin 4,2mg','Cefuroxim 500mg','Nước súc miệng Chlorhexidine 0,12%','Vitamin C 500mg','Efferalgan 500mg'];
 
-/* Xã/phường theo địa giới mới từ 01/07/2025 (NQ UBTVQH15) — An Giang và các tỉnh lân cận */
-const mkWards = (p, x, dk) => [].concat(
-  p ? p.split('|').map(s => 'Phường ' + s) : [],
-  x ? x.split('|').map(s => 'Xã ' + s) : [],
-  dk ? dk.split('|').map(s => 'Đặc khu ' + s) : []);
-const WARDS = {
-  'An Giang': mkWards(
-    'Bình Đức|Châu Đốc|Chi Lăng|Hà Tiên|Long Phú|Long Xuyên|Mỹ Thới|Rạch Giá|Tân Châu|Thới Sơn|Tịnh Biên|Tô Châu|Vĩnh Tế|Vĩnh Thông',
-    'An Biên|An Châu|An Cư|An Minh|An Phú|Ba Chúc|Bình An|Bình Giang|Bình Hòa|Bình Mỹ|Bình Sơn|Bình Thạnh Đông|Cần Đăng|Châu Phong|Châu Phú|Châu Thành|Chợ Mới|Chợ Vàm|Cô Tô|Cù Lao Giêng|Định Hòa|Định Mỹ|Đông Hòa|Đông Hưng|Đông Thái|Giang Thành|Giồng Riềng|Gò Quao|Hòa Điền|Hòa Hưng|Hòa Lạc|Hòa Thuận|Hòn Đất|Hòn Nghệ|Hội An|Khánh Bình|Kiên Lương|Long Điền|Long Kiến|Long Thạnh|Mỹ Đức|Mỹ Hòa Hưng|Mỹ Thuận|Ngọc Chúc|Nhơn Hội|Nhơn Mỹ|Núi Cấm|Óc Eo|Ô Lâm|Phú An|Phú Hòa|Phú Hữu|Phú Lâm|Phú Tân|Sơn Hải|Sơn Kiên|Tân An|Tân Hiệp|Tân Hội|Tân Thạnh|Tây Phú|Tây Yên|Thạnh Đông|Thạnh Hưng|Thạnh Lộc|Thạnh Mỹ Tây|Thoại Sơn|Tiên Hải|Tri Tôn|U Minh Thượng|Vân Khánh|Vĩnh An|Vĩnh Bình|Vĩnh Điều|Vĩnh Gia|Vĩnh Hanh|Vĩnh Hậu|Vĩnh Hòa|Vĩnh Hòa Hưng|Vĩnh Phong|Vĩnh Thạnh Trung|Vĩnh Thuận|Vĩnh Trạch|Vĩnh Tuy|Vĩnh Xương',
-    'Kiên Hải|Phú Quốc|Thổ Châu'),
-  'Cần Thơ': mkWards(
-    'An Bình|Bình Thủy|Cái Khế|Cái Răng|Đại Thành|Hưng Phú|Khánh Hòa|Long Bình|Long Mỹ|Long Phú 1|Long Tuyền|Mỹ Quới|Mỹ Xuyên|Ngã Bảy|Ngã Năm|Ninh Kiều|Ô Môn|Phú Lợi|Phước Thới|Sóc Trăng|Tân An|Tân Lộc|Thốt Nốt|Thới An Đông|Thới Long|Thuận Hưng|Trung Nhứt|Vĩnh Châu|Vĩnh Phước|Vị Tân|Vị Thanh',
-    'An Lạc Thôn|An Ninh|An Thạnh|Châu Thành|Cờ Đỏ|Cù Lao Dung|Đại Hải|Đại Ngãi|Đông Hiệp|Đông Phước|Đông Thuận|Gia Hòa|Hiệp Hưng|Hòa An|Hòa Tú|Hỏa Lựu|Hồ Đắc Kiện|Kế Sách|Lai Hòa|Lâm Tân|Liêu Tú|Lịch Hội Thượng|Long Hưng|Long Phú|Lương Tâm|Mỹ Hương|Mỹ Phước|Mỹ Tú|Ngọc Tố|Nhơn Ái|Nhơn Mỹ|Nhu Gia|Phong Điền|Phong Nẫm|Phú Hữu|Phú Lộc|Phú Tâm|Phụng Hiệp|Phương Bình|Tài Văn|Tân Bình|Tân Hòa|Tân Long|Tân Phước Hưng|Tân Thạnh|Thạnh An|Thạnh Hòa|Thạnh Phú|Thạnh Quới|Thạnh Thới An|Thạnh Xuân|Thới An Hội|Thới Hưng|Thới Lai|Thuận Hòa|Trần Đề|Trung Hưng|Trường Khánh|Trường Long|Trường Long Tây|Trường Thành|Trường Xuân|Vĩnh Hải|Vĩnh Lợi|Vĩnh Thạnh|Vĩnh Thuận Đông|Vĩnh Trinh|Vĩnh Tường|Vĩnh Viễn|Vị Thanh 1|Vị Thủy|Xà Phiên', ''),
-  'Đồng Tháp': mkWards(
-    'Mỹ Tho|Đạo Thạnh|Mỹ Phong|Thới Sơn|Trung An|Gò Công|Long Thuận|Bình Xuân|Sơn Qui|An Bình|Hồng Ngự|Thường Lạc|Cao Lãnh|Mỹ Ngãi|Mỹ Trà|Sa Đéc|Mỹ Phước Tây|Thanh Hòa|Cai Lậy|Nhị Quý',
-    'Tân Hồng|Tân Thành|Tân Hộ Cơ|An Phước|Thường Phước|Long Khánh|Long Phú Thuận|An Hòa|Tam Nông|Phú Thọ|Tràm Chim|Phú Cường|An Long|Thanh Bình|Tân Thạnh|Bình Thành|Tân Long|Tháp Mười|Thanh Mỹ|Mỹ Quí|Đốc Binh Kiều|Trường Xuân|Phương Thịnh|Phong Mỹ|Ba Sao|Mỹ Thọ|Bình Hàng Trung|Mỹ Hiệp|Mỹ An Hưng|Tân Khánh Trung|Lấp Vò|Lai Vung|Hòa Long|Phong Hòa|Tân Dương|Phú Hựu|Tân Nhuận Đông|Tân Phú Trung|Tân Phú|Thanh Hưng|An Hữu|Mỹ Lợi|Mỹ Đức Tây|Mỹ Thiện|Hậu Mỹ|Hội Cư|Cái Bè|Mỹ Thành|Thạnh Phú|Bình Phú|Hiệp Đức|Long Tiên|Ngũ Hiệp|Tân Phước 1|Tân Phước 2|Tân Phước 3|Hưng Thạnh|Tân Hương|Châu Thành|Long Hưng|Long Định|Bình Trưng|Vĩnh Kim|Kim Sơn|Mỹ Tịnh An|Lương Hòa Lạc|Tân Thuận Bình|Chợ Gạo|An Thạnh Thủy|Bình Ninh|Vĩnh Bình|Đồng Sơn|Phú Thành|Long Bình|Vĩnh Hựu|Gò Công Đông|Tân Điền|Tân Hòa|Tân Đông|Gia Thuận|Tân Thới|Tân Phú Đông', ''),
-  'Cà Mau': mkWards(
-    'An Xuyên|Bạc Liêu|Giá Rai|Hiệp Thành|Hòa Thành|Láng Tròn|Lý Văn Lâm|Tân Thành|Vĩnh Trạch',
-    'An Trạch|Biển Bạch|Cái Đôi Vàm|Cái Nước|Châu Thới|Đá Bạc|Đầm Dơi|Đất Mới|Đất Mũi|Định Thành|Đông Hải|Gành Hào|Hòa Bình|Hồ Thị Kỷ|Hồng Dân|Hưng Hội|Hưng Mỹ|Khánh An|Khánh Bình|Khánh Hưng|Khánh Lâm|Long Điền|Lương Thế Trân|Năm Căn|Nguyễn Phích|Nguyễn Việt Khái|Ninh Quới|Ninh Thạnh Lợi|Phan Ngọc Hiển|Phong Hiệp|Phong Thạnh|Phú Mỹ|Phú Tân|Phước Long|Quách Phẩm|Sông Đốc|Tạ An Khương|Tam Giang|Tân Ân|Tân Hưng|Tân Lộc|Tân Thuận|Tân Tiến|Thanh Tùng|Thới Bình|Trần Phán|Trần Văn Thời|Trí Phải|U Minh|Vĩnh Hậu|Vĩnh Lộc|Vĩnh Lợi|Vĩnh Mỹ|Vĩnh Phước|Vĩnh Thanh', ''),
-};
-const PROVINCES = Object.keys(WARDS);
+/* Danh mục tỉnh + xã/phường nằm ở wards.js (WARDS, PROVINCES) */
 const LABS = ['Lab Việt Tiên (Cần Thơ)','Lab Nha Việt (TP.HCM)','Lab Đại Nam (TP.HCM)','Lab Rạng Đông (Long Xuyên)'];
 const LAB_TYPES = ['Mão sứ Zirconia','Mão sứ Titan','Mão toàn sứ Emax','Dán sứ Veneer','Hàm khung','Hàm nhựa dẻo','Máng tẩy trắng','Máng chỉnh nha','Cầu răng sứ'];
 const CHAIRS = ['Ghế 1','Ghế 2'];
@@ -195,11 +175,28 @@ function seed() {
     seq:{cust:1300, receipt:rno}, services, staff, customers, treatments, receipts, rx, inventory, appointments, labs, attendance, bonuses};
 }
 
-function load() { try { const raw = localStorage.getItem(DB_KEY); if (raw) { db = JSON.parse(raw); return; } } catch(e){} db = seed(); save(); }
+function load() {
+  try { const raw = localStorage.getItem(DB_KEY); if (raw) db = JSON.parse(raw); } catch(e){ db = null; }
+  if (!db || !db.customers) db = seed();
+  migrate(); save();
+}
 function save() { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+/* Nâng cấp dữ liệu cũ: tách ô "địa chỉ" gộp thành số nhà + đường */
+function migrate() {
+  (db.customers || []).forEach(c => {
+    if (c.addr1 && !c.street && !c.houseNo) {
+      const m = String(c.addr1).match(/^\s*([^,]+),\s*(.+)$/);
+      if (m) { c.houseNo = m[1].trim(); c.street = m[2].trim(); }
+      else { c.street = String(c.addr1).trim(); }
+      delete c.addr1;
+    }
+  });
+}
 
 /* Truy vấn */
 const custById = id => db.customers.find(c => c.id === id);
+/* Địa chỉ đầy đủ, viết theo lối quen thuộc: số nhà → đường → phường/xã → tỉnh */
+const fullAddr = c => [c.houseNo, c.street, c.ward, c.province].filter(Boolean).join(', ');
 const staffById = id => db.staff.find(s => s.id === id);
 const custDebt = c => {
   const billed = db.treatments.filter(t => t.customerId === c.id && t.status !== 'Báo giá').reduce((s,t) => s + t.price, 0);
@@ -356,14 +353,14 @@ const Cust = {
     const knownWard = knownProv && list.includes(c.ward);
     const OTHER = '__other__';
     return `
-      <div class="f"><label>Tỉnh, thành phố</label>
+      <div class="f"><label>8. Địa chỉ — Tỉnh, thành phố</label>
         <select name="provinceSel" onchange="Cust.provChange(this)">
           ${PROVINCES.map(p=>`<option value="${h(p)}"${knownProv&&prov===p?' selected':''}>${h(p)}</option>`).join('')}
           <option value="${OTHER}"${!knownProv?' selected':''}>Khác — nhập tay</option>
         </select>
         <input name="provinceOther" placeholder="Nhập tỉnh/thành phố" value="${h(!knownProv?prov:'')}" style="margin-top:6px;${knownProv?'display:none':''}">
       </div>
-      <div class="f"><label>Xã, phường</label>
+      <div class="f"><label>Phường, xã</label>
         <select name="wardSel" onchange="Cust.wardChange(this)">
           <option value="">— chọn xã/phường —</option>
           ${knownProv?list.map(w=>`<option value="${h(w)}"${c.ward===w?' selected':''}>${h(w)}</option>`).join(''):''}
@@ -405,8 +402,9 @@ const Cust = {
       ${f('5. Nghề nghiệp','job',c.job)}
       ${f('6. Dân tộc','ethnic',c.ethnic||'Kinh')}
       ${f('7. Quốc tịch','nation',c.nation||'Việt Nam')}
-      ${f('8. Địa chỉ (số nhà, đường/thôn/phố)','addr1',c.addr1)}
       ${Cust.addrSelects(c)}
+      ${f('Đường / ấp, thôn, khóm','street',c.street)}
+      ${f('Số nhà','houseNo',c.houseNo)}
       <div class="f"><label>9. Đối tượng</label><select name="doiTuong">${['Thu phí','BHYT','Miễn','Khác'].map(o=>`<option${c.doiTuong===o?' selected':''}>${o}</option>`).join('')}</select></div>
       ${f('10. Số thẻ BHYT','bhyt',c.bhyt)}
       ${f('11. Số CCCD / Hộ chiếu / Định danh','cccd',c.cccd)}
@@ -515,7 +513,7 @@ const Cust = {
     <table class="no-border">
       <tr><td colspan="2">1. Họ và tên: <b>${h(c.name)}</b></td><td>2. Ngày sinh: ${fmtD(c.dob)}</td><td>3. Giới tính: ${h(c.gender)}</td></tr>
       <tr><td>4. Điện thoại: ${h(c.phone)}</td><td>5. Nghề nghiệp: ${h(c.job)}</td><td>6. Dân tộc: ${h(c.ethnic)}</td><td>7. Quốc tịch: ${h(c.nation)}</td></tr>
-      <tr><td colspan="4">8. Địa chỉ: ${h([c.addr1,c.ward,c.province].filter(Boolean).join(', '))}</td></tr>
+      <tr><td colspan="4">8. Địa chỉ: ${h(fullAddr(c))}</td></tr>
       <tr><td>9. Đối tượng: ${h(c.doiTuong)}</td><td>10. Số thẻ BHYT: ${h(c.bhyt)||'—'}</td><td colspan="2">11. Số CCCD/định danh: ${h(c.cccd)||'—'}</td></tr>
       <tr><td colspan="4">12. Thân nhân khi cần báo tin: ${h(c.kinName)} — ĐT: ${h(c.kinPhone)}</td></tr>
     </table>
@@ -588,7 +586,7 @@ SCREENS.customers = () => {
         <div class="form-grid" style="gap:8px 16px">
           <div class="f"><label>Ngày sinh</label><b class="num">${fmtD(c.dob)}</b></div>
           <div class="f"><label>Điện thoại</label><b class="num">${h(c.phone||'—')}</b></div>
-          <div class="f"><label>Địa chỉ</label><b>${h([c.addr1,c.ward,c.province].filter(Boolean).join(', ')||'—')}</b></div>
+          <div class="f"><label>Địa chỉ</label><b>${h(fullAddr(c)||'—')}</b></div>
           <div class="f"><label>Đối tượng · CCCD</label><b>${h(c.doiTuong||'—')} · ${h(c.cccd||'—')}</b></div>
           <div class="f"><label>Thân nhân báo tin</label><b>${h(c.kinName||'—')} ${c.kinPhone?'· '+h(c.kinPhone):''}</b></div>
           <div class="f"><label>Nguồn khách</label><b>${h(c.source||'—')}</b></div>
@@ -821,7 +819,7 @@ const Treat = {
     <h1>ĐƠN THUỐC</h1>
     <table class="no-border">
       <tr><td>Họ tên:</td><td><b>${h(c.name)}</b> — ${fmtD(c.dob)} (${h(c.gender||'')})</td></tr>
-      <tr><td>Địa chỉ:</td><td>${h([c.addr1,c.ward,c.province].filter(Boolean).join(', '))}</td></tr>
+      <tr><td>Địa chỉ:</td><td>${h(fullAddr(c))}</td></tr>
       <tr><td>Chẩn đoán:</td><td>${h(icdName((c.record||{}).chanDoan))||'—'}</td></tr>
       ${c.allergy?`<tr><td>Dị ứng:</td><td><b>${h(c.allergy)}</b></td></tr>`:''}
     </table>
