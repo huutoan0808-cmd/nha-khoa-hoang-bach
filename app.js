@@ -192,6 +192,18 @@ const App = {
     this.cur = id; this.closeSheet(); this.render(); window.scrollTo({top:0});
   },
   render(){
+    /* Máy chưa nối vào phòng khám, hoặc đã nối nhưng chưa đăng nhập → màn hình chào */
+    const chuaSanSang = (!Cloud.configured() || !Cloud.loggedIn())
+      && !App.state.skipWelcome && !db.customers.length && location.hash.slice(0,3) !== '#cc';
+    if (chuaSanSang) {
+      document.querySelector('.sidebar').style.display = 'none';
+      document.querySelector('.bottom-nav').style.display = 'none';
+      $('#mainArea').innerHTML = Att.welcomeScreen();
+      return;
+    }
+    document.querySelector('.sidebar').style.display = '';
+    document.querySelector('.bottom-nav').style.display = '';
+
     /* Mở từ mã QR của phòng khám → chỉ hiện màn hình chấm công */
     if (location.hash.slice(0,3) === '#cc') {
       document.querySelector('.sidebar').style.display = 'none';
@@ -1345,6 +1357,70 @@ const Att = {
     logs.forEach(l => { if (l.inAt) { days++; if (l.inAt > start) late++; if (l.net === 'outside') outside++; } });
     return {days, late, outside, logs};
   },
+  /* ---------- Link mời: nhân viên bấm vào là máy tự cấu hình ---------- */
+  inviteUrl(){
+    if (!Cloud.configured()) return '';
+    const payload = btoa(unescape(encodeURIComponent(JSON.stringify({u: Cloud.cfg.url, k: Cloud.cfg.key}))));
+    return location.origin + location.pathname + '#setup=' + payload;
+  },
+  /* Đọc cấu hình từ link mời khi mở app */
+  applyInvite(){
+    const m = location.hash.match(/^#setup=(.+)$/);
+    if (!m) return false;
+    try {
+      const o = JSON.parse(decodeURIComponent(escape(atob(m[1]))));
+      if (o.u && o.k) {
+        Cloud.saveCfg(o.u, o.k);
+        history.replaceState(null, '', location.pathname);
+        return true;
+      }
+    } catch(e){}
+    return false;
+  },
+  inviteForm(){
+    const url = this.inviteUrl();
+    if (!url) { App.toast('Chưa cấu hình kết nối — làm Hướng dẫn kết nối trước'); this.wizard(); return; }
+    App.modal('Mời nhân viên vào phần mềm', `
+      <div class="note-block mb">Gửi liên kết này cho nhân viên (Zalo, tin nhắn…). Họ bấm vào là máy <b>tự nối vào phòng khám</b>,
+        chỉ cần đăng nhập bằng tài khoản bạn đã cấp là thấy đủ dữ liệu.</div>
+      <div class="f mb"><label>Liên kết mời</label>
+        <textarea id="inviteTxt" readonly style="min-height:70px;font-size:12px">${h(url)}</textarea></div>
+      <div class="form-actions" style="justify-content:flex-start">
+        <button type="button" class="btn primary" onclick="Att.copy(document.getElementById('inviteTxt').value,this)">Sao chép liên kết</button></div>
+      <div style="text-align:center;margin-top:14px">
+        <div style="display:inline-block;padding:10px;background:#fff;border-radius:12px;border:1px solid var(--line)">${QR.svg(url, 220)}</div>
+        <div class="sub-line" style="margin-top:6px">Hoặc cho nhân viên quét mã này</div></div>
+      <div class="note-block" style="margin-top:12px;background:var(--warn-soft);color:var(--warn)">
+        Liên kết chứa khóa kết nối của phòng khám. Khóa này vốn được thiết kế để công khai và
+        <b>không tự mở được dữ liệu</b> — vẫn phải đăng nhập mới xem được. Nhưng chỉ nên gửi cho người trong phòng khám.</div>
+      <div class="form-actions"><button type="button" class="btn" onclick="App.closeModal()">Đóng</button></div>`);
+  },
+
+  /* ---------- Màn hình chào khi máy chưa nối vào phòng khám ---------- */
+  welcomeScreen(){
+    const buoc = (n, t, d, btn) => `<div class="rx mb"><div class="rx-head"><b>${n}. ${t}</b></div>
+      <div class="card-b">${d}${btn ? `<div class="form-actions" style="justify-content:flex-start;margin-top:8px">${btn}</div>` : ''}</div></div>`;
+    if (!Cloud.configured()) {
+      return `<div style="max-width:560px;margin:0 auto">
+        <div class="page-head"><h1>Chào mừng đến ${h(db.clinic.name)}</h1>
+          <div class="sub">Máy này chưa nối vào dữ liệu chung của phòng khám</div></div>
+        ${buoc(1, 'Bạn là nhân viên?', 'Hãy xin <b>liên kết mời</b> từ quản lý rồi bấm vào liên kết đó. Máy sẽ tự nối, bạn chỉ cần đăng nhập.', '')}
+        ${buoc(2, 'Bạn là quản lý, đang cài lần đầu?', 'Tạo cơ sở dữ liệu chung trên Supabase (miễn phí) rồi dán khóa vào đây.',
+          `<button class="btn primary" onclick="Att.wizard()">Bắt đầu cài đặt</button>`)}
+        ${buoc(3, 'Chỉ muốn dùng thử trên máy này?', 'Dùng được ngay, dữ liệu lưu trên máy này thôi, không dùng chung với ai.',
+          `<button class="btn" onclick="App.state.skipWelcome=1;App.render()">Dùng riêng máy này</button>`)}
+      </div>`;
+    }
+    return `<div style="max-width:420px;margin:0 auto">
+      <div class="page-head"><h1>${h(db.clinic.name)}</h1><div class="sub">Đăng nhập để xem dữ liệu phòng khám</div></div>
+      <div class="card"><div class="card-b">
+        <div class="note-block mb">Máy này đã nối vào phòng khám. Đăng nhập bằng tài khoản quản lý cấp cho bạn.</div>
+        <div class="form-actions" style="justify-content:flex-start">
+          <button class="btn primary" onclick="Att.loginForm()">Đăng nhập</button>
+          <button class="btn" onclick="App.state.skipWelcome=1;App.render()">Xem sau</button></div>
+      </div></div></div>`;
+  },
+
   /* ---------- Trình hướng dẫn kết nối ---------- */
   SQL: `create table if not exists staff (
   id text primary key, name text not null, role text,
@@ -1589,6 +1665,7 @@ create policy p_rec   on records    for all to authenticated using (true) with c
       <div class="f full"><label>Cơ sở dữ liệu chung</label><div>${conn}</div>
         <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
           <button type="button" class="btn small primary" onclick="Att.wizard()">Hướng dẫn kết nối</button>
+          ${Cloud.configured() ? `<button type="button" class="btn small" onclick="Att.inviteForm()">Mời nhân viên</button>` : ''}
           <button type="button" class="btn small" onclick="Att.checkSetup()">Kiểm tra</button>
           ${Cloud.configured() ? (Cloud.loggedIn()
             ? `<button type="button" class="btn small" onclick="Att.sync()">Đồng bộ ngay</button>
@@ -1986,7 +2063,9 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('#modalBack').addEventListener('click', ev => { if (ev.target.id === 'modalBack') App.closeModal(); });
   Sync.snapshot();
-  App.render();
+  /* Mở từ liên kết mời → tự lưu cấu hình rồi mời đăng nhập */
+  if (Att.applyInvite()) { App.render(); App.toast('Đã nối vào phòng khám ✓ — hãy đăng nhập'); Att.loginForm(); }
+  else App.render();
   /* Có kết nối sẵn thì lặng lẽ đồng bộ khi mở app */
   if (Cloud.configured() && Cloud.loggedIn()) setTimeout(() => { Sync.run(true).then(() => Att.sync()); }, 800);
 });
