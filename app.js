@@ -715,11 +715,14 @@ const Cust = {
 
 SCREENS.customers = () => {
   const q = Combo.norm(App.state.custQ);
-  const list = !q ? db.customers : db.customers.filter(c =>
+  /* Tìm theo tên, số điện thoại hoặc mã KH */
+  const filtered = !q ? db.customers.slice() : db.customers.filter(c =>
     Combo.norm(c.name).includes(q)
-    || (c.phone||'').replace(/\s/g,'').includes(q.replace(/\s/g,''))
-    || Combo.norm(c.code||'').includes(q)
-    || Combo.norm(fullAddr(c)).includes(q));
+    || (c.phone||'').replace(/\D/g,'').includes(q.replace(/\D/g,'')) && /\d/.test(q)
+    || Combo.norm(c.code||'').includes(q));
+  /* Danh sách sắp theo mã KH tăng dần */
+  const codeNum = c => { const m = String(c.code||'').match(/(\d+)/); return m ? +m[1] : Infinity; };
+  const list = filtered.sort((a,b) => codeNum(a) - codeNum(b) || String(a.code).localeCompare(String(b.code)));
   const rows = list.map(c => {
     const debt = custDebt(c);
     const lastV = custLastVisit(c);

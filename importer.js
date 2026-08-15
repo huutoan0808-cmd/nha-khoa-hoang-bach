@@ -121,42 +121,203 @@ const Importer = {
     return c;
   },
 
+  /* ================= NHẬP LỊCH SỬ ĐIỀU TRỊ / LỊCH HẸN / VẬT LIỆU ================= */
+
+  /* Loại điều trị bên AppSheet → nhóm dịch vụ trong phần mềm */
+  GROUP_MAP: {
+    'trám răng':'Trám răng', 'cạo vôi răng':'Nha chu', 'nội nha':'Điều trị tủy',
+    'nhổ răng':'Nhổ răng', 'răng sứ':'Phục hình sứ', 'răng tháo lắp':'Phục hình tháo lắp',
+    'chỉnh nha':'Chỉnh nha', 'implant':'Implant', 'nước súc miệng':'Khác', 'loại khác':'Khác',
+  },
+  mapGroup(v){
+    const s = this.norm(v).toLowerCase();
+    if (!s) return 'Khác';
+    for (const part of s.split(/\s*,\s*/)) if (this.GROUP_MAP[part]) return this.GROUP_MAP[part];
+    return 'Khác';
+  },
+  money(v){ const n = parseFloat(String(v == null ? '' : v).replace(/[^\d.-]/g, '')); return isNaN(n) ? 0 : n; },
+  /* Mã KH bên AppSheet ("1", "1.0", 1) → mã trong phần mềm */
+  custCode(v){
+    const n = parseInt(String(v).replace(/[^\d]/g, ''), 10);
+    return isNaN(n) ? '' : 'KH-' + String(n).padStart(4, '0');
+  },
+  /* Ngày AppSheet: 24/06/2022 hoặc 2022-06-24 hoặc 2022-06-24 00:00:00 */
+  anyDate(v){
+    const s = this.norm(v); if (!s) return '';
+    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return m[1] + '-' + m[2] + '-' + m[3];
+    return this.toISO(s.split(' ')[0]);
+  },
+  hhmm(v){ const m = this.norm(v).match(/^(\d{1,2}):(\d{2})/); return m ? String(m[1]).padStart(2,'0') + ':' + m[2] : ''; },
+
+  /* Tìm/tạo nhân viên theo tên có sẵn trong dữ liệu cũ */
+  staffByName(name, role, created){
+    /* Sổ cũ có ô ghi nhiều người: "Bs. Toàn , Bs. Mến" — tạo từng người, lấy người đầu làm chính */
+    const parts = String(name == null ? '' : name).split(/\s*,\s*/).map(x => this.norm(x)).filter(Boolean);
+    if (parts.length > 1) {
+      const ids = parts.map(p => this.staffByName(p, role, created));
+      return ids[0];
+    }
+    const n = this.norm(name); if (!n) return '';
+    let st = db.staff.find(s => Combo.norm(s.name) === Combo.norm(n));
+    if (!st) {
+      st = {id: uid(), name: n, role: role || 'Bác sĩ điều trị', email: '', base: 0, kpiTarget: 0,
+            model: {type: role === 'Phụ tá' ? 'perCase' : 'svcGroup', rates: {}, def: 10, rate: 2}};
+      db.staff.push(st); if (created) created.push(n);
+    }
+    return st.id;
+  },
+
+  /* ---------- Điều trị (bảng CONG VIEC) ---------- */
+  buildTreatments(rows){
+    const byCode = {}; db.customers.forEach(c => byCode[c.code] = c);
+    const treatments = [], receipts = [], created = [];
+    const missing = new Set(); let noDate = 0, noDateAmount = 0;
+    const lastLeft = {};                       /* công nợ dòng cuối của từng khách */
+    const g = (r, k) => this.norm(r[k] !== undefined ? r[k] : r[k + ' ']);
+
+    const sorted = rows.slice().sort((a, b) =>
+      (this.anyDate(g(a,'Ngày điều trị')) || '').localeCompare(this.anyDate(g(b,'Ngày điều trị')) || ''));
+
+    sorted.forEach(r => {
+      const code = this.custCode(g(r,'Mã KH'));
+      const c = byCode[code];
+      if (!c) { if (code) missing.add(code); return; }
+      const date = this.anyDate(g(r,'Ngày điều trị'));
+      if (!date) { noDate++; noDateAmount += this.money(g(r,'Thanh toán')); return; }
+      const work = g(r,'Công việc') || g(r,'Công việc ') || 'Điều trị';
+      const paid = this.money(g(r,'Thanh toán'));
+      const left = this.money(g(r,'Còn lại'));
+      const owed = this.money(g(r,'Tổng thu'));
+      const grp  = this.mapGroup(g(r,'Loại điều trị'));
+      const docId = this.staffByName(g(r,'Điều trị'), 'Bác sĩ điều trị', created);
+      if (g(r,'Phụ tá')) this.staffByName(g(r,'Phụ tá'), 'Phụ tá', created);
+      lastLeft[c.id] = left;
+
+      treatments.push({id: uid(), customerId: c.id, serviceId: '', name: work, group: grp,
+        tooth: '', doctorId: docId, price: paid, status: 'Hoàn tất', date,
+        note: 'Sổ cũ — ghi nhận nợ ' + owed.toLocaleString('vi-VN') + ' ₫, còn lại ' + left.toLocaleString('vi-VN') + ' ₫'});
+
+      if (paid > 0) receipts.push({id: uid(), no: '', date, customerId: c.id, desc: work,
+        method: 'Tiền mặt', amount: paid, staffId: '', doctorId: docId, group: grp, invoice: null});
+    });
+
+    /* Công nợ đang còn của từng khách → một hạng mục chờ, để phần mềm tính đúng số phải thu */
+    let debtTotal = 0;
+    Object.keys(lastLeft).forEach(cid => {
+      const v = lastLeft[cid];
+      if (v > 0) {
+        debtTotal += v;
+        treatments.push({id: uid(), customerId: cid, serviceId: '', name: 'Công nợ chuyển từ sổ cũ',
+          group: 'Khác', tooth: '', doctorId: '', price: v, status: 'Chờ điều trị', date: todayISO()});
+      }
+    });
+    return {treatments, receipts, created, missing: [...missing], noDate, noDateAmount, debtTotal,
+            paidTotal: receipts.reduce((s, r) => s + r.amount, 0)};
+  },
+
+  /* ---------- Lịch hẹn (bảng DAT HEN) ---------- */
+  buildAppointments(rows){
+    const byCode = {}; db.customers.forEach(c => byCode[c.code] = c);
+    const out = []; const missing = new Set(); const created = [];
+    rows.forEach(r => {
+      const g = k => this.norm(r[k]);
+      const c = byCode[this.custCode(g('Mã KH'))];
+      const date = this.anyDate(g('Ngày đặt hẹn'));
+      if (!c || !date) { if (!c && g('Mã KH')) missing.add(this.custCode(g('Mã KH'))); return; }
+      const t1 = this.hhmm(g('Giờ bắt đầu')) || '08:00', t2 = this.hhmm(g('Giờ kết thúc'));
+      let dur = 30;
+      if (t2) { const a = +t1.slice(0,2)*60 + +t1.slice(3), b = +t2.slice(0,2)*60 + +t2.slice(3); if (b > a) dur = b - a; }
+      out.push({id: uid(), date, time: t1, dur, customerId: c.id,
+        service: g('Công việc') || 'Tái khám',
+        doctorId: this.staffByName(g('Bác sĩ'), 'Bác sĩ điều trị', created),
+        chair: 'Ghế 1',
+        status: /đã điện thoại/i.test(g('Tình trạng')) ? 'Đã xác nhận' : 'Chờ xác nhận',
+        labOrderId: ''});
+    });
+    return {appointments: out, missing: [...missing], created};
+  },
+
+  /* ---------- Vật liệu (bảng VAT LIEU) ---------- */
+  buildInventory(rows){
+    const out = [];
+    rows.forEach(r => {
+      const g = k => this.norm(r[k]);
+      const name = g('Tên vật liệu'); if (!name) return;
+      const brand = g('Tên thương mại');
+      const stock = this.money(g('Giữa tháng')) || this.money(g('Đầu tháng'));
+      const color = g('Tình trạng').toLowerCase();
+      /* màu bên sổ cũ: Red = cần mua gấp, Yellow = sắp hết, Black = đủ */
+      const min = color === 'red' ? stock + 1 : color === 'yellow' ? stock : 0;
+      out.push({id: uid(), name: name + (brand ? ' — ' + brand : ''), unit: g('Đơn vị tính') || 'cái',
+        stock, min, supplier: g('Nơi bán'), buy: this.money(g('Giá')), sell: 0,
+        expiry: this.anyDate(g('Ngày mua')) ? '' : ''});
+    });
+    return {inventory: out};
+  },
+
   /* ---------- Giao diện ---------- */
+  KINDS: {
+    customers:   {label:'Khách hàng',        sheet:'THONG TIN'},
+    treatments:  {label:'Lịch sử điều trị',  sheet:'CONG VIEC'},
+    appointments:{label:'Lịch hẹn',          sheet:'DAT HEN'},
+    inventory:   {label:'Vật liệu / kho',    sheet:'VAT LIEU'},
+  },
   form(){
-    App.modal('Nhập khách hàng từ Google Sheet / CSV', `
+    App.modal('Nhập dữ liệu từ sổ cũ (AppSheet / Google Sheet)', `
     <form class="form-grid" onsubmit="Importer.run(event)">
-      <div class="f full"><label>Link Google Sheet (đặt ở chế độ ai có link đều xem)</label>
-        <input name="url" placeholder="https://docs.google.com/spreadsheets/d/..." ></div>
-      <div class="f full"><label>Hoặc dán thẳng nội dung CSV</label>
-        <textarea name="csv" placeholder="Mã KH,Họ và tên,..." style="min-height:80px"></textarea></div>
+      <div class="f full"><label>Nhập bảng nào</label>
+        <select name="kind">${Object.entries(this.KINDS).map(([k,v]) =>
+          `<option value="${k}">${v.label} — bảng "${v.sheet}"</option>`).join('')}</select></div>
+
+      <div class="f full"><label>Cách 1 — chọn file CSV từ máy (chắc chắn chạy được)</label>
+        <input type="file" name="file" accept=".csv,text/csv"></div>
+      <div class="f full"><label>Cách 2 — link Google Sheet của đúng bảng đó</label>
+        <input name="url" placeholder="dán link khi đang mở đúng tab cần nhập"></div>
+      <div class="f full"><label>Cách 3 — dán thẳng nội dung CSV</label>
+        <textarea name="csv" style="min-height:70px"></textarea></div>
+
       <div class="f full"><label>Cách xử lý</label>
         <select name="mode">
-          <option value="append">Thêm vào danh sách hiện có</option>
-          <option value="replace">Thay thế toàn bộ danh sách khách hàng</option>
+          <option value="append">Thêm vào dữ liệu hiện có</option>
+          <option value="replace">Thay thế toàn bộ bảng này</option>
         </select></div>
-      <div class="note-block full">Phần mềm tự quy đổi địa chỉ từ địa giới cũ (Kiên Giang, TP Rạch Giá…)
-        sang địa giới mới 01/07/2025. Địa chỉ nào chưa quy đổi được sẽ <b>giữ nguyên văn bản gốc</b>
-        và liệt kê ra để bạn sửa sau — không tự đoán bừa.</div>
+
+      <div class="note-block full"><b>Cách lấy file CSV:</b> mở Google Sheet → chọn đúng tab cần nhập
+        → <b>File → Tải xuống → Giá trị được phân tách bằng dấu phẩy (.csv)</b> → chọn file vừa tải ở ô trên.
+        <br>Làm lần lượt 4 bảng: Khách hàng → Lịch sử điều trị → Lịch hẹn → Vật liệu.</div>
       <div class="form-actions full"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
         <button class="btn primary">Đọc dữ liệu</button></div>
     </form>`);
   },
+
+  /* Lấy nội dung CSV từ file / link / ô dán */
+  async readSource(d, fileInput){
+    if (fileInput && fileInput.files && fileInput.files[0]) return await fileInput.files[0].text();
+    if ((d.csv || '').trim()) return d.csv.trim();
+    if ((d.url || '').trim()) {
+      const m = String(d.url).match(/[#&?]gid=(\d+)/);
+      let u = this.csvUrl(d.url);
+      if (m && !/[?&]gid=/.test(u)) u += '&gid=' + m[1];
+      const r = await fetch(u);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.text();
+    }
+    return '';
+  },
   async run(ev){
     ev.preventDefault();
-    const d = Object.fromEntries(new FormData(ev.target).entries());
-    let text = (d.csv || '').trim();
-    if (!text && d.url) {
-      App.toast('Đang tải dữ liệu…');
-      try {
-        const r = await fetch(this.csvUrl(d.url));
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        text = await r.text();
-      } catch(e){ App.toast('Không tải được: ' + e.message + ' — thử dán thẳng nội dung CSV'); return; }
-    }
-    if (!text) { App.toast('Chưa có dữ liệu'); return; }
+    const form = ev.target;
+    const d = Object.fromEntries(new FormData(form).entries());
+    let text = '';
+    App.toast('Đang đọc dữ liệu…');
+    try { text = await this.readSource(d, form.querySelector('[name=file]')); }
+    catch(e){ App.toast('Không tải được: ' + e.message + ' — hãy tải file CSV về rồi chọn từ máy'); return; }
+    if (!text) { App.toast('Chưa chọn file, chưa dán link hay nội dung nào'); return; }
     const rows = this.parseCSV(text);
     if (!rows.length) { App.toast('Không đọc được dòng nào'); return; }
 
+    if (d.kind && d.kind !== 'customers') return this.runOther(d.kind, rows, d.mode);
     let seq = db.seq.cust || 1300;
     const made = [], kinds = {};
     rows.forEach(r => {
@@ -184,6 +345,64 @@ const Importer = {
         <button type="button" class="btn primary" onclick="Importer.commit('${d.mode}')">Nhập ${made.length} hồ sơ vào phần mềm</button></div>`);
     this._pending = made;
   },
+  /* ---------- Xem trước & nhập cho 3 bảng còn lại ---------- */
+  runOther(kind, rows, mode){
+    const row = (k, t) => `<div class="alert-line"><span class="alert-ico ${k}">${k==='info'?'✓':'!'}</span><div>${t}</div></div>`;
+    let body = '', pending = null;
+
+    if (kind === 'treatments') {
+      const r = this.buildTreatments(rows);
+      pending = {kind, ...r};
+      body = row('info', `Đọc được <b>${r.treatments.length}</b> lần điều trị và <b>${r.receipts.length}</b> phiếu thu từ ${rows.length} dòng`)
+        + row('info', `Tổng tiền đã thu: <b>${money(r.paidTotal)}</b>`)
+        + row('info', `Công nợ còn lại chuyển sang: <b>${money(r.debtTotal)}</b>`)
+        + (r.created.length ? row('info', `Tự tạo <b>${r.created.length}</b> nhân viên từ sổ cũ: ${h(r.created.join(', '))}`) : '')
+        + (r.missing.length ? row('warn', `<b>${r.missing.length}</b> mã khách chưa có hồ sơ nên bỏ qua: ${h(r.missing.slice(0,8).join(', '))}${r.missing.length>8?'…':''}`) : '')
+        + (r.noDate ? row('warn', `<b>${r.noDate}</b> dòng thiếu ngày điều trị nên bỏ qua`
+             + (r.noDateAmount ? ` — trong đó có <b>${money(r.noDateAmount)}</b> tiền đã thu, bạn nên nhập tay lại` : '')) : '')
+        + `<div class="note-block" style="margin-top:10px">Sổ cũ ghi <b>Tổng thu</b> là số tiền còn nợ tại thời điểm đó, không phải giá của lần khám,
+           và có <b>509 dòng</b> mà ba cột tiền không khớp nhau. Vì vậy tôi lấy con số chắc chắn nhất là
+           <b>Thanh toán</b> làm doanh thu, còn số nợ gốc giữ nguyên trong ghi chú từng lần điều trị.</div>`;
+    }
+    if (kind === 'appointments') {
+      const r = this.buildAppointments(rows);
+      pending = {kind, ...r};
+      body = row('info', `Đọc được <b>${r.appointments.length}</b> lịch hẹn từ ${rows.length} dòng`)
+        + (r.created.length ? row('info', `Tự tạo nhân viên: ${h(r.created.join(', '))}`) : '')
+        + (r.missing.length ? row('warn', `<b>${r.missing.length}</b> mã khách chưa có hồ sơ nên bỏ qua`) : '');
+    }
+    if (kind === 'inventory') {
+      const r = this.buildInventory(rows);
+      pending = {kind, ...r};
+      const canhBao = r.inventory.filter(i => i.min > 0).length;
+      body = row('info', `Đọc được <b>${r.inventory.length}</b> vật liệu từ ${rows.length} dòng`)
+        + row('info', `<b>${canhBao}</b> món đang ở mức cần mua (theo màu Red/Yellow của sổ cũ)`);
+    }
+    this._pending = pending;
+    App.modal('Xem trước — ' + this.KINDS[kind].label, `<div class="card mb"><div class="card-b">${body}</div></div>
+      <div class="note-block">Cách xử lý: <b>${mode==='replace'?'thay thế toàn bộ bảng này':'thêm vào dữ liệu hiện có'}</b>.</div>
+      <div class="form-actions"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+        <button type="button" class="btn primary" onclick="Importer.commitOther('${mode}')">Nhập vào phần mềm</button></div>`);
+  },
+  commitOther(mode){
+    const p = this._pending; if (!p) { App.toast('Không có dữ liệu'); return; }
+    if (mode === 'replace' && !confirm('Thay thế toàn bộ dữ liệu ' + this.KINDS[p.kind].label.toLowerCase() + ' hiện có?')) return;
+    if (p.kind === 'treatments') {
+      if (mode === 'replace') { db.treatments = []; db.receipts = []; }
+      db.treatments = db.treatments.concat(p.treatments);
+      p.receipts.forEach(r => { r.no = 'PT-' + (++db.seq.receipt); db.receipts.push(r); });
+    } else if (p.kind === 'appointments') {
+      if (mode === 'replace') db.appointments = [];
+      db.appointments = db.appointments.concat(p.appointments);
+    } else if (p.kind === 'inventory') {
+      if (mode === 'replace') db.inventory = [];
+      db.inventory = db.inventory.concat(p.inventory);
+    }
+    this._pending = null;
+    save(); App.closeModal(); App.render();
+    App.toast('Đã nhập xong ' + this.KINDS[p.kind].label.toLowerCase() + ' ✓');
+  },
+
   commit(mode){
     const made = this._pending || [];
     if (!made.length) { App.toast('Không có dữ liệu'); return; }
