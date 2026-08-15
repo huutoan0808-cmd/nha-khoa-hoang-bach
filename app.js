@@ -69,148 +69,33 @@ const DB_KEY = 'nkhb_v1';
 let db = null;
 
 function seed() {
-  const T = todayISO();
+  /* Bản mới tinh: chỉ có bảng giá dịch vụ mẫu để dùng ngay, không có bệnh nhân giả. */
   const services = [];
-  const svc = (group, name, price) => { const s = {id: uid()+services.length, group, name, price}; services.push(s); return s; };
-  svc('Phục hình sứ','Mão sứ Zirconia',4500000); svc('Phục hình sứ','Mão sứ Titan',2500000); svc('Phục hình sứ','Mão toàn sứ Emax',6000000); svc('Phục hình sứ','Dán sứ Veneer',6000000); svc('Phục hình sứ','Cầu răng sứ (3 đơn vị)',10500000);
-  svc('Phục hình tháo lắp','Hàm khung kim loại',3500000); svc('Phục hình tháo lắp','Hàm nhựa dẻo',2500000); svc('Phục hình tháo lắp','Răng tháo lắp (1 đơn vị)',500000);
+  const svc = (group, name, price) => services.push({id: uid() + services.length, group, name, price});
+  svc('Phục hình sứ','Mão sứ Zirconia',4500000); svc('Phục hình sứ','Mão sứ Titan',2500000);
+  svc('Phục hình sứ','Mão toàn sứ Emax',6000000); svc('Phục hình sứ','Dán sứ Veneer',6000000);
+  svc('Phục hình sứ','Cầu răng sứ (3 đơn vị)',10500000);
+  svc('Phục hình tháo lắp','Hàm khung kim loại',3500000); svc('Phục hình tháo lắp','Hàm nhựa dẻo',2500000);
+  svc('Phục hình tháo lắp','Răng tháo lắp (1 đơn vị)',500000);
   svc('Trám răng','Trám composite',450000); svc('Trám răng','Trám GIC',300000); svc('Trám răng','Trám cổ răng',350000);
-  svc('Nhổ răng','Nhổ răng sữa',100000); svc('Nhổ răng','Nhổ răng vĩnh viễn',500000); svc('Nhổ răng','Nhổ răng khôn',1500000); svc('Nhổ răng','Tiểu phẫu răng khôn lệch',2500000);
-  svc('Điều trị tủy','Điều trị tủy răng cửa',1200000); svc('Điều trị tủy','Điều trị tủy răng cối nhỏ',1800000); svc('Điều trị tủy','Điều trị tủy răng cối lớn',2500000);
+  svc('Nhổ răng','Nhổ răng sữa',100000); svc('Nhổ răng','Nhổ răng vĩnh viễn',500000);
+  svc('Nhổ răng','Nhổ răng khôn',1500000); svc('Nhổ răng','Tiểu phẫu răng khôn lệch',2500000);
+  svc('Điều trị tủy','Điều trị tủy răng cửa',1200000); svc('Điều trị tủy','Điều trị tủy răng cối nhỏ',1800000);
+  svc('Điều trị tủy','Điều trị tủy răng cối lớn',2500000);
   svc('Implant','Implant Hàn Quốc (trụ + mão)',16000000); svc('Implant','Implant Thụy Sĩ (trụ + mão)',25000000);
-  svc('Chỉnh nha','Mắc cài kim loại (2 hàm)',30000000); svc('Chỉnh nha','Mắc cài sứ (2 hàm)',42000000); svc('Chỉnh nha','Máng trong suốt',60000000);
+  svc('Chỉnh nha','Mắc cài kim loại (2 hàm)',30000000); svc('Chỉnh nha','Mắc cài sứ (2 hàm)',42000000);
+  svc('Chỉnh nha','Máng trong suốt',60000000);
   svc('Nha chu','Cạo vôi răng + đánh bóng',300000); svc('Nha chu','Nạo túi nha chu (1 vùng)',800000);
   svc('Thẩm mỹ','Tẩy trắng răng tại ghế',1500000); svc('Thẩm mỹ','Gắn hột (đá) thẩm mỹ',800000);
   svc('Khác','Khám + tư vấn + chụp phim',150000); svc('Khác','Cắt chỉ / tái khám',0);
 
-  const staff = [
-    {id:'st1', name:'BS. Trần Minh Đức', role:'Bác sĩ điều trị', email:'', base:20000000, kpiTarget:300000000, model:{type:'svcGroup', rates:{'Implant':20,'Phục hình sứ':15,'Chỉnh nha':12}, def:10}},
-    {id:'st2', name:'BS. Lê Thu Hằng', role:'Bác sĩ điều trị', email:'', base:18000000, kpiTarget:250000000, model:{type:'svcGroup', rates:{'Implant':20,'Phục hình sứ':15,'Chỉnh nha':12}, def:10}},
-    {id:'st3', name:'Nguyễn Văn Bình', role:'Phụ tá', email:'', base:9000000, kpiTarget:0, model:{type:'perCase', rate:2}},
-    {id:'st4', name:'Phạm Thảo Vy', role:'Lễ tân', email:'', base:8000000, kpiTarget:0, model:{type:'referral', rate:1}},
-  ];
-
-  const cM = monthOf(T);
-  const customers = [
-    {id:'c1', code:'KH-0412', name:'NGUYỄN THỊ MAI', dob:'1992-03-14', gender:'Nữ', phone:'0903 214 856', job:'Giáo viên', ethnic:'Kinh', nation:'Việt Nam',
-     addr1:'25, Nguyễn Trung Trực', ward:'Phường Rạch Giá', province:'An Giang', doiTuong:'Thu phí', bhyt:'', cccd:'091192001234',
-     kinName:'Nguyễn Văn Hùng (chồng)', kinPhone:'0918 001 002', allergy:'Penicillin', source:'Facebook', createdAt:isoAdd(T,-30),
-     teeth:{14:{s:'filled',note:'Trám composite '+fmtD(isoAdd(T,-14))},26:{s:'filled',note:'Trám cũ 2023 — theo dõi'},36:{s:'rct',note:'Đang điều trị tủy, kế hoạch bọc sứ'},46:{s:'caries',note:'Sâu lớn — đề xuất implant'},48:{s:'missing',note:'Đã nhổ 2021'},25:{s:'implant',note:'Implant 2024 — ổn định'}},
-     record:{lyDo:'Đau nhức răng hàm dưới bên trái 5 ngày, đau tăng về đêm.', benhLy:'Đau âm ỉ răng 36 khoảng 2 tuần, 5 ngày nay đau nhiều, đau lan lên thái dương, uống thuốc giảm đau chỉ đỡ tạm.',
-       tienSuBanThan:'Dị ứng Penicillin (nổi mề đay). Không bệnh nội khoa.', tienSuGiaDinh:'Chưa ghi nhận bất thường.',
-       toanThan:'Bình thường. M 78 l/p, HA 120/80 mmHg.', ngoaiMieng:'Cân xứng, không sưng, hạch (-).',
-       trongMieng:'R36 sâu ngà lớn mặt nhai, gõ dọc (+), lung lay độ 0. R46 sâu lớn vỡ múi. Vôi răng mức độ trung bình.',
-       canLamSang:'X-quang quanh chóp R36: thấu quang sát tủy, dây chằng nha chu giãn nhẹ.',
-       tomTat:'BN nữ 34 tuổi, viêm tủy không hồi phục R36 / sâu ngà lớn R46 trên nền vôi răng.',
-       chanDoan:'K04.0', chanDoanKem:'K02.1', bienChung:'', keHoach:'1) Điều trị tủy R36 (3 buổi) + bọc sứ Zirconia.\n2) Tư vấn implant R46.\n3) Cạo vôi răng toàn hàm.',
-       tuNgay:isoAdd(T,-14), denNgay:'', ketQua:'',
-       dienBien:[
-         {date:isoAdd(T,-14), db:'Khám tổng quát, chụp phim. Chẩn đoán viêm tủy R36.', xt:'Lập kế hoạch điều trị, cạo vôi răng. Trám composite R14.'},
-         {date:isoAdd(T,-7), db:'Điều trị tủy R36 buổi 1.', xt:'Mở tủy, xác định 3 ống tủy, đo chiều dài làm việc, băng thuốc.'},
-         {date:T, db:'Điều trị tủy R36 buổi 2. Hết đau tự phát.', xt:'Bơm rửa, tạo hình ống tủy, đặt Ca(OH)2, trám tạm. Hẹn buổi 3.'}
-       ]}},
-    {id:'c2', code:'KH-0871', name:'TRẦN VĂN HÙNG', dob:'1985-09-22', gender:'Nam', phone:'0918 552 730', job:'Kinh doanh', ethnic:'Kinh', nation:'Việt Nam',
-     addr1:'102, Trần Phú', ward:'Phường Vĩnh Thông', province:'An Giang', doiTuong:'Thu phí', bhyt:'', cccd:'091085004567',
-     kinName:'Trần Thị Hoa (vợ)', kinPhone:'0917 003 004', allergy:'', source:'Khách quen giới thiệu', createdAt:isoAdd(T,-200), teeth:{}, record:{dienBien:[]}},
-    {id:'c3', code:'KH-1105', name:'ĐỖ MINH CHÂU', dob:'2008-12-05', gender:'Nữ', phone:'0937 664 219', job:'Học sinh', ethnic:'Kinh', nation:'Việt Nam',
-     addr1:'88, Lạc Hồng', ward:'Xã Gò Quao', province:'An Giang', doiTuong:'Thu phí', bhyt:'', cccd:'',
-     kinName:'Đỗ Văn Nam (cha)', kinPhone:'0937 664 219', allergy:'', source:'Walk-in', createdAt:isoAdd(T,-420),
-     teeth:{}, record:{lyDo:'Chỉnh nha định kỳ.', chanDoan:'K07.3', keHoach:'Chỉnh nha mắc cài kim loại 2 hàm — tháng 14/24.', dienBien:[]}},
-    {id:'c4', code:'KH-1201', name:'LÊ HOÀNG NAM', dob:'1979-01-30', gender:'Nam', phone:'0908 771 340', job:'Tài xế', ethnic:'Kinh', nation:'Việt Nam',
-     addr1:'15, Mạc Cửu', ward:'Phường Long Xuyên', province:'An Giang', doiTuong:'Thu phí', bhyt:'', cccd:'091079008910',
-     kinName:'Lê Thị Bé (vợ)', kinPhone:'0909 005 006', allergy:'Tăng huyết áp — hội chẩn trước tiểu phẫu', source:'Google Maps', createdAt:isoAdd(T,-9),
-     teeth:{46:{s:'caries',note:'Sâu vỡ lớn — chờ báo giá implant'}}, record:{dienBien:[]}},
-  ];
-
-  const sv = n => services.find(s => s.name === n);
-  const treatments = [
-    {id:'t1', customerId:'c1', serviceId:sv('Điều trị tủy răng cối lớn').id, name:'Điều trị tủy răng cối lớn', group:'Điều trị tủy', tooth:'R36', doctorId:'st1', price:2500000, status:'Đang điều trị', date:isoAdd(T,-7)},
-    {id:'t2', customerId:'c1', serviceId:sv('Mão sứ Zirconia').id, name:'Mão sứ Zirconia', group:'Phục hình sứ', tooth:'R36', doctorId:'st1', price:4500000, status:'Chờ điều trị', date:isoAdd(T,-7)},
-    {id:'t3', customerId:'c1', serviceId:sv('Trám composite').id, name:'Trám composite', group:'Trám răng', tooth:'R14', doctorId:'st2', price:450000, status:'Hoàn tất', date:isoAdd(T,-14)},
-    {id:'t4', customerId:'c1', serviceId:sv('Cạo vôi răng + đánh bóng').id, name:'Cạo vôi răng + đánh bóng', group:'Nha chu', tooth:'', doctorId:'st2', price:300000, status:'Hoàn tất', date:isoAdd(T,-14)},
-    {id:'t5', customerId:'c1', serviceId:sv('Implant Hàn Quốc (trụ + mão)').id, name:'Implant Hàn Quốc (trụ + mão)', group:'Implant', tooth:'R46', doctorId:'st1', price:16000000, status:'Báo giá', date:isoAdd(T,-7)},
-    {id:'t6', customerId:'c3', serviceId:sv('Mắc cài kim loại (2 hàm)').id, name:'Chỉnh nha mắc cài kim loại', group:'Chỉnh nha', tooth:'2 hàm', doctorId:'st2', price:30000000, status:'Đang điều trị', date:isoAdd(T,-420)},
-    {id:'t7', customerId:'c4', serviceId:sv('Khám + tư vấn + chụp phim').id, name:'Khám + tư vấn + chụp phim', group:'Khác', tooth:'', doctorId:'st1', price:150000, status:'Hoàn tất', date:isoAdd(T,-9)},
-  ];
-
-  let rno = 1240;
-  const receipts = [];
-  const rc = (date, customerId, desc, method, amount, doctorId, group, inv) => {
-    receipts.push({id:uid()+rno, no:'PT-'+(rno++), date, customerId, desc, method, amount, staffId:'st4', doctorId, group,
-      invoice: inv ? {no:'1C26THB-'+String(1190+rno).padStart(8,'0'), code:Math.random().toString(16).slice(2,8).toUpperCase(), date} : null});
-  };
-  // Lịch sử các tháng trước (phục vụ báo cáo quý/năm)
-  for (let m = 8; m >= 1; m--) {
-    const base = isoAdd(T, -m*30);
-    rc(base, 'c3', 'Chỉnh nha — thu định kỳ', 'Chuyển khoản', 1500000, 'st2', 'Chỉnh nha', true);
-    rc(isoAdd(base,2), 'c2', 'Cạo vôi răng định kỳ', 'Tiền mặt', 300000, 'st2', 'Nha chu', true);
-    rc(isoAdd(base,5), 'c2', 'Phục hình sứ', 'Chuyển khoản', 4500000 + (m%3)*2000000, 'st1', 'Phục hình sứ', true);
-    rc(isoAdd(base,8), 'c4', 'Implant — thu theo đợt', 'Chuyển khoản', 8000000, 'st1', 'Implant', m%2===0);
-  }
-  rc(isoAdd(T,-14), 'c1', 'Trám composite R14 + cạo vôi + khám', 'Tiền mặt', 900000, 'st2', 'Trám răng', true);
-  rc(isoAdd(T,-7), 'c1', 'Trả góp đợt 1 — điều trị tủy + bọc sứ R36', 'Chuyển khoản', 3000000, 'st1', 'Điều trị tủy', true);
-  rc(T, 'c1', 'Trả góp đợt 2 — điều trị tủy + bọc sứ R36', 'Chuyển khoản', 2000000, 'st1', 'Điều trị tủy', false);
-  rc(T, 'c3', 'Chỉnh nha — thu định kỳ tháng này', 'Tiền mặt', 1500000, 'st2', 'Chỉnh nha', false);
-
-  const rx = [
-    {id:'rx1', customerId:'c1', date:isoAdd(T,-14), doctorId:'st2', status:'sent', code:'79-0412-'+isoAdd(T,-14).replace(/-/g,'').slice(2)+'-1136',
-     items:[{drug:'Paracetamol 500mg', qty:'6 viên', use:'Uống khi đau, cách nhau ≥ 4 giờ'},{drug:'Nước súc miệng Chlorhexidine 0,12%', qty:'1 chai', use:'Súc 2 lần/ngày sau đánh răng'}]},
-    {id:'rx2', customerId:'c1', date:T, doctorId:'st1', status:'draft', code:'',
-     items:[{drug:'Spiramycin 3 M.IU', qty:'10 viên', use:'Ngày 2 lần, mỗi lần 1 viên, sau ăn'},{drug:'Paracetamol 500mg', qty:'10 viên', use:'Uống khi đau, cách nhau ≥ 4 giờ'},{drug:'Alphachymotrypsin 4,2mg', qty:'10 viên', use:'Ngày 2 lần, mỗi lần 1 viên'}]},
-  ];
-
-  const inventory = [
-    {id:'i1', name:'Composite 3M Filtek Z350 — A2', unit:'tuýp', stock:2, min:5, supplier:'Cty Nha khoa Việt Đăng (TP.HCM)', buy:520000, sell:0, expiry:isoAdd(T,45)},
-    {id:'i2', name:'Thuốc tê Lidocain 2% (Septodont)', unit:'ống', stock:8, min:30, supplier:'Dược Sài Gòn — chi nhánh Rạch Giá', buy:9000, sell:0, expiry:isoAdd(T,120)},
-    {id:'i3', name:'Găng tay nitrile size M', unit:'hộp', stock:4, min:10, supplier:'VT Y tế Kiên Hà', buy:95000, sell:0, expiry:''},
-    {id:'i4', name:'Côn gutta-percha 04', unit:'hộp', stock:6, min:3, supplier:'Cty Nha khoa Việt Đăng (TP.HCM)', buy:180000, sell:0, expiry:isoAdd(T,700)},
-    {id:'i5', name:'Bàn chải + kem P/S du lịch (bán lẻ)', unit:'bộ', stock:35, min:10, supplier:'Unilever — đại lý Rạch Giá', buy:18000, sell:35000, expiry:isoAdd(T,400)},
-    {id:'i6', name:'Nước súc miệng Chlorhexidine 0,12%', unit:'chai', stock:14, min:6, supplier:'Dược Hậu Giang', buy:38000, sell:65000, expiry:isoAdd(T,25)},
-    {id:'i7', name:'Mũi khoan kim cương (bộ trám)', unit:'cái', stock:18, min:10, supplier:'Mani — NPP miền Tây', buy:45000, sell:0, expiry:''},
-    {id:'i8', name:'Khẩu trang y tế 4 lớp', unit:'hộp', stock:22, min:8, supplier:'VT Y tế Kiên Hà', buy:32000, sell:45000, expiry:''},
-  ];
-
-  const appointments = [
-    {id:'a1', date:T, time:'08:30', dur:60, customerId:'c1', service:'Điều trị tủy R36 — buổi 2', doctorId:'st1', chair:'Ghế 1', status:'Đang điều trị', labOrderId:''},
-    {id:'a2', date:T, time:'10:00', dur:45, customerId:'c2', service:'Cạo vôi răng', doctorId:'st1', chair:'Ghế 1', status:'Đã xác nhận', labOrderId:''},
-    {id:'a3', date:T, time:'11:00', dur:30, customerId:'c3', service:'Tái khám chỉnh nha', doctorId:'st2', chair:'Ghế 2', status:'Đã xác nhận', labOrderId:''},
-    {id:'a4', date:T, time:'14:00', dur:60, customerId:'c4', service:'Tư vấn implant R46', doctorId:'st1', chair:'Ghế 1', status:'Chờ xác nhận', labOrderId:''},
-    {id:'a5', date:isoAdd(T,7), time:'09:00', dur:60, customerId:'c1', service:'Gắn mão sứ R36', doctorId:'st1', chair:'Ghế 1', status:'Đã xác nhận', labOrderId:'lb1'},
-    {id:'a6', date:isoAdd(T,1), time:'15:00', dur:45, customerId:'c2', service:'Gắn cầu răng sứ', doctorId:'st1', chair:'Ghế 2', status:'Đã xác nhận', labOrderId:'lb2'},
-  ];
-
-  const labs = [
-    {id:'lb1', customerId:'c1', labName:LABS[0], type:'Mão sứ Zirconia', teeth:'R36', qty:1, sent:T, due:isoAdd(T,5), received:'', apptId:'a5', note:'Màu A2'},
-    {id:'lb2', customerId:'c2', labName:LABS[1], type:'Cầu răng sứ', teeth:'R44–R46', qty:3, sent:isoAdd(T,-6), due:isoAdd(T,-1), received:'', apptId:'a6', note:'Khách hẹn gắn ngày mai — GỌI LAB GẤP'},
-    {id:'lb3', customerId:'c3', labName:LABS[0], type:'Máng chỉnh nha', teeth:'2 hàm', qty:2, sent:isoAdd(T,-20), due:isoAdd(T,-13), received:isoAdd(T,-13), apptId:'', note:''},
-  ];
-
-  /* Nhật ký chấm công mẫu: 10 ngày làm việc gần nhất */
-  const attLog = [];
-  const IN_T = {st1:'07:52', st2:'07:58', st3:'07:55', st4:'07:48'};
-  for (let d = 12; d >= 0; d--) {
-    const day = isoAdd(T, -d);
-    if (new Date(day + 'T00:00').getDay() === 0) continue;          /* nghỉ chủ nhật */
-    staff.forEach((st, i) => {
-      if ((d + i) % 7 === 3) return;                                 /* rải vài ngày nghỉ */
-      const base = IN_T[st.id] || '08:00';
-      const late = (st.id === 'st3' && (d === 3 || d === 6)) ? '08:23' : base;   /* phụ tá đi trễ 2 hôm */
-      attLog.push({id: uid()+d+i, staffId: st.id, date: day, inAt: late,
-        outAt: d === 0 ? '' : (st.id === 'st2' ? '17:45' : '17:30'),
-        net: (d === 4 && st.id === 'st4') ? 'outside' : 'clinic', viaQR: true});
-    });
-  }
-
-  const bonuses = [
-    {id:'b1', date:monthOf(T)+'-01', staffId:'st1', amount:2000000, reason:'Thưởng vượt KPI implant tháng trước'},
-    {id:'b2', date:monthOf(T)+'-05', staffId:'st2', amount:1000000, reason:'Thưởng khách đánh giá 5★ (3 lượt liên tiếp)'},
-    {id:'b3', date:monthOf(T)+'-01', staffId:'st3', amount:500000, reason:'Thưởng chuyên cần'},
-    {id:'b4', date:monthOf(T)+'-01', staffId:'st4', amount:500000, reason:'Thưởng chuyên cần'},
-    {id:'b5', date:monthOf(T)+'-08', staffId:'st3', amount:-200000, reason:'Phạt đi trễ 2 lần (nội quy)'},
-  ];
-
-  return {ver:1, clinic:{name:'Nha Khoa Hoàng Bách', legal:'Công ty TNHH Nha Khoa Hoàng Bách – Gò Quao', authority:'Sở Y tế An Giang', addr:'Rạch Giá, An Giang', phone:'0297 3xxx xxx', taxCode:'', maCSKCB:'', shiftStart:'08:00', wifiIp:''},
-    seq:{cust:1300, receipt:rno}, services, staff, customers, treatments, receipts, rx, inventory, appointments, labs, attLog, bonuses};
+  return {ver: 1,
+    clinic: {name:'Nha Khoa Hoàng Bách', legal:'Công ty TNHH Nha Khoa Hoàng Bách – Gò Quao',
+             authority:'Sở Y tế An Giang', addr:'Rạch Giá, An Giang', phone:'', taxCode:'', maCSKCB:'',
+             shiftStart:'08:00', wifiIp:''},
+    seq: {cust: 1, receipt: 1},
+    services, staff: [], customers: [], treatments: [], receipts: [], rx: [],
+    inventory: [], appointments: [], labs: [], attLog: [], bonuses: []};
 }
 
 function load() {
@@ -302,7 +187,10 @@ const App = {
   cur:'dashboard',
   state:{calDate:todayISO(), custSel:'c1', custQ:'', treatCust:'c1', hrTab:'payroll', invQ:'', rp:{type:'month', y:(new Date()).getFullYear(), m:(new Date()).getMonth()+1, q:Math.floor((new Date()).getMonth()/3)+1}, toothSel:null},
 
-  go(id){ this.cur = id; this.closeSheet(); this.render(); window.scrollTo({top:0}); },
+  go(id){
+    if (!Perm.tabs().includes(id)) { App.toast('Bạn không có quyền vào mục này'); return; }
+    this.cur = id; this.closeSheet(); this.render(); window.scrollTo({top:0});
+  },
   render(){
     /* Mở từ mã QR của phòng khám → chỉ hiện màn hình chấm công */
     if (location.hash.slice(0,3) === '#cc') {
@@ -311,10 +199,13 @@ const App = {
       $('#mainArea').innerHTML = Att.checkinScreen();
       return;
     }
-    $('#sideNav').innerHTML = NAV.map(n => `<button class="nav-item ${n.id===this.cur?'active':''}" onclick="App.go('${n.id}')">${n.icon} ${n.label}</button>`).join('') +
+    const NAVOK = NAV.filter(n => Perm.tabs().includes(n.id));
+    if (!Perm.tabs().includes(this.cur)) this.cur = NAVOK[0] ? NAVOK[0].id : 'dashboard';
+    $('#sideNav').innerHTML = NAVOK.map(n => `<button class="nav-item ${n.id===this.cur?'active':''}" onclick="App.go('${n.id}')">${n.icon} ${n.label}</button>`).join('') +
       `<div class="nav-foot">${(() => { const st = Sync.status(); return `<span class="pill ${st.k}">${st.t}</span>`; })()}<br>
-        <span style="font-size:11px">Nút ⟳ ở góc trên để đồng bộ ngay.</span></div>`;
-    const first4 = NAV.slice(0,4), rest = NAV.slice(4);
+        <span style="font-size:11px">Nút ⟳ ở góc trên để đồng bộ ngay.</span>
+        <div style="margin-top:6px">Vai trò: <b>${h(Perm.label())}</b>${Cloud.loggedIn()?' · '+h(Cloud.who()):''}</div></div>`;
+    const first4 = NAVOK.slice(0,4), rest = NAVOK.slice(4);
     $('#bottomNav').innerHTML = first4.map(n => `<button class="bnav-item ${n.id===this.cur?'active':''}" onclick="App.go('${n.id}')">${n.icon}<span>${n.label}</span></button>`).join('') +
       `<button class="bnav-item ${rest.some(n=>n.id===this.cur)?'active':''}" onclick="App.openSheet()">${IC.more}<span>Thêm</span></button>`;
     $('#moreSheet').innerHTML = `<div class="sheet-grid">` + rest.map(n => `<button class="sheet-item ${n.id===this.cur?'active':''}" onclick="App.go('${n.id}')">${n.icon}<span>${n.label}</span></button>`).join('') + `</div>`;
@@ -348,6 +239,49 @@ const App = {
   },
   restorePick(){ $('#restoreFile').click(); },
   print(html){ $('#printArea').innerHTML = html; setTimeout(()=>window.print(), 60); },
+};
+
+/* ================= PHÂN QUYỀN THEO VAI TRÒ ================= */
+const ROLES = {
+  quanly: {label:'Quản lý',  can:['thu','luong','baocao','xoa','caidat','kho','nhansu']},
+  bacsi:  {label:'Bác sĩ',   can:['thu','kho']},
+  trothu: {label:'Trợ thủ',  can:['kho']},
+  letan:  {label:'Lễ tân',   can:['thu']},
+};
+const ROLE_TABS = {
+  quanly: ['dashboard','customers','calendar','treatment','inventory','hr','lab','reports'],
+  bacsi:  ['dashboard','customers','calendar','treatment','inventory','hr','lab'],
+  trothu: ['dashboard','customers','calendar','treatment','inventory','hr','lab'],
+  letan:  ['dashboard','customers','calendar','treatment','inventory','hr','lab'],
+};
+/* Đoán vai trò từ chức danh cũ nếu chưa đặt rõ */
+const guessRole = txt => {
+  const t = Combo.norm(txt || '');
+  if (/quan ly|giam doc|chu/.test(t)) return 'quanly';
+  if (/bac si|bs/.test(t)) return 'bacsi';
+  if (/phu ta|tro thu|dieu duong/.test(t)) return 'trothu';
+  if (/le tan|tiep tan|thu ngan/.test(t)) return 'letan';
+  return 'letan';
+};
+const Perm = {
+  /* Chưa nối đám mây thì đây là máy riêng của chủ phòng khám — mở toàn quyền */
+  offline(){ return !Cloud.configured() || !Cloud.loggedIn(); },
+  me(){
+    const email = (Cloud.who() || '').toLowerCase();
+    if (!email) return null;
+    const s = db.staff.find(x => (x.email || '').toLowerCase() === email);
+    return (s && s.active === false) ? null : s;    /* đã nghỉ thì coi như không có quyền */
+  },
+  role(){
+    if (this.offline()) return 'quanly';
+    const s = this.me();
+    return (s && (s.perm || guessRole(s.role))) || 'letan';
+  },
+  label(){ return (ROLES[this.role()] || ROLES.letan).label; },
+  can(x){ return (ROLES[this.role()] || ROLES.letan).can.includes(x); },
+  tabs(){ return ROLE_TABS[this.role()] || ROLE_TABS.letan; },
+  /* Ẩn hẳn phần tử khỏi giao diện khi không đủ quyền */
+  only(x, html){ return this.can(x) ? html : ''; },
 };
 
 /* ================= Ô GÕ-ĐỂ-TÌM ================= */
@@ -448,15 +382,15 @@ SCREENS.dashboard = () => {
     <button class="btn primary" onclick="Cal.form()">${IC.plus} Lịch hẹn mới</button>
     <div class="sub">${WEEKD[new Date().getDay()]}, ${fmtD(T)} · ${apptToday.length} lịch hẹn hôm nay</div></div>
   <div class="kpis">
-    <div class="card kpi"><div class="k-label">Doanh thu hôm nay</div><div class="k-value num">${money(revToday)}</div><div class="k-note">${db.receipts.filter(r=>r.date===T).length} phiếu thu</div></div>
+    ${Perm.can('thu') ? `<div class="card kpi"><div class="k-label">Doanh thu hôm nay</div><div class="k-value num">${money(revToday)}</div><div class="k-note">${db.receipts.filter(r=>r.date===T).length} phiếu thu</div></div>` : ''}
     <div class="card kpi"><div class="k-label">Lịch hẹn hôm nay</div><div class="k-value num">${apptToday.length}</div><div class="k-note">${unconfirmed?`<span class="down">${unconfirmed} chưa xác nhận</span>`:'<span class="up">Đã xác nhận đủ</span>'}</div></div>
     <div class="card kpi"><div class="k-label">Khách mới tháng này</div><div class="k-value num">${newCust}</div><div class="k-note">tổng ${db.customers.length} hồ sơ</div></div>
-    <div class="card kpi"><div class="k-label">Công nợ phải thu</div><div class="k-value num">${money(debtTotal)}</div><div class="k-note">${debtCount} khách còn nợ</div></div>
+    ${Perm.can('thu') ? `<div class="card kpi"><div class="k-label">Công nợ phải thu</div><div class="k-value num">${money(debtTotal)}</div><div class="k-note">${debtCount} khách còn nợ</div></div>` : ''}
   </div>
   <div class="grid-2">
     <div class="col">
       <div class="card"><div class="card-h"><h2>Doanh thu 7 ngày gần nhất</h2></div><div class="card-b"><div class="chart">${bars}</div></div></div>
-      <div class="card"><div class="card-h"><h2>Doanh thu theo nhóm dịch vụ</h2><span class="hint">tháng ${monthOf(T).slice(5)}/${monthOf(T).slice(0,4)}</span></div><div class="card-b hbars">${groupBars || '<span class="sub-line">Chưa có phiếu thu tháng này.</span>'}</div></div>
+      ${Perm.can('luong') ? `<div class="card"><div class="card-h"><h2>Doanh thu theo nhóm dịch vụ</h2><span class="hint">tháng ${monthOf(T).slice(5)}/${monthOf(T).slice(0,4)}</span></div><div class="card-b hbars">${groupBars || '<span class="sub-line">Chưa có phiếu thu tháng này.</span>'}</div></div>` : ''}
     </div>
     <div class="col">
       <div class="card"><div class="card-h"><h2>Lịch hẹn hôm nay</h2><button class="link-btn" onclick="App.go('calendar')">Xem tất cả →</button></div><div class="card-b row-list">${upcoming}</div></div>
@@ -738,7 +672,7 @@ SCREENS.customers = () => {
     return `<tr class="clickable ${c.id===App.state.custSel?'sel-row':''}" onclick="Cust.pick('${c.id}')">
       <td><span class="cell-who"><span class="avatar">${h(c.name.split(' ').slice(-1)[0].slice(0,2))}</span><span><b>${h(c.name)}</b><span>${h(c.phone||'')} · ${c.gender||''}${c.dob?', '+c.dob.slice(0,4):''}</span></span></span></td>
       <td class="num">${h(c.code)}</td><td class="num">${lastV?fmtD(lastV):'—'}</td>
-      <td class="r num" ${debt?'style="color:var(--danger);font-weight:600"':''}>${money(debt)}</td></tr>`;
+      ${Perm.can('thu') ? `<td class="r num" ${debt?'style="color:var(--danger);font-weight:600"':''}>${money(debt)}</td>` : ''}</tr>`;
   }).join('') || '<tr><td colspan="4" class="sub-line">Không tìm thấy khách hàng.</td></tr>';
 
   const c = custById(App.state.custSel);
@@ -756,7 +690,7 @@ SCREENS.customers = () => {
       <div class="card-h"><h2>Hồ sơ: ${h(c.name)}</h2><span class="hint">${h(c.code)}</span><span class="spacer"></span>
         <button class="btn small" onclick="Cust.form('${c.id}')">Sửa hồ sơ</button>
         <button class="btn small" onclick="App.state.treatCust='${c.id}';App.go('treatment')">Điều trị & thu tiền →</button>
-        <button class="btn small danger" onclick="Cust.del('${c.id}')">Xóa</button></div>
+        ${Perm.only('xoa', `<button class="btn small danger" onclick="Cust.del('${c.id}')">Xóa</button>`)}</div>
       <div class="card-b">
         <div class="form-grid" style="gap:8px 16px">
           <div class="f"><label>Ngày sinh</label><b class="num">${fmtD(c.dob)}</b></div>
@@ -799,13 +733,13 @@ SCREENS.customers = () => {
 
   return `
   <div class="page-head"><h1>Khách hàng</h1><span class="spacer"></span>
-    <button class="btn" onclick="Importer.form()">Nhập từ Google Sheet</button>
+    ${Perm.only('caidat', `<button class="btn" onclick="Importer.form()">Nhập từ Google Sheet</button>`)}
     <button class="btn primary" onclick="Cust.form()">${IC.plus} Thêm khách hàng</button>
     <div class="sub">${db.customers.length} hồ sơ · thông tin hành chính theo mẫu BA-18</div></div>
   <div class="searchbar">${IC.search}<input placeholder="Tìm theo tên, số điện thoại, mã KH..." value="${h(App.state.custQ)}"
     oninput="App.state.custQ=this.value;App.render();const i=document.querySelector('.searchbar input');i.focus();i.setSelectionRange(i.value.length,i.value.length)"></div>
   <div class="card mb"><div class="tbl-wrap"><table>
-    <thead><tr><th>Khách hàng</th><th>Mã</th><th>Khám gần nhất</th><th class="r">Công nợ</th></tr></thead>
+    <thead><tr><th>Khách hàng</th><th>Mã</th><th>Khám gần nhất</th>${Perm.can('thu')?'<th class="r">Công nợ</th>':''}</tr></thead>
     <tbody id="custRows">${rows}</tbody></table></div></div>
   ${detail}`;
 };
@@ -1510,6 +1444,43 @@ create policy p_rec   on records    for all to authenticated using (true) with c
       </div>`);
   },
 
+  /* ---------- Quản lý tài khoản truy cập (chỉ quản lý) ---------- */
+  accountsPanel(){
+    const rows = db.staff.map(s => {
+      const role = s.perm || guessRole(s.role);
+      const off = s.active === false;
+      return `<tr${off?' style="opacity:.55"':''}>
+        <td><b>${h(s.name)}</b><br><span class="sub-line">${h(s.role||'')}</span></td>
+        <td>${s.email ? `<span class="num">${h(s.email)}</span>` : '<span class="sub-line">chưa có tài khoản</span>'}</td>
+        <td><span class="pill ${role==='quanly'?'info':'mutedp'}">${h((ROLES[role]||{}).label||role)}</span></td>
+        <td>${off?'<span class="pill danger">Đã khóa</span>':'<span class="pill ok">Đang làm</span>'}</td>
+        <td style="white-space:nowrap">
+          <button class="btn small" onclick="HR.staffForm('${s.id}')">Sửa</button>
+          ${s.email ? (off
+            ? `<button class="btn small" onclick="Att.setActive('${s.id}',true)">Mở lại</button>`
+            : `<button class="btn small danger" onclick="Att.setActive('${s.id}',false)">Khóa</button>`) : ''}
+        </td></tr>`;
+    }).join('');
+    App.modal('Tài khoản truy cập', `
+      <div class="tbl-wrap"><table style="min-width:620px">
+        <thead><tr><th>Nhân viên</th><th>Email đăng nhập</th><th>Quyền</th><th>Trạng thái</th><th></th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5" class="sub-line">Chưa có nhân viên nào.</td></tr>'}</tbody></table></div>
+      <div class="note-block" style="margin-top:12px">
+        <b>Khóa</b> = người đó đăng nhập vào sẽ không còn quyền xem gì, dùng khi nhân viên nghỉ việc.
+        Muốn xóa hẳn tài khoản khỏi hệ thống thì vào Supabase → <b>Authentication → Users</b> → xóa dòng đó
+        (phần mềm không tự xóa được vì lý do an toàn).</div>
+      <div class="form-actions">
+        <button type="button" class="btn" onclick="App.closeModal()">Đóng</button>
+        <button type="button" class="btn" onclick="HR.staffForm()">${IC.plus} Thêm nhân viên</button>
+        <button type="button" class="btn primary" onclick="Att.accountsForm()">Cấp tài khoản mới</button></div>`);
+  },
+  setActive(id, on){
+    const st = staffById(id); if (!st) return;
+    if (!on && !confirm('Khóa truy cập của "' + st.name + '"? Người này đăng nhập vào sẽ không xem được gì.')) return;
+    st.active = on; save(); this.accountsPanel(); App.render();
+    App.toast(on ? 'Đã mở lại quyền cho ' + st.name : 'Đã khóa truy cập của ' + st.name);
+  },
+
   /* Tạo tài khoản đăng nhập cho nhân viên ngay trong phần mềm */
   accountsForm(){
     const rows = db.staff.map(s => `
@@ -1668,6 +1639,13 @@ const HR = {
       <div class="f"><label>Chức danh</label><input name="role" value="${h(st.role||'')}" list="roleList">
         <datalist id="roleList">${['Bác sĩ điều trị','Phụ tá','Lễ tân','Quản lý','Kế toán'].map(r=>`<option value="${r}">`).join('')}</datalist></div>
       <div class="f"><label>Email đăng nhập</label><input name="email" type="email" value="${h(st.email||'')}" placeholder="bsduc@hoangbach.vn"></div>
+      <div class="f"><label>Quyền truy cập</label><select name="perm">
+        ${Object.entries(ROLES).map(([k,v])=>`<option value="${k}"${(st.perm||guessRole(st.role))===k?' selected':''}>${v.label}</option>`).join('')}
+      </select></div>
+      <div class="f"><label>Trạng thái</label><select name="active">
+        <option value="1"${st.active!==false?' selected':''}>Đang làm việc</option>
+        <option value="0"${st.active===false?' selected':''}>Đã nghỉ — khóa truy cập</option>
+      </select></div>
       <div class="f"><label>Lương cứng (₫)</label><input type="number" name="base" value="${st.base||0}"></div>
       <div class="f"><label>Chỉ tiêu KPI doanh thu (₫)</label><input type="number" name="kpiTarget" value="${st.kpiTarget||0}"></div>
       <div class="note-block full">Email phải trùng với tài khoản đã tạo trong Supabase → <b>Authentication → Users</b>
@@ -1681,6 +1659,7 @@ const HR = {
     ev.preventDefault();
     const d = Object.fromEntries(new FormData(ev.target).entries());
     d.base = num(d.base); d.kpiTarget = num(d.kpiTarget); d.email = (d.email||'').trim();
+    d.active = d.active !== '0';
     if (id) Object.assign(staffById(id), d);
     else db.staff.push(Object.assign({id:uid(), model:{type:'svcGroup', rates:{}, def:10}}, d));
     save(); App.closeModal(); App.render(); App.toast('Đã lưu nhân viên ✓');
@@ -1713,6 +1692,11 @@ const HR = {
 
 SCREENS.hr = () => {
   const M = monthOf(todayISO());
+  /* Không phải quản lý thì chỉ thấy Chấm công — không xem được lương, hoa hồng của người khác */
+  const HRTABS = Perm.can('luong')
+    ? [['payroll','Bảng lương'],['attendance','Chấm công'],['commission','Hoa hồng'],['kpi','KPI · Thưởng · Phạt']]
+    : [['attendance','Chấm công']];
+  if (!HRTABS.some(t => t[0] === App.state.hrTab)) App.state.hrTab = HRTABS[0][0];
   const tab = App.state.hrTab;
   const payRows = db.staff.map(st => {
     const com = HR.commissionOf(st, M), bon = HR.bonusOf(st.id, M), pen = HR.penaltyOf(st.id, M), bhxh = st.base*0.105;
@@ -1730,7 +1714,9 @@ SCREENS.hr = () => {
       <div class="card kpi"><div class="k-label">Trạng thái kỳ</div><div class="k-value" style="font-size:18px"><span class="pill warn">Chưa chốt</span></div><div class="k-note">tự tổng hợp từ phiếu thu, chấm công</div></div>
     </div>
     <div class="card"><div class="card-h"><h2>Bảng lương tháng ${M.slice(5)}/${M.slice(0,4)}</h2><span class="hint">hoa hồng, thưởng, phạt tự động</span>
-      <span class="spacer"></span><button class="btn small" onclick="HR.staffForm()">${IC.plus} Thêm nhân viên</button></div>
+      <span class="spacer"></span>
+      ${Perm.only('caidat', `<button class="btn small" onclick="Att.accountsPanel()">Tài khoản truy cập</button>`)}
+      <button class="btn small" onclick="HR.staffForm()">${IC.plus} Thêm nhân viên</button></div>
     <div class="tbl-wrap"><table style="min-width:900px">
       <thead><tr><th>Nhân viên</th><th class="r">Lương cứng</th><th class="r">Hoa hồng</th><th class="r">Thưởng</th><th class="r">Phạt</th><th class="r">BHXH (10,5%)</th><th class="r">Thực lãnh</th><th></th></tr></thead>
       <tbody>${payRows.map(({st,com,bon,pen,bhxh,net}) => `<tr>
@@ -1769,8 +1755,8 @@ SCREENS.hr = () => {
       <button class="btn primary" onclick="Att.scanner()">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg>
         Mở máy chấm công</button>
-      <button class="btn" onclick="Att.clinicQR()">Mã QR phòng khám</button>
-      <button class="btn" onclick="Att.settingsForm()">Cài đặt</button>
+      ${Perm.only('caidat', `<button class="btn" onclick="Att.clinicQR()">Mã QR phòng khám</button>
+      <button class="btn" onclick="Att.settingsForm()">Cài đặt</button>`)}
       <span class="spacer"></span>
       <span class="sub-line">Giờ vào ca chuẩn ${h(start)}${db.clinic.wifiIp?' · mạng phòng khám đã đặt':' · chưa đặt mạng phòng khám'}</span>
     </div>
@@ -1809,7 +1795,7 @@ SCREENS.hr = () => {
   return `
   <div class="page-head"><h1>Nhân sự</h1><span class="spacer"></span></div>
   <div class="subtabs">
-    ${[['payroll','Bảng lương'],['attendance','Chấm công'],['commission','Hoa hồng'],['kpi','KPI · Thưởng · Phạt']].map(([k,l])=>`<button class="subtab ${tab===k?'active':''}" onclick="HR.tab('${k}')">${l}</button>`).join('')}
+    ${HRTABS.map(([k,l])=>`<button class="subtab ${tab===k?'active':''}" onclick="HR.tab('${k}')">${l}</button>`).join('')}
   </div>${body}`;
 };
 
