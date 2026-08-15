@@ -111,12 +111,16 @@ const Importer = {
       phone: g('phone'), job: g('job'),
       ethnic: 'Kinh', nation: 'Việt Nam',
       street: g('street'), ward: addr.ward, province: addr.province,
+      oldAddr: '',                       /* điền bên dưới nếu địa chỉ đã đổi so với sổ cũ */
       doiTuong: 'Thu phí', bhyt: '', cccd: '', kinName: '', kinPhone: '',
       allergy: '', source: g('source'),
       createdAt: this.toISO(g('visit')) || todayISO(),
       teeth: {}, photos: [], record: {dienBien: []},
       _addrKind: addr.kind,
     };
+    /* Chỉ ghi địa chỉ cũ khi tên phường/xã thật sự bị đổi do sáp nhập.
+       Hồ sơ vốn đã ghi đúng địa giới mới thì không cần chú thích gì. */
+    if (addr.kind === 'quy-đổi' || addr.kind === 'khớp-tên') c.oldAddr = this.norm(g('addr'));
     const note = g('note'); if (note) c.record.lyDo = note;
     return c;
   },
@@ -171,7 +175,7 @@ const Importer = {
   /* ---------- Điều trị (bảng CONG VIEC) ---------- */
   buildTreatments(rows){
     const byCode = {}; db.customers.forEach(c => byCode[c.code] = c);
-    const treatments = [], receipts = [], created = [];
+    const treatments = [], receipts = [], created = [], visits = {};
     const missing = new Set(); let noDate = 0, noDateAmount = 0;
     const lastLeft = {};                       /* công nợ dòng cuối của từng khách */
     const g = (r, k) => this.norm(r[k] !== undefined ? r[k] : r[k + ' ']);
@@ -194,12 +198,27 @@ const Importer = {
       if (g(r,'Phụ tá')) this.staffByName(g(r,'Phụ tá'), 'Phụ tá', created);
       lastLeft[c.id] = left;
 
-      treatments.push({id: uid(), customerId: c.id, serviceId: '', name: work, group: grp,
-        tooth: '', doctorId: docId, price: paid, status: 'Hoàn tất', date,
-        note: 'Sổ cũ — ghi nhận nợ ' + owed.toLocaleString('vi-VN') + ' ₫, còn lại ' + left.toLocaleString('vi-VN') + ' ₫'});
+      /* Mỗi lần điều trị của sổ cũ vào mục "Quá trình điều trị" của hồ sơ bệnh án */
+      const doc = docId ? (staffById(docId) || {}).name : '';
+      const tien = [];
+      if (owed)  tien.push('nợ tại thời điểm đó ' + owed.toLocaleString('vi-VN') + ' ₫');
+      if (paid)  tien.push('đã thu ' + paid.toLocaleString('vi-VN') + ' ₫');
+      if (left)  tien.push('còn lại ' + left.toLocaleString('vi-VN') + ' ₫');
+      const lab = this.money(g(r,'Tiền Lab')), thuc = this.money(g(r,'Thực lãnh')), hs = this.norm(g(r,'Hệ số'));
+      if (lab)  tien.push('tiền lab ' + lab.toLocaleString('vi-VN') + ' ₫');
+      if (thuc) tien.push('thực lãnh ' + thuc.toLocaleString('vi-VN') + ' ₫');
+      if (hs)   tien.push('hệ số ' + hs);
+      (visits[c.id] || (visits[c.id] = [])).push({
+        date,
+        db: work,
+        xt: [doc ? 'BS: ' + doc : '', g(r,'Phụ tá') ? 'Phụ tá: ' + g(r,'Phụ tá') : '',
+             grp !== 'Khác' ? 'Nhóm: ' + grp : '', tien.join(' · ')].filter(Boolean).join(' — '),
+      });
 
+      /* old:true — phiếu thu của sổ cũ. Số nợ mang sang đã là số CÒN LẠI sau các lần thu này,
+         nên khi tính công nợ không được trừ chúng thêm lần nữa. */
       if (paid > 0) receipts.push({id: uid(), no: '', date, customerId: c.id, desc: work,
-        method: 'Tiền mặt', amount: paid, staffId: '', doctorId: docId, group: grp, invoice: null});
+        method: 'Tiền mặt', amount: paid, staffId: '', doctorId: docId, group: grp, invoice: null, old: true});
     });
 
     /* Công nợ đang còn của từng khách → một hạng mục chờ, để phần mềm tính đúng số phải thu */
@@ -212,7 +231,7 @@ const Importer = {
           group: 'Khác', tooth: '', doctorId: '', price: v, status: 'Chờ điều trị', date: todayISO()});
       }
     });
-    return {treatments, receipts, created, missing: [...missing], noDate, noDateAmount, debtTotal,
+    return {treatments, receipts, visits, created, missing: [...missing], noDate, noDateAmount, debtTotal,
             paidTotal: receipts.reduce((s, r) => s + r.amount, 0)};
   },
 
@@ -265,8 +284,19 @@ const Importer = {
   },
   form(){
     App.modal('Nhập dữ liệu từ sổ cũ (AppSheet / Google Sheet)', `
+    <div class="card mb"><div class="card-h"><h2>Cách nhanh nhất — nhập tất cả một lần</h2></div>
+      <div class="card-b">
+        <div class="f"><label>Chọn cùng lúc cả 4 file CSV đã tải về</label>
+          <input type="file" id="impMulti" accept=".csv,text/csv" multiple></div>
+        <div class="check-row"><label><input type="radio" name="mmode" value="replace" checked> Thay thế dữ liệu cũ</label>
+          <label><input type="radio" name="mmode" value="append"> Thêm vào</label></div>
+        <div class="form-actions" style="justify-content:flex-start">
+          <button type="button" class="btn primary" onclick="Importer.goMulti()">Nhập tất cả</button></div>
+        <div class="combo-hint">Phần mềm tự nhận file nào là khách hàng, điều trị, lịch hẹn hay vật liệu — không cần chọn đúng thứ tự.</div>
+      </div></div>
+
     <form class="form-grid" onsubmit="Importer.run(event)">
-      <div class="f full"><label>Nhập bảng nào</label>
+      <div class="f full"><label>Hoặc nhập từng bảng một</label>
         <select name="kind">${Object.entries(this.KINDS).map(([k,v]) =>
           `<option value="${k}">${v.label} — bảng "${v.sheet}"</option>`).join('')}</select></div>
 
@@ -289,6 +319,65 @@ const Importer = {
       <div class="form-actions full"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
         <button class="btn primary">Đọc dữ liệu</button></div>
     </form>`);
+  },
+
+  /* Tự nhận ra file thuộc bảng nào dựa vào tên cột */
+  detectKind(rows){
+    if (!rows.length) return '';
+    const cols = Object.keys(rows[0]).map(x => x.toLowerCase());
+    const has = t => cols.some(c => c.includes(t));
+    if (has('họ và tên') && has('ngày tháng năm sinh')) return 'customers';
+    if (has('ngày điều trị') || has('tổng thu')) return 'treatments';
+    if (has('ngày đặt hẹn') || (has('giờ bắt đầu') && has('mã kh'))) return 'appointments';
+    if (has('tên vật liệu') || has('mã vật liệu')) return 'inventory';
+    return '';
+  },
+
+  /* Nhập nhiều file cùng lúc, tự sắp đúng thứ tự: khách hàng trước, còn lại sau */
+  async runMulti(files, mode){
+    const order = ['customers','treatments','appointments','inventory'];
+    const found = {}, unknown = [];
+    for (const f of files) {
+      const rows = this.parseCSV(await f.text());
+      const kind = this.detectKind(rows);
+      if (!kind) { unknown.push(f.name); continue; }
+      found[kind] = rows;
+    }
+    const done = [], skipped = [];
+    for (const kind of order) {
+      const rows = found[kind]; if (!rows) { skipped.push(this.KINDS[kind].label); continue; }
+      if (kind === 'customers') {
+        let seq = db.seq.cust || 1300; const made = [];
+        rows.forEach(x => { const c = this.toCustomer(x, ++seq); if (c) made.push(c); });
+        made.forEach(c => delete c._addrKind);
+        if (mode === 'replace') db.customers = made;
+        else { const have = new Set(db.customers.map(c => c.code)); made.forEach(c => { if (!have.has(c.code)) db.customers.push(c); }); }
+        done.push('Khách hàng: ' + made.length);
+      } else {
+        const r = kind === 'treatments' ? this.buildTreatments(rows)
+                : kind === 'appointments' ? this.buildAppointments(rows) : this.buildInventory(rows);
+        this._pending = Object.assign({kind}, r);
+        this.commitOther(mode === 'replace' ? 'replace-silent' : 'append');
+        done.push(this.KINDS[kind].label + ': ' +
+          (kind === 'treatments' ? Object.values(r.visits).reduce((s,v)=>s+v.length,0) + ' lần điều trị, ' + r.receipts.length + ' phiếu thu'
+           : kind === 'appointments' ? r.appointments.length : r.inventory.length));
+      }
+      save();
+    }
+    App.closeModal(); App.render();
+    App.modal('Đã nhập xong', done.map(t => `<div class="alert-line"><span class="alert-ico info">✓</span><div>${h(t)}</div></div>`).join('')
+      + (skipped.length ? `<div class="alert-line"><span class="alert-ico warn">!</span><div>Không có file cho: ${h(skipped.join(', '))}</div></div>` : '')
+      + (unknown.length ? `<div class="alert-line"><span class="alert-ico warn">!</span><div>Không nhận ra bảng: ${h(unknown.join(', '))}</div></div>` : '')
+      + `<div class="form-actions"><button class="btn primary" onclick="App.closeModal();App.go('customers')">Xem danh sách khách</button></div>`);
+  },
+
+  goMulti(){
+    const inp = document.getElementById('impMulti');
+    const mode = (document.querySelector('[name=mmode]:checked') || {}).value || 'replace';
+    if (!inp || !inp.files || !inp.files.length) { App.toast('Chưa chọn file nào'); return; }
+    if (mode === 'replace' && !confirm('Thay thế toàn bộ dữ liệu hiện có bằng ' + inp.files.length + ' file vừa chọn?')) return;
+    App.toast('Đang nhập ' + inp.files.length + ' file…');
+    this.runMulti([...inp.files], mode).catch(e => App.toast('Lỗi: ' + e.message));
   },
 
   /* Lấy nội dung CSV từ file / link / ô dán */
@@ -353,7 +442,8 @@ const Importer = {
     if (kind === 'treatments') {
       const r = this.buildTreatments(rows);
       pending = {kind, ...r};
-      body = row('info', `Đọc được <b>${r.treatments.length}</b> lần điều trị và <b>${r.receipts.length}</b> phiếu thu từ ${rows.length} dòng`)
+      const soLan = Object.values(r.visits).reduce((s, v) => s + v.length, 0);
+      body = row('info', `Đọc được <b>${soLan}</b> lần điều trị (đưa vào mục <b>Quá trình điều trị</b> của từng hồ sơ) và <b>${r.receipts.length}</b> phiếu thu`)
         + row('info', `Tổng tiền đã thu: <b>${money(r.paidTotal)}</b>`)
         + row('info', `Công nợ còn lại chuyển sang: <b>${money(r.debtTotal)}</b>`)
         + (r.created.length ? row('info', `Tự tạo <b>${r.created.length}</b> nhân viên từ sổ cũ: ${h(r.created.join(', '))}`) : '')
@@ -386,10 +476,20 @@ const Importer = {
   },
   commitOther(mode){
     const p = this._pending; if (!p) { App.toast('Không có dữ liệu'); return; }
-    if (mode === 'replace' && !confirm('Thay thế toàn bộ dữ liệu ' + this.KINDS[p.kind].label.toLowerCase() + ' hiện có?')) return;
+    const silent = mode === 'replace-silent';
+    if (silent) mode = 'replace';
+    if (mode === 'replace' && !silent && !confirm('Thay thế toàn bộ dữ liệu ' + this.KINDS[p.kind].label.toLowerCase() + ' hiện có?')) return;
     if (p.kind === 'treatments') {
       if (mode === 'replace') { db.treatments = []; db.receipts = []; }
       db.treatments = db.treatments.concat(p.treatments);
+      Object.keys(p.visits || {}).forEach(cid => {
+        const c = custById(cid); if (!c) return;
+        if (!c.record) c.record = {dienBien: []};
+        if (!c.record.dienBien) c.record.dienBien = [];
+        if (mode === 'replace') c.record.dienBien = [];
+        c.record.dienBien = c.record.dienBien.concat(p.visits[cid])
+          .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      });
       p.receipts.forEach(r => { r.no = 'PT-' + (++db.seq.receipt); db.receipts.push(r); });
     } else if (p.kind === 'appointments') {
       if (mode === 'replace') db.appointments = [];
@@ -399,8 +499,8 @@ const Importer = {
       db.inventory = db.inventory.concat(p.inventory);
     }
     this._pending = null;
-    save(); App.closeModal(); App.render();
-    App.toast('Đã nhập xong ' + this.KINDS[p.kind].label.toLowerCase() + ' ✓');
+    save();
+    if (!silent) { App.closeModal(); App.render(); App.toast('Đã nhập xong ' + this.KINDS[p.kind].label.toLowerCase() + ' ✓'); }
   },
 
   commit(mode){

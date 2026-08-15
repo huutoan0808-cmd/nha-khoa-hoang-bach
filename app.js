@@ -235,7 +235,11 @@ function migrate() {
 /* Truy vấn */
 const custById = id => db.customers.find(c => c.id === id);
 /* Địa chỉ đầy đủ, viết theo lối quen thuộc: số nhà → đường → phường/xã → tỉnh */
-const fullAddr = c => [c.street, c.ward, c.province].filter(Boolean).join(', ');
+/* Địa chỉ theo địa giới mới; nếu hồ sơ đến từ sổ cũ thì ghi kèm địa chỉ cũ trong ngoặc */
+const fullAddr = c => {
+  const now = [c.street, c.ward, c.province].filter(Boolean).join(', ');
+  return c.oldAddr ? (now + ' (trước: ' + c.oldAddr + ')') : now;
+};
 /* Ô tìm khách hàng: gõ tên, số điện thoại hoặc mã KH đều ra */
 const custLabel = c => c ? c.name + ' · ' + c.code : '';
 const custOptions = () => db.customers.map(c => ({t: custLabel(c), s: c.phone || ''}));
@@ -248,7 +252,8 @@ function pickCustomerInto(v, inp){
 const staffById = id => db.staff.find(s => s.id === id);
 const custDebt = c => {
   const billed = db.treatments.filter(t => t.customerId === c.id && t.status !== 'Báo giá').reduce((s,t) => s + t.price, 0);
-  const paid = db.receipts.filter(r => r.customerId === c.id).reduce((s,r) => s + r.amount, 0);
+  /* Bỏ qua phiếu thu nhập từ sổ cũ: khoản nợ mang sang đã là số còn lại sau những lần thu đó */
+  const paid = db.receipts.filter(r => r.customerId === c.id && !r.old).reduce((s,r) => s + r.amount, 0);
   return Math.max(0, billed - paid);
 };
 const custLastVisit = c => { const ds = db.receipts.filter(r => r.customerId===c.id).map(r=>r.date).concat(db.appointments.filter(a=>a.customerId===c.id && a.date<=todayISO()).map(a=>a.date)); return ds.sort().pop() || ''; };
@@ -560,6 +565,9 @@ const Cust = {
       ${Cust.addrSelects(c)}
       <div class="f full"><label>Số nhà, đường / ấp, thôn, khóm</label>
         <input name="street" value="${h(c.street||'')}" placeholder="Vd: 25 Nguyễn Trung Trực, hoặc Ấp Hòa Thuận"></div>
+      ${c.oldAddr ? `<div class="f full"><label>Địa chỉ cũ (theo sổ trước sáp nhập)</label>
+        <input name="oldAddr" value="${h(c.oldAddr)}">
+        <div class="combo-hint">Hiện trong ngoặc sau địa chỉ mới. Xác nhận đúng rồi thì xóa trống ô này.</div></div>` : ''}
       <div class="f"><label>9. Đối tượng</label><select name="doiTuong">${['Thu phí','BHYT','Miễn','Khác'].map(o=>`<option${c.doiTuong===o?' selected':''}>${o}</option>`).join('')}</select></div>
       ${f('10. Số thẻ BHYT','bhyt',c.bhyt)}
       ${f('11. Số CCCD / Hộ chiếu / Định danh','cccd',c.cccd)}
@@ -577,6 +585,7 @@ const Cust = {
     d.province = (d.province || '').trim();
     d.ward = (d.ward || '').trim();
     d.street = (d.street || '').trim();
+    if (d.oldAddr !== undefined) d.oldAddr = (d.oldAddr || '').trim();
     if (id) { Object.assign(custById(id), d); App.toast('Đã cập nhật hồ sơ ✓'); }
     else {
       const c = Object.assign({id:uid(), code:'KH-'+(db.seq.cust++), createdAt:todayISO(), teeth:{}, record:{dienBien:[]}}, d);
