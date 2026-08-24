@@ -1139,7 +1139,16 @@ const Att = {
   },
 
   /* ---------- Nhân viên tự quét mã QR của phòng khám ---------- */
-  clinicUrl(){ return location.origin + location.pathname + '#cc'; },
+  /* Mã QR phòng khám mang luôn khóa kết nối, để điện thoại nhân viên quét phát là
+     tự nối vào phòng khám rồi mở thẳng màn hình chấm công. */
+  cfgPayload(){
+    if (!Cloud.configured()) return '';
+    return btoa(unescape(encodeURIComponent(JSON.stringify({u: Cloud.cfg.url, k: Cloud.cfg.key}))));
+  },
+  clinicUrl(){
+    const p = this.cfgPayload();
+    return location.origin + location.pathname + '#cc' + (p ? '=' + p : '');
+  },
   clinicQR(){
     App.modal('Mã QR chấm công của phòng khám', `
       <div style="text-align:center">
@@ -1359,20 +1368,20 @@ const Att = {
   },
   /* ---------- Link mời: nhân viên bấm vào là máy tự cấu hình ---------- */
   inviteUrl(){
-    if (!Cloud.configured()) return '';
-    const payload = btoa(unescape(encodeURIComponent(JSON.stringify({u: Cloud.cfg.url, k: Cloud.cfg.key}))));
-    return location.origin + location.pathname + '#setup=' + payload;
+    const p = this.cfgPayload();
+    return p ? (location.origin + location.pathname + '#setup=' + p) : '';
   },
-  /* Đọc cấu hình từ link mời khi mở app */
+  /* Đọc cấu hình từ link mời (#setup=…) hoặc từ mã QR chấm công (#cc=…) */
   applyInvite(){
-    const m = location.hash.match(/^#setup=(.+)$/);
+    const m = location.hash.match(/^#(setup|cc)=(.+)$/);
     if (!m) return false;
     try {
-      const o = JSON.parse(decodeURIComponent(escape(atob(m[1]))));
+      const o = JSON.parse(decodeURIComponent(escape(atob(m[2]))));
       if (o.u && o.k) {
         Cloud.saveCfg(o.u, o.k);
-        history.replaceState(null, '', location.pathname);
-        return true;
+        /* giữ lại #cc để vẫn vào thẳng màn hình chấm công */
+        history.replaceState(null, '', location.pathname + (m[1] === 'cc' ? '#cc' : ''));
+        return m[1];
       }
     } catch(e){}
     return false;
@@ -2065,9 +2074,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('#modalBack').addEventListener('click', ev => { if (ev.target.id === 'modalBack') App.closeModal(); });
   Sync.snapshot();
-  /* Mở từ liên kết mời → tự lưu cấu hình rồi mời đăng nhập */
-  if (Att.applyInvite()) { App.render(); App.toast('Đã nối vào phòng khám ✓ — hãy đăng nhập'); Att.loginForm(); }
-  else App.render();
+  /* Mở từ liên kết mời hoặc mã QR chấm công → tự lưu cấu hình rồi mời đăng nhập */
+  const invited = Att.applyInvite();
+  App.render();
+  if (invited) {
+    App.toast('Đã nối vào phòng khám ✓ — hãy đăng nhập');
+    if (!Cloud.loggedIn()) Att.loginForm();
+  }
   /* Có kết nối sẵn thì lặng lẽ đồng bộ khi mở app */
   if (Cloud.configured() && Cloud.loggedIn()) setTimeout(() => { Sync.run(true).then(() => Att.sync()); }, 800);
 });
