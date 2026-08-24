@@ -1505,9 +1505,10 @@ create policy p_rec   on records    for all to authenticated using (true) with c
     if (r.cfg) html += row(r.reach, r.reach ? 'Gọi tới máy chủ Supabase được' : h(r.msg));
     if (r.reach) ['staff','attendance','settings','records'].forEach(t => {
       const v = r.tables[t];
-      html += row(v === true ? true : v === 'locked' ? 'warn' : false,
+      html += row(v === true ? true : (v === 'locked' || v === 'cache') ? 'warn' : false,
         v === true ? `Bảng <b>${t}</b> đã có`
         : v === 'locked' ? `Bảng <b>${t}</b> đã có và đang khoá — bình thường, đăng nhập là đọc được`
+        : v === 'cache' ? `Bảng <b>${t}</b> vừa tạo nhưng Supabase chưa nạp lại danh mục — chạy lệnh <code>NOTIFY pgrst, 'reload schema';</code> trong SQL Editor rồi bấm Kiểm tra lại`
         : `Chưa có bảng <b>${t}</b> — chạy lại đoạn SQL ở Bước 2`);
     });
     html += row(r.login ? true : 'warn', r.login ? 'Đã đăng nhập: <b>' + h(Cloud.who()) + '</b>' : 'Chưa đăng nhập — tạo tài khoản rồi đăng nhập ở bước dưới');
