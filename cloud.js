@@ -181,9 +181,16 @@ const Cloud = {
     try { await this.test(); r.reach = true; }
     catch(e){ r.msg = e.message; return r; }
     for (const t of ['staff','attendance','settings']) {
-      try { await this.req('/rest/v1/' + t + '?select=count&limit=1',
-        {headers:{Authorization:'Bearer '+this.cfg.key, Prefer:'count=exact'}}); r.tables[t] = true; }
-      catch(e){ r.tables[t] = /does not exist|schema cache/i.test(e.message) ? 'missing' : 'locked'; }
+      /* Chỉ cần biết bảng có tồn tại hay không — không dùng select=count vì PostgREST
+         hiểu đó là tên cột và báo "does not exist", gây báo nhầm là thiếu bảng. */
+      try { await this.req('/rest/v1/' + t + '?limit=1',
+        {headers:{Authorization:'Bearer '+this.cfg.key}}); r.tables[t] = true; }
+      catch(e){
+        const m = e.message || '';
+        if (/schema cache|Could not find the table/i.test(m)) r.tables[t] = 'cache';
+        else if (/relation .* does not exist|404/i.test(m)) r.tables[t] = 'missing';
+        else r.tables[t] = 'locked';
+      }
     }
     r.login = this.loggedIn();
     return r;
