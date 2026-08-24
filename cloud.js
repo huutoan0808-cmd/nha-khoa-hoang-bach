@@ -187,6 +187,8 @@ const Cloud = {
         {headers:{Authorization:'Bearer '+this.cfg.key}}); r.tables[t] = true; }
       catch(e){
         const m = e.message || '';
+        r.errs = r.errs || {};
+        r.errs[t] = m;                       /* giữ nguyên văn để hiện ra cho dễ chẩn đoán */
         if (/schema cache|Could not find the table/i.test(m)) r.tables[t] = 'cache';
         else if (/relation .* does not exist|404/i.test(m)) r.tables[t] = 'missing';
         else r.tables[t] = 'locked';
