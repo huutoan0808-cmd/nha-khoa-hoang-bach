@@ -1171,9 +1171,16 @@ const Att = {
   },
 
   /* Màn hình riêng khi mở app từ mã QR của phòng khám */
+  /* Tìm nhân viên ứng với tài khoản đang đăng nhập.
+     Bỏ qua hoa/thường và khoảng trắng thừa. Người đã nghỉ thì không nhận. */
+  matchStaff(){
+    const email = (Cloud.who() || '').trim().toLowerCase();
+    if (!email) return null;
+    return db.staff.find(s => (s.email || '').trim().toLowerCase() === email) || null;
+  },
   myStaff(){
-    const email = (Cloud.who() || '').toLowerCase();
-    return db.staff.find(s => (s.email || '').toLowerCase() === email);
+    const s = this.matchStaff();
+    return (s && s.active === false) ? null : s;
   },
   checkinScreen(){
     const T = todayISO();
@@ -1186,11 +1193,26 @@ const Att = {
         <div class="form-actions"><button class="btn primary" onclick="Att.loginForm()">Đăng nhập</button></div>`;
     } else {
       const st = this.myStaff();
-      if (!st) {
+      const locked = this.matchStaff();
+      if (!st && locked) {
         body = `<div class="note-block" style="background:var(--danger-soft);color:var(--danger)">
-          Tài khoản <b>${h(Cloud.who())}</b> chưa được gắn với nhân viên nào.
-          Quản lý vào <b>Nhân sự → Bảng lương → Sửa</b> để điền email này cho đúng người.</div>
+          Tài khoản của <b>${h(locked.name)}</b> đã bị khóa truy cập. Liên hệ quản lý nếu đây là nhầm lẫn.</div>
           <div class="form-actions"><button class="btn" onclick="Att.logout();App.render()">Đăng xuất</button></div>`;
+      } else if (!st) {
+        const ds = db.staff.map(x => (x.email || '(chưa gắn email)') + ' — ' + x.name).join('<br>');
+        body = `<div class="note-block" style="background:var(--danger-soft);color:var(--danger)">
+          Tài khoản <b>${h(Cloud.who())}</b> chưa khớp với nhân viên nào trên máy này.</div>
+          <div class="card mb"><div class="card-b">
+            <div class="sub-line">Bạn đang đăng nhập bằng</div><b>${h(Cloud.who())}</b>
+            <div class="sub-line" style="margin-top:10px">Email đã gắn trong danh sách nhân viên (${db.staff.length} người)</div>
+            <div style="font-size:12.5px;margin-top:4px">${ds || '<i>máy này chưa có danh sách nhân viên — bấm Tải lại</i>'}</div>
+          </div></div>
+          <div class="note-block">Thường là do máy này chưa tải danh sách nhân viên về. Bấm <b>Tải lại</b> trước.
+            Nếu tải xong vẫn không khớp, nhờ quản lý vào <b>Nhân sự → Bảng lương → Sửa</b> điền đúng email này.</div>
+          <div class="form-actions">
+            <button class="btn primary" onclick="Att.reloadStaff()">Tải lại</button>
+            <span class="spacer"></span>
+            <button class="btn" onclick="Att.logout();App.render()">Đăng xuất</button></div>`;
       } else {
         const l = this.logOf(st.id, T);
         const next = !l ? 'Chấm công vào ca' : (!l.outAt ? 'Chấm công ra ca' : 'Cập nhật giờ ra');
@@ -1216,6 +1238,13 @@ const Att = {
     return `<div style="max-width:420px;margin:0 auto">
       <div class="page-head"><h1>Chấm công</h1><div class="sub">${h(db.clinic.name)} · ${h(db.clinic.addr)}</div></div>
       ${body}</div>`;
+  },
+  async reloadStaff(){
+    App.toast('Đang tải danh sách nhân viên…');
+    await Sync.run(true);
+    App.render();
+    const st = this.myStaff();
+    App.toast(st ? 'Đã nhận ra bạn: ' + st.name : 'Vẫn chưa khớp — nhờ quản lý kiểm tra email');
   },
   async selfCheck(staffId){
     await this.record(staffId, true);
@@ -1643,8 +1672,12 @@ create policy p_rec   on records    for all to authenticated using (true) with c
     try {
       await Cloud.login(d.email, d.password);
       App.closeModal(); App.render();
-      App.toast('Xin chào ' + Cloud.who());
-      Att.sync();
+      App.toast('Đang tải dữ liệu phòng khám…');
+      /* Phải kéo cả danh sách nhân viên về thì mới nhận ra người đăng nhập là ai */
+      await Sync.run(true);
+      await Att.sync();
+      App.render();
+      App.toast('Xin chào ' + ((Att.myStaff() || {}).name || Cloud.who()));
     } catch(e){ App.toast('Đăng nhập không được: ' + e.message); }
   },
   logout(){ Cloud.logout(); App.render(); App.toast('Đã đăng xuất'); },
