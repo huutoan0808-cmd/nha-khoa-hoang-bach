@@ -183,8 +183,14 @@ const Cloud = {
     for (const t of ['staff','attendance','settings']) {
       /* Chỉ cần biết bảng có tồn tại hay không — không dùng select=count vì PostgREST
          hiểu đó là tên cột và báo "does not exist", gây báo nhầm là thiếu bảng. */
-      try { await this.req('/rest/v1/' + t + '?limit=1',
-        {headers:{Authorization:'Bearer '+this.cfg.key}}); r.tables[t] = true; }
+      /* Dò bằng đúng danh tính mà app dùng: đã đăng nhập thì dùng phiên đăng nhập,
+         chưa thì dùng khóa ẩn danh. Trước đây luôn ép dùng khóa ẩn danh nên bảng nào
+         chỉ cho người đã đăng nhập đọc sẽ bị báo nhầm là "chưa có". */
+      try {
+        if (this.loggedIn()) await this.auth('/rest/v1/' + t + '?limit=1');
+        else await this.req('/rest/v1/' + t + '?limit=1', {headers:{Authorization:'Bearer '+this.cfg.key}});
+        r.tables[t] = true;
+      }
       catch(e){
         const m = e.message || '';
         r.errs = r.errs || {};
