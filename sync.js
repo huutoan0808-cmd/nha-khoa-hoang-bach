@@ -113,6 +113,46 @@ const Sync = {
     await Cloud.pushSetting('seq', JSON.stringify(db.seq));
   },
 
+  /* ---------- Dọn bản ghi trùng lặp ----------
+     Dùng khi dữ liệu đã bị nhân đôi do lỗi đồng bộ trước đây. Giữ bản mới nhất,
+     chuyển hết điều trị / phiếu thu / lịch hẹn của bản cũ sang bản được giữ. */
+  findDupCustomers(){
+    const byCode = {};
+    (db.customers || []).forEach(c => { if (c.code) (byCode[c.code] || (byCode[c.code] = [])).push(c); });
+    return Object.entries(byCode).filter(([, arr]) => arr.length > 1);
+  },
+  dedupeReport(){
+    const dupC = this.findDupCustomers();
+    const thua = dupC.reduce((s, [, arr]) => s + arr.length - 1, 0);
+    const noC = {}; (db.receipts || []).forEach(r => { if (r.no) noC[r.no] = (noC[r.no] || 0) + 1; });
+    const dupR = Object.values(noC).filter(v => v > 1).reduce((s, v) => s + v - 1, 0);
+    return {maTrung: dupC.length, hoSoThua: thua, phieuThuThua: dupR};
+  },
+  dedupe(){
+    let goneC = 0, moved = 0;
+    this.findDupCustomers().forEach(([, arr]) => {
+      /* giữ bản có nhiều dữ liệu điều trị nhất, hòa thì giữ bản sửa gần đây nhất */
+      arr.sort((a, b) => (((b.record && b.record.dienBien) || []).length - ((a.record && a.record.dienBien) || []).length)
+                      || ((b._up || 0) - (a._up || 0)));
+      const keep = arr[0];
+      arr.slice(1).forEach(old => {
+        ['treatments','receipts','appointments','labs','rx'].forEach(t => {
+          (db[t] || []).forEach(x => { if (x.customerId === old.id) { x.customerId = keep.id; moved++; } });
+        });
+        db.customers = db.customers.filter(c => c.id !== old.id);
+        goneC++;
+      });
+    });
+    /* phiếu thu trùng hệt nhau (cùng ngày, cùng khách, cùng số tiền, cùng nội dung) */
+    const seen = {}, dropR = [];
+    (db.receipts || []).forEach(r => {
+      const k = [r.customerId, r.date, r.amount, r.desc].join('|');
+      if (seen[k]) dropR.push(r.id); else seen[k] = 1;
+    });
+    db.receipts = (db.receipts || []).filter(r => !dropR.includes(r.id));
+    return {hoSoDaGop: goneC, banGhiChuyenSang: moved, phieuThuDaBo: dropR.length};
+  },
+
   /* Hai máy cùng lập phiếu lúc mất mạng có thể ra trùng số phiếu thu.
      Sau khi gộp dữ liệu, phát hiện trùng thì giữ phiếu lập trước, đánh lại số phiếu lập sau. */
   fixDupReceipts(){
@@ -135,8 +175,10 @@ const Sync = {
     this.busy = true;
     try {
       this.stamp();
-      await this.push();
+      /* KÉO VỀ TRƯỚC rồi mới đẩy lên. Nếu đẩy trước, máy nào còn dữ liệu cũ sẽ ghi đè
+         lên dấu xóa trên đám mây, làm sống lại bản ghi đã xóa và sinh ra trùng lặp. */
       const r = await this.pull();
+      await this.push();
       await this.syncMeta();
       const dup = this.fixDupReceipts();
       if (dup.length) { await this.push(); App.toast('Đã đánh lại ' + dup.length + ' số phiếu thu bị trùng: ' + dup.slice(0,3).join(', ')); }

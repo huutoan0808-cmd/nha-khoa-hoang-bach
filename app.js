@@ -232,6 +232,41 @@ const App = {
   toastT:null,
   toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(this.toastT); this.toastT = setTimeout(()=>t.classList.remove('show'), 2200); },
 
+  dedupeForm(){
+    const r = Sync.dedupeReport();
+    if (!r.maTrung && !r.phieuThuThua) {
+      App.modal('Dọn trùng lặp', `<div class="alert-line"><span class="alert-ico info">✓</span>
+        <div>Không tìm thấy hồ sơ hay phiếu thu nào bị trùng. Dữ liệu đang sạch.</div></div>
+        <div class="form-actions"><button class="btn" onclick="App.closeModal()">Đóng</button></div>`);
+      return;
+    }
+    App.modal('Dọn trùng lặp', `
+      <div class="card mb"><div class="card-b">
+        <div class="alert-line"><span class="alert-ico warn">!</span><div><b>${r.maTrung}</b> mã khách hàng bị lặp — thừa <b>${r.hoSoThua}</b> hồ sơ</div></div>
+        ${r.phieuThuThua ? `<div class="alert-line"><span class="alert-ico warn">!</span><div>Thừa <b>${r.phieuThuThua}</b> phiếu thu trùng số</div></div>` : ''}
+      </div></div>
+      <div class="note-block">Phần mềm sẽ giữ lại hồ sơ có <b>nhiều lịch sử điều trị nhất</b> của mỗi mã khách,
+        và <b>chuyển toàn bộ</b> điều trị, phiếu thu, lịch hẹn, phiếu lab của hồ sơ thừa sang hồ sơ được giữ.
+        Không mất dữ liệu điều trị nào.</div>
+      <div class="note-block" style="background:var(--warn-soft);color:var(--warn)">
+        Nên <b>sao lưu</b> (nút ⬇ góc trên) trước khi dọn, để lỡ có gì còn quay lại được.</div>
+      <div class="form-actions">
+        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+        <button type="button" class="btn primary" onclick="App.dedupeRun()">Dọn ngay</button></div>`);
+  },
+  async dedupeRun(){
+    if (!confirm('Bắt đầu dọn trùng lặp? Nên sao lưu trước.')) return;
+    const k = Sync.dedupe();
+    save(); App.closeModal(); App.render();
+    App.modal('Đã dọn xong', `
+      <div class="alert-line"><span class="alert-ico info">✓</span><div>Gộp <b>${k.hoSoDaGop}</b> hồ sơ thừa</div></div>
+      <div class="alert-line"><span class="alert-ico info">✓</span><div>Chuyển <b>${k.banGhiChuyenSang}</b> bản ghi sang hồ sơ được giữ</div></div>
+      <div class="alert-line"><span class="alert-ico info">✓</span><div>Bỏ <b>${k.phieuThuDaBo}</b> phiếu thu trùng</div></div>
+      <div class="note-block" style="margin-top:10px">Còn lại <b>${db.customers.length}</b> hồ sơ khách hàng.
+        Bấm Đồng bộ để cập nhật lên đám mây cho các máy khác.</div>
+      <div class="form-actions"><button class="btn" onclick="App.closeModal()">Đóng</button>
+        <button class="btn primary" onclick="App.closeModal();App.syncNow()">Đồng bộ ngay</button></div>`);
+  },
   async syncNow(){
     if (!Cloud.configured()) { App.toast('Chưa kết nối đám mây — vào Nhân sự → Chấm công → Cài đặt'); Att.wizard(); return; }
     if (!Cloud.loggedIn()) { App.toast('Hãy đăng nhập trước'); Att.loginForm(); return; }
@@ -745,7 +780,8 @@ SCREENS.customers = () => {
 
   return `
   <div class="page-head"><h1>Khách hàng</h1><span class="spacer"></span>
-    ${Perm.only('caidat', `<button class="btn" onclick="Importer.form()">Nhập từ Google Sheet</button>`)}
+    ${Perm.only('caidat', `<button class="btn" onclick="App.dedupeForm()">Dọn trùng lặp</button>
+    <button class="btn" onclick="Importer.form()">Nhập từ Google Sheet</button>`)}
     <button class="btn primary" onclick="Cust.form()">${IC.plus} Thêm khách hàng</button>
     <div class="sub">${db.customers.length} hồ sơ · thông tin hành chính theo mẫu BA-18</div></div>
   <div class="searchbar">${IC.search}<input placeholder="Tìm theo tên, số điện thoại, mã KH..." value="${h(App.state.custQ)}"
