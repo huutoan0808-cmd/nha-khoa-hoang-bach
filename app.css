@@ -123,6 +123,10 @@ tr:last-child td{border-bottom:none}
 tbody tr.clickable{cursor:pointer}
 tbody tr.clickable:hover{background:var(--surface2)}
 tbody tr.sel-row{background:var(--accent-soft)}
+/* Nháy nhẹ dòng khách vừa mở từ tab khác, để mắt bắt được ngay là đang ở đúng người */
+tbody tr.vua-chon{animation:nhay-dong 1.6s ease-out 1}
+@keyframes nhay-dong{0%,40%{background:var(--warn-soft)}100%{background:var(--accent-soft)}}
+@media (prefers-reduced-motion:reduce){tbody tr.vua-chon{animation:none}}
 td.r,th.r{text-align:right}
 .cell-who{display:flex;align-items:center;gap:10px}
 .cell-who b{display:block;font-size:13.5px}

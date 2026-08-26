@@ -711,6 +711,27 @@ const Cust = {
   },
   pick(id){ App.state.custSel = id; App.render(); const el = $('#custDetail'); if (el) el.scrollIntoView({behavior:'smooth', block:'start'}); },
 
+  /* Từ tab khác nhảy thẳng vào hồ sơ một khách.
+     App.go kéo trang về đầu, mà hồ sơ nằm DƯỚI cả danh sách mấy trăm dòng, nên phải
+     tự đưa nó vào tầm nhìn — không thì trông như bấm xong chẳng có gì đổi. */
+  moHoSo(id){
+    const c = custById(id);
+    if (!c) { App.toast('Không tìm thấy hồ sơ khách này'); return; }
+    App.state.custSel = id;
+    /* Ô tìm kiếm còn chữ cũ có thể đang lọc mất người này khỏi danh sách */
+    const q = Combo.norm(App.state.custQ || '');
+    const khop = !q || Combo.norm(c.name).includes(q) || Combo.norm(c.code || '').includes(q)
+      || (/\d/.test(q) && (c.phone||'').replace(/\D/g,'').includes(q.replace(/\D/g,'')));
+    if (!khop) App.state.custQ = '';
+    App.go('customers');
+    setTimeout(() => {
+      const el = $('#custDetail');
+      if (el) el.scrollIntoView({block:'start'});
+      const row = document.querySelector('#custRows .sel-row');
+      if (row) row.classList.add('vua-chon');
+    }, 0);
+  },
+
   toothClick(n){
     const c = custById(App.state.custSel); if (!c) return;
     const t = (c.teeth||{})[n] || {s:'ok', mat:[], note:''};
@@ -1394,7 +1415,7 @@ SCREENS.treatment = () => {
   <div class="page-head"><h1>Điều trị & thanh toán</h1><span class="spacer"></span>
     <span style="min-width:230px;flex:1;max-width:320px">${Combo.html('cbTreatCust','treatCust', custLabel(c), custOptions(),
       'Đổi khách: gõ tên, SĐT hoặc mã KH', Treat.onCustPick)}</span>
-    <button class="btn" onclick="App.state.custSel='${c.id}';App.go('customers')">← Hồ sơ khách hàng</button>
+    <button class="btn" onclick="Cust.moHoSo('${c.id}')">← Hồ sơ khách hàng</button>
     <button class="btn primary" onclick="Treat.payForm()">Thu tiền</button></div>
   <div class="card mb"><div class="card-b" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
     <div style="flex:1;min-width:200px">
@@ -1402,7 +1423,7 @@ SCREENS.treatment = () => {
       <span class="sub-line">${h(c.phone||'chưa có SĐT')} · ${fmtD(c.dob)||'chưa có ngày sinh'} · ${h(fullAddr(c)||'chưa có địa chỉ')}</span>
       ${c.allergy?`<br><span class="pill danger">⚕ ${h(c.allergy)}</span>`:''}
     </div>
-    <button class="btn small" onclick="App.state.custSel='${c.id}';App.go('customers')">Xem hồ sơ đầy đủ →</button>
+    <button class="btn small" onclick="Cust.moHoSo('${c.id}')">Xem hồ sơ đầy đủ →</button>
   </div></div>
   <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
     <div class="card kpi"><div class="k-label">Tổng kế hoạch (đã duyệt)</div><div class="k-value num">${money(total)}</div><div class="k-note">${items.length} hạng mục · ${items.filter(t=>t.status==='Báo giá').length} đang báo giá</div></div>
