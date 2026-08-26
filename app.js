@@ -416,8 +416,10 @@ const Perm = {
   role(){
     if (this.offline()) return 'quanly';
     const s = this.me();
-    return (s && (s.perm || guessRole(s.role))) || 'letan';
+    return (s && this.roleOf(s)) || 'letan';
   },
+  /* Vai trò của một nhân viên bất kỳ — dùng để lọc danh sách bác sĩ, trợ thủ */
+  roleOf(s){ return s ? (s.perm || guessRole(s.role)) : ''; },
   label(){ return (ROLES[this.role()] || ROLES.letan).label; },
   can(x){ return (ROLES[this.role()] || ROLES.letan).can.includes(x); },
   tabs(){ return ROLE_TABS[this.role()] || ROLE_TABS.letan; },
@@ -987,7 +989,14 @@ const Treat = {
       <input type="hidden" name="group" value="${h(t.group||'')}">
       <div class="f"><label>Răng / vị trí</label><input name="tooth" value="${h(t.tooth||'')}" placeholder="R36, 2 hàm..."></div>
       <div class="f"><label>Đơn giá (₫)</label><input type="number" name="price" value="${t.price||''}" required></div>
-      <div class="f"><label>Bác sĩ</label><select name="doctorId">${db.staff.filter(s=>s.role.includes('Bác sĩ')).map(s=>`<option value="${s.id}"${t.doctorId===s.id?' selected':''}>${h(s.name)}</option>`).join('')}</select></div>
+      <div class="f"><label>Bác sĩ</label><select name="doctorId">
+        <option value="">— chưa phân —</option>
+        ${db.staff.filter(s=>s.active!==false && (Perm.roleOf(s)==='bacsi' || /bác sĩ/i.test(s.role||'')))
+          .map(s=>`<option value="${s.id}"${t.doctorId===s.id?' selected':''}>${h(s.name)}</option>`).join('')}</select></div>
+      <div class="f"><label>Người phụ (trợ thủ)</label><select name="assistantId">
+        <option value="">— không có —</option>
+        ${db.staff.filter(s=>s.active!==false && s.id!==t.doctorId)
+          .map(s=>`<option value="${s.id}"${t.assistantId===s.id?' selected':''}>${h(s.name)}${s.role?' · '+h(s.role):''}</option>`).join('')}</select></div>
       <div class="f"><label>Trạng thái</label><select name="status">${TREAT_STATUS.map(s=>`<option${t.status===s?' selected':''}>${s}</option>`).join('')}</select></div>
       <div class="form-actions full">
         ${id?`<button type="button" class="btn danger" onclick="Treat.itemDel('${id}')">Xóa</button><span class="spacer"></span>`:''}
@@ -1117,8 +1126,10 @@ SCREENS.treatment = () => {
 
   const itemRows = items.map(t => {
     const st = t.status==='Hoàn tất'?'ok':t.status==='Đang điều trị'?'info':t.status==='Chờ điều trị'?'warn':'mutedp';
+    const phu = staffById(t.assistantId);
     return `<tr class="clickable" onclick="Treat.itemForm('${t.id}')"><td><b>${h(t.name)}</b><br><span class="sub-line">${h(t.group)}</span></td>
-    <td class="num">${h(t.tooth||'—')}</td><td>${h((staffById(t.doctorId)||{}).name||'—')}</td>
+    <td class="num">${h(t.tooth||'—')}</td>
+    <td>${h((staffById(t.doctorId)||{}).name||'—')}${phu?`<br><span class="sub-line">phụ: ${h(phu.name)}</span>`:''}</td>
     <td><span class="pill ${st}">${t.status}</span></td><td class="r num">${money(t.price)}</td></tr>`;
   }).join('') || '<tr><td colspan="5" class="sub-line">Chưa có hạng mục — bấm "Thêm hạng mục".</td></tr>';
 
@@ -1151,13 +1162,72 @@ SCREENS.treatment = () => {
     <div class="card kpi"><div class="k-label">Còn lại</div><div class="k-value num" ${debt?'style="color:var(--danger)"':''}>${money(debt)}</div><div class="k-note">${debt?'nhắc khách theo lịch trả góp':'không còn công nợ'}</div></div>
   </div>
   <div class="card mb"><div class="card-h"><h2>Kế hoạch điều trị — ${h(c.name)}</h2><span class="spacer"></span>
+    <button class="btn small" onclick="Svc.bang()">Bảng giá dịch vụ</button>
     <button class="btn small" onclick="Treat.itemForm()">${IC.plus} Thêm hạng mục</button></div>
-    <div class="tbl-wrap"><table><thead><tr><th>Hạng mục</th><th>Răng</th><th>Bác sĩ</th><th>Trạng thái</th><th class="r">Đơn giá</th></tr></thead><tbody>${itemRows}</tbody></table></div></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Hạng mục</th><th>Răng</th><th>Bác sĩ · người phụ</th><th>Trạng thái</th><th class="r">Đơn giá</th></tr></thead><tbody>${itemRows}</tbody></table></div></div>
   <div class="card mb"><div class="card-h"><h2>Đơn thuốc</h2><span class="hint">liên thông Đơn thuốc quốc gia</span><span class="spacer"></span>
     <button class="btn small" onclick="Treat.rxForm()">${IC.plus} Kê đơn mới</button></div>
     <div class="card-b">${rxBlocks}</div></div>
   <div class="card"><div class="card-h"><h2>Phiếu thu</h2><span class="hint">hóa đơn điện tử Viettel SInvoice</span></div>
     <div class="tbl-wrap"><table><thead><tr><th>Ngày / Số</th><th>Nội dung</th><th class="r">Số tiền</th><th>Hóa đơn điện tử</th><th></th></tr></thead><tbody>${recRows}</tbody></table></div></div>`;
+};
+
+/* ---------- Bảng giá dịch vụ ---------- */
+const NHOM_DV = ['Phục hình sứ','Phục hình tháo lắp','Trám răng','Nhổ răng','Điều trị tủy',
+                 'Implant','Chỉnh nha','Nha chu','Thẩm mỹ','Khác'];
+const Svc = {
+  bang(){
+    const sua = Perm.can('caidat');
+    const theoNhom = NHOM_DV.map(g => ({g, ds: db.services.filter(s => s.group === g)}))
+      .concat([{g:'(chưa xếp nhóm)', ds: db.services.filter(s => !NHOM_DV.includes(s.group))}])
+      .filter(x => x.ds.length);
+    const rows = theoNhom.map(({g, ds}) => `
+      <tr><td colspan="${sua?3:2}" style="background:var(--surface2);font-weight:700">${h(g)} <span class="sub-line">· ${ds.length} dịch vụ</span></td></tr>
+      ${ds.map(s => `<tr><td>${h(s.name)}</td><td class="r num" style="font-weight:600">${money(s.price)}</td>
+        ${sua?`<td style="white-space:nowrap"><button class="btn small" onclick="Svc.form('${s.id}')">Sửa</button></td>`:''}</tr>`).join('')}`).join('');
+    App.modal('Bảng giá dịch vụ', `
+      ${sua ? `<div class="form-actions" style="justify-content:flex-start;margin-bottom:10px">
+        <button class="btn primary" onclick="Svc.form()">${IC.plus} Thêm dịch vụ</button></div>`
+      : '<div class="note-block mb">Chỉ quản lý mới sửa được bảng giá. Bạn xem để báo giá cho khách.</div>'}
+      <div class="tbl-wrap"><table style="min-width:420px">
+        <thead><tr><th>Dịch vụ</th><th class="r">Đơn giá</th>${sua?'<th></th>':''}</tr></thead>
+        <tbody>${rows || `<tr><td colspan="3" class="sub-line">Chưa có dịch vụ nào.</td></tr>`}</tbody></table></div>
+      <div class="note-block" style="margin-top:12px">Sửa giá ở đây <b>không làm đổi giá của những hạng mục đã lập trước đó</b> —
+        hồ sơ cũ giữ nguyên giá lúc chốt. Giá mới chỉ áp cho hạng mục lập từ bây giờ.</div>`);
+  },
+  form(id){
+    if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới sửa được bảng giá'); return; }
+    const s = id ? db.services.find(x=>x.id===id) : {group:'Phục hình sứ', price:0};
+    App.modal(id?'Sửa dịch vụ':'Thêm dịch vụ', `
+    <form class="form-grid" onsubmit="Svc.save(event,'${id||''}')">
+      <div class="f full"><label>Tên dịch vụ</label><input name="name" required value="${h(s.name||'')}"></div>
+      <div class="f"><label>Nhóm dịch vụ</label><select name="group">
+        ${NHOM_DV.map(g=>`<option${s.group===g?' selected':''}>${h(g)}</option>`).join('')}</select></div>
+      <div class="f"><label>Đơn giá (₫)</label><input type="number" name="price" min="0" value="${s.price||0}" required></div>
+      <div class="form-actions full">
+        ${id?`<button type="button" class="btn danger" onclick="Svc.del('${id}')">Xóa</button><span class="spacer"></span>`:''}
+        <button type="button" class="btn" onclick="Svc.bang()">Quay lại</button><button class="btn primary">Lưu</button></div>
+    </form>`);
+  },
+  save(ev, id){
+    ev.preventDefault();
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    d.name = (d.name||'').trim(); d.price = num(d.price);
+    if (!d.name) { App.toast('Chưa nhập tên dịch vụ'); return; }
+    const trung = db.services.find(x => x.id !== id && Combo.norm(x.name) === Combo.norm(d.name));
+    if (trung) { App.toast('Đã có dịch vụ tên này trong nhóm ' + trung.group); return; }
+    if (id) Object.assign(db.services.find(x=>x.id===id), d);
+    else db.services.push(Object.assign({id:uid()}, d));
+    save(); App.render(); this.bang(); App.toast('Đã lưu dịch vụ ✓');
+  },
+  del(id){
+    const s = db.services.find(x=>x.id===id); if (!s) return;
+    const dung = db.treatments.filter(t => t.serviceId === id).length;
+    if (!confirm('Xóa "' + s.name + '" khỏi bảng giá?' +
+      (dung ? '\n\n' + dung + ' hạng mục điều trị đã dùng dịch vụ này. Hồ sơ cũ vẫn giữ nguyên tên và giá, chỉ mất gợi ý khi lập hạng mục mới.' : ''))) return;
+    db.services = db.services.filter(x=>x.id!==id);
+    save(); App.render(); this.bang(); App.toast('Đã xóa');
+  },
 };
 
 /* ---------- Kho ---------- */
@@ -2223,6 +2293,25 @@ const HR = {
   revenueOf(st, month){ return db.receipts.filter(r => monthOf(r.date)===month && r.doctorId===st.id).reduce((s,r)=>s+r.amount,0); },
   bonusOf(stId, month){ return db.bonuses.filter(b=>b.staffId===stId && monthOf(b.date)===month && b.amount>0).reduce((s,b)=>s+b.amount,0); },
   penaltyOf(stId, month){ return -db.bonuses.filter(b=>b.staffId===stId && monthOf(b.date)===month && b.amount<0).reduce((s,b)=>s+b.amount,0); },
+  /* Danh sách nhân viên để sửa tên, chức danh, quyền — mở được từ cả hai mục Nhân sự */
+  dsNhanVien(){
+    if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới sửa được hồ sơ nhân viên'); return; }
+    const rows = db.staff.map(s => `<tr>
+      <td><b>${h(s.name)}</b><br><span class="sub-line">${h(s.email||'chưa gắn email')}</span></td>
+      <td>${h(s.role||'—')}<br><span class="sub-line">quyền: ${h((ROLES[Perm.roleOf(s)]||{}).label||'—')}</span></td>
+      <td>${s.active===false?'<span class="pill danger">Đã nghỉ</span>':'<span class="pill ok">Đang làm</span>'}</td>
+      <td><button class="btn small" onclick="HR.staffForm('${s.id}')">Sửa</button></td></tr>`).join('')
+      || '<tr><td colspan="4" class="sub-line">Chưa có nhân viên nào.</td></tr>';
+    App.modal('Danh sách nhân viên', `
+      <div class="form-actions" style="justify-content:flex-start;margin-bottom:10px">
+        <button class="btn primary" onclick="HR.staffForm()">${IC.plus} Thêm nhân viên</button></div>
+      <div class="tbl-wrap"><table style="min-width:520px">
+        <thead><tr><th>Họ tên · email</th><th>Chức danh · quyền</th><th>Trạng thái</th><th></th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+      <div class="note-block" style="margin-top:12px">Sửa tên ở đây thì <b>mọi hồ sơ cũ cũng hiện tên mới</b> —
+        phần mềm lưu theo mã nhân viên, không lưu tên rời rạc.</div>`);
+  },
+
   staffForm(id){
     const st = id ? staffById(id) : {role:'Bác sĩ điều trị', base:0, kpiTarget:0, model:{type:'svcGroup', rates:{}, def:10}};
     App.modal(id ? 'Sửa nhân viên' : 'Thêm nhân viên', `
@@ -2359,7 +2448,8 @@ SCREENS.hr = () => {
       <button class="btn primary" onclick="Att.scanner()">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg>
         Mở máy chấm công</button>
-      ${Perm.only('caidat', `<button class="btn" onclick="Att.clinicQR()">Mã QR phòng khám</button>
+      ${Perm.only('caidat', `<button class="btn" onclick="HR.dsNhanVien()">Sửa nhân viên</button>
+      <button class="btn" onclick="Att.clinicQR()">Mã QR phòng khám</button>
       <button class="btn" onclick="Att.settingsForm()">Cài đặt</button>`)}
       <span class="spacer"></span>
       <span class="sub-line">${h(Att.moTaCa())}${db.clinic.wifiIp?' · mạng phòng khám đã đặt':' · chưa đặt mạng phòng khám'}</span>
