@@ -431,6 +431,7 @@ SCREENS.dashboard = () => {
   <div class="page-head"><h1>Tổng quan</h1><span class="spacer"></span>
     <button class="btn primary" onclick="Cal.form()">${IC.plus} Lịch hẹn mới</button>
     <div class="sub">${WEEKD[new Date().getDay()]}, ${fmtD(T)} · ${apptToday.length} lịch hẹn hôm nay</div></div>
+  ${Att.myCardHTML()}
   <div class="kpis">
     ${Perm.can('thu') ? `<div class="card kpi"><div class="k-label">Doanh thu hôm nay</div><div class="k-value num">${money(revToday)}</div><div class="k-note">${db.receipts.filter(r=>r.date===T).length} phiếu thu</div></div>` : ''}
     <div class="card kpi"><div class="k-label">Lịch hẹn hôm nay</div><div class="k-value num">${apptToday.length}</div><div class="k-note">${unconfirmed?`<span class="down">${unconfirmed} chưa xác nhận</span>`:'<span class="up">Đã xác nhận đủ</span>'}</div></div>
@@ -1207,6 +1208,27 @@ const Att = {
       <p style="margin:2px 0"><b>${h(db.clinic.name)}</b><br>${h(db.clinic.addr)}</p>
       <div style="margin:16px auto">${QR.svg(Att.clinicUrl(), 260)}</div>
       <p style="font-size:13px">Nối wifi phòng khám → quét mã → chấm công</p></div>`);
+  },
+
+  /* Thẻ chấm công ngay trên Tổng quan — để nhân viên khỏi phải quét mã QR mỗi ngày.
+     Chỉ hiện khi đã đăng nhập và nhận ra là nhân viên nào. */
+  myCardHTML(){
+    const st = this.myStaff();
+    if (!st) return '';
+    const T = todayISO(), l = this.logOf(st.id, T);
+    const start = db.clinic.shiftStart || '08:00';
+    const nut = !l ? 'Chấm công vào ca' : (!l.outAt ? 'Chấm công ra ca' : 'Cập nhật giờ ra');
+    return `<div class="card mb"><div class="card-b" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:180px">
+        <div class="sub-line">Chấm công hôm nay · ${h(st.name)}</div>
+        <div style="display:flex;gap:18px;margin-top:4px">
+          <div><span class="sub-line">Vào</span> <b class="num" style="font-size:16px">${l&&l.inAt?h(l.inAt):'—'}</b>
+            ${l&&l.inAt&&l.inAt>start?'<span class="pill warn">trễ</span>':''}</div>
+          <div><span class="sub-line">Ra</span> <b class="num" style="font-size:16px">${l&&l.outAt?h(l.outAt):'—'}</b></div>
+        </div>
+      </div>
+      <button class="btn primary" onclick="Att.selfCheck('${st.id}')">${nut}</button>
+    </div></div>`;
   },
 
   /* Màn hình riêng khi mở app từ mã QR của phòng khám */
