@@ -36,6 +36,8 @@ a{color:var(--accent-ink)}
 
 /* ===== Khung ===== */
 .app{display:grid;grid-template-columns:224px 1fr;grid-template-rows:56px 1fr;min-height:100vh}
+/* Màn hình chào / chấm công: không có menu nên nội dung trải hết chiều ngang */
+.app.solo{grid-template-columns:1fr}
 .app>*{min-width:0}
 .topbar{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30;min-width:0}
 .logo{display:flex;align-items:center;gap:10px;min-width:0;flex:1}

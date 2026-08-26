@@ -196,16 +196,19 @@ const App = {
     const chuaSanSang = (!Cloud.configured() || !Cloud.loggedIn())
       && !App.state.skipWelcome && !db.customers.length && location.hash.slice(0,3) !== '#cc';
     if (chuaSanSang) {
+      document.querySelector('.app').classList.add('solo');
       document.querySelector('.sidebar').style.display = 'none';
       document.querySelector('.bottom-nav').style.display = 'none';
       $('#mainArea').innerHTML = Att.welcomeScreen();
       return;
     }
+    document.querySelector('.app').classList.remove('solo');
     document.querySelector('.sidebar').style.display = '';
     document.querySelector('.bottom-nav').style.display = '';
 
     /* Mở từ mã QR của phòng khám → chỉ hiện màn hình chấm công */
     if (location.hash.slice(0,3) === '#cc') {
+      document.querySelector('.app').classList.add('solo');
       document.querySelector('.sidebar').style.display = 'none';
       document.querySelector('.bottom-nav').style.display = 'none';
       $('#mainArea').innerHTML = Att.checkinScreen();
@@ -1451,6 +1454,23 @@ const Att = {
     } catch(e){}
     return false;
   },
+  /* Dán liên kết mời vào ô trên màn hình chào để nối máy mới */
+  useInvite(){
+    const el = document.getElementById('inviteIn');
+    const raw = ((el && el.value) || '').trim();
+    if (!raw) { App.toast('Chưa dán liên kết nào'); return; }
+    const m = raw.match(/#(?:setup|cc)=([A-Za-z0-9+/=_-]+)/);
+    if (!m) { App.toast('Liên kết không đúng — phải có đoạn #setup=… ở cuối'); return; }
+    try {
+      const o = JSON.parse(decodeURIComponent(escape(atob(m[1]))));
+      if (!o.u || !o.k) throw 0;
+      Cloud.saveCfg(o.u, o.k);
+      App.render();
+      App.toast('Đã nối vào phòng khám ✓ — hãy đăng nhập');
+      Att.loginForm();
+    } catch(e){ App.toast('Liên kết hỏng hoặc chép thiếu — xin quản lý gửi lại'); }
+  },
+
   inviteForm(){
     const url = this.inviteUrl();
     if (!url) { App.toast('Chưa cấu hình kết nối — làm Hướng dẫn kết nối trước'); this.wizard(); return; }
@@ -1475,13 +1495,20 @@ const Att = {
     const buoc = (n, t, d, btn) => `<div class="rx mb"><div class="rx-head"><b>${n}. ${t}</b></div>
       <div class="card-b">${d}${btn ? `<div class="form-actions" style="justify-content:flex-start;margin-top:8px">${btn}</div>` : ''}</div></div>`;
     if (!Cloud.configured()) {
-      return `<div style="max-width:560px;margin:0 auto">
-        <div class="page-head"><h1>Chào mừng đến ${h(db.clinic.name)}</h1>
+      return `<div style="max-width:520px;margin:0 auto">
+        <div class="page-head"><h1>${h(db.clinic.name)}</h1>
           <div class="sub">Máy này chưa nối vào dữ liệu chung của phòng khám</div></div>
-        ${buoc(1, 'Bạn là nhân viên?', 'Hãy xin <b>liên kết mời</b> từ quản lý rồi bấm vào liên kết đó. Máy sẽ tự nối, bạn chỉ cần đăng nhập.', '')}
-        ${buoc(2, 'Bạn là quản lý, đang cài lần đầu?', 'Tạo cơ sở dữ liệu chung trên Supabase (miễn phí) rồi dán khóa vào đây.',
-          `<button class="btn primary" onclick="Att.wizard()">Bắt đầu cài đặt</button>`)}
-        ${buoc(3, 'Chỉ muốn dùng thử trên máy này?', 'Dùng được ngay, dữ liệu lưu trên máy này thôi, không dùng chung với ai.',
+        <div class="card mb"><div class="card-b">
+          <div class="f"><label>Dán liên kết mời từ quản lý</label>
+            <input id="inviteIn" placeholder="https://…#setup=…" autocomplete="off"></div>
+          <div class="form-actions" style="justify-content:flex-start;margin-top:10px">
+            <button class="btn primary" onclick="Att.useInvite()">Nối vào phòng khám</button></div>
+          <div class="combo-hint">Quản lý lấy liên kết này ở <b>Nhân sự → Chấm công → Cài đặt → Mời nhân viên</b>.
+            Nối một lần, những lần sau chỉ cần đăng nhập.</div>
+        </div></div>
+        ${buoc('•', 'Bạn là quản lý, đang cài lần đầu?', 'Tạo cơ sở dữ liệu chung trên Supabase (miễn phí) rồi dán khóa vào đây.',
+          `<button class="btn" onclick="Att.wizard()">Bắt đầu cài đặt</button>`)}
+        ${buoc('•', 'Chỉ muốn dùng thử trên máy này?', 'Dùng được ngay, dữ liệu lưu trên máy này thôi, không dùng chung với ai.',
           `<button class="btn" onclick="App.state.skipWelcome=1;App.render()">Dùng riêng máy này</button>`)}
       </div>`;
     }
