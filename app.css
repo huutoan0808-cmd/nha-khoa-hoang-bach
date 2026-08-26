@@ -256,6 +256,8 @@ td.r,th.r{text-align:right}
 .legend i.lg-tl{background:transparent;border:2px dashed var(--warn)}
 .legend i.lg-im{background:repeating-linear-gradient(180deg,var(--accent) 0 2px,transparent 2px 4px)}
 .legend i.lg-mat{background:transparent;border:1.5px dashed var(--muted);position:relative}
+.legend i.lg-lodo{background:transparent;border:2px solid var(--danger);border-radius:50%}
+.legend i.lg-sung{background:var(--warn);border-radius:50% 50% 0 0}
 .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--ink2);margin-top:10px}
 .legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:5px;vertical-align:-1px}
 .tooth-info{margin-top:8px;padding:10px 14px;border-radius:8px;background:var(--surface2);font-size:13px;color:var(--ink2);border:1px dashed var(--line)}
