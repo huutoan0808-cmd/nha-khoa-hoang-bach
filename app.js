@@ -103,6 +103,10 @@ const TOOTH_STATES = [
   ['implant', 'Implant'],
   ['missing', 'Mất răng'],
 ];
+/* Chỉ những tình trạng này mới còn thân răng để nói tới chuyện nội nha.
+   Mất răng / implant / răng tháo lắp thì không có tủy mà điều trị. */
+const TT_CO_NOI_NHA = ['caries', 'filled', 'crownKL', 'crownTS'];
+
 /* 6 mặt răng. k = mã lưu, l = tên đầy đủ, z = vùng vẽ trên sơ đồ */
 const TOOTH_SURF = [
   ['G',  'Mặt gần',   'gan'],
@@ -174,12 +178,19 @@ function migrate() {
      (bọc sứ chung). Nay nội nha là ô tick riêng, còn răng sứ tách kim loại / toàn sứ.
      Bản cũ không ghi rõ loại sứ nên chuyển tạm về "toàn sứ" — cần thì sửa lại tay. */
   (db.customers || []).forEach(c => {
-    if (!c.teeth) return;
-    Object.keys(c.teeth).forEach(n => {
-      const t = c.teeth[n]; if (!t) return;
-      if (t.s === 'rct') { t.s = 'ok'; t.nn = true; }
-      if (t.s === 'crown') t.s = 'crownTS';
-      if (!Array.isArray(t.mat)) t.mat = [];
+    ['teeth', 'teethKH'].forEach(lop => {
+      if (!c[lop]) return;
+      Object.keys(c[lop]).forEach(n => {
+        const t = c[lop][n]; if (!t) return;
+        /* 'rct' cũ = đã điều trị tủy. Nội nha nay là ô tick, mà ô này chỉ mở với răng
+           còn thân để phục hồi — răng đã nội nha thì luôn có phục hồi, nên xếp vào
+           "đã trám"; răng nào thực tế bọc sứ thì sửa lại tay. */
+        if (t.s === 'rct') { t.s = 'filled'; t.nn = true; }
+        if (t.s === 'crown') t.s = 'crownTS';
+        if (!Array.isArray(t.mat)) t.mat = [];
+        /* Răng mất / implant / tháo lắp thì không còn tủy để nội nha */
+        if (t.nn && !TT_CO_NOI_NHA.includes(t.s)) t.nn = false;
+      });
     });
   });
   /* Diễn biến điều trị cũ (kể cả bản nhập từ sổ Google Sheet) chưa có mã riêng,
@@ -820,7 +831,7 @@ const Cust = {
         <div class="check-row">${TOOTH_SURF.map(([k,l])=>
           `<label><input type="checkbox" name="mat" value="${k}"${mat.includes(k)?' checked':''}> ${h(l)}</label>`).join('')}</div>
       </div>
-      <div class="f full"><div class="check-row">
+      <div class="f full" id="oNoiNha" style="display:${TT_CO_NOI_NHA.includes(t.s)?'':'none'}"><div class="check-row">
         <label><input type="checkbox" name="nn"${t.nn?' checked':''}> Răng đã nội nha (điều trị tủy)</label></div></div>
       <div class="f full"><label>Ghi chú</label><input name="note" value="${h(t.note||'')}" placeholder="Vd: sâu ngà sâu, còn ê buốt…"></div>
       <div class="note-block full">Nội nha để riêng vì răng <b>đã nội nha rồi bọc sứ</b> là chuyện thường —
@@ -833,6 +844,14 @@ const Cust = {
   toothMatHien(v){
     const o = document.getElementById('oMat');
     if (o) o.style.display = (v === 'caries' || v === 'filled') ? '' : 'none';
+    /* Mất răng, implant, tháo lắp thì không có tủy để nội nha — giấu luôn ô tick,
+       và bỏ dấu đã tick kẻo lưu lại một thông tin vô lý. */
+    const nn = document.getElementById('oNoiNha');
+    if (nn) {
+      const duoc = TT_CO_NOI_NHA.includes(v);
+      nn.style.display = duoc ? '' : 'none';
+      if (!duoc) { const cb = nn.querySelector('[name="nn"]'); if (cb) cb.checked = false; }
+    }
   },
   toothSave(ev, n, lop){
     lop = lop || 'teeth';
@@ -841,7 +860,7 @@ const Cust = {
     const d = Object.fromEntries(new FormData(f).entries());
     const mat = (d.s === 'caries' || d.s === 'filled')
       ? [...f.querySelectorAll('[name="mat"]:checked')].map(x => x.value) : [];
-    const nn = !!f.querySelector('[name="nn"]:checked');
+    const nn = !!f.querySelector('[name="nn"]:checked') && TT_CO_NOI_NHA.includes(d.s);
     const c = custById(App.state.custSel);
     if (!c[lop]) c[lop] = {};
     if (d.s === 'ok' && !nn && !mat.length && !d.note) delete c[lop][n];
@@ -985,56 +1004,6 @@ const Cust = {
     }).join('');
   },
 
-  printBA18(){
-    const c = custById(App.state.custSel); const r = c.record || {};
-    const dot = v => v ? h(v) : '<span class="dots" style="display:inline-block;min-width:200px"></span>';
-    const rows = (r.dienBien||[]).map(v=>`<tr><td style="width:80px">${fmtD(v.date)}</td><td>${h(v.db)}</td><td>${h(v.xt)}</td><td></td></tr>`).join('') || '<tr><td>&nbsp;</td><td></td><td></td><td></td></tr>';
-    App.print(`
-    <div class="p-head"><div>${h(db.clinic.authority||'')}<br><b>${h(db.clinic.legal||db.clinic.name)}</b></div><div>MS: <b>BA-18</b><br>Số HS: ................<br>Mã KH: <b>${h(c.code)}</b></div></div>
-    <h1>BỆNH ÁN NGOẠI TRÚ RĂNG HÀM MẶT</h1>
-    <h2>A. THÔNG TIN CHUNG</h2>
-    <table class="no-border">
-      <tr><td colspan="2">1. Họ và tên: <b>${h(c.name)}</b></td><td>2. Ngày sinh: ${fmtD(c.dob)}</td><td>3. Giới tính: ${h(c.gender)}</td></tr>
-      <tr><td>4. Điện thoại: ${h(c.phone)}</td><td>5. Nghề nghiệp: ${h(c.job)}</td><td>6. Dân tộc: ${h(c.ethnic)}</td><td>7. Quốc tịch: ${h(c.nation)}</td></tr>
-      <tr><td colspan="4">8. Địa chỉ: ${h(fullAddr(c))}</td></tr>
-      <tr><td>9. Đối tượng: ${h(c.doiTuong)}</td><td>10. Số thẻ BHYT: ${h(c.bhyt)||'—'}</td><td colspan="2">11. Số CCCD/định danh: ${h(c.cccd)||'—'}</td></tr>
-      <tr><td colspan="4">12. Thân nhân khi cần báo tin: ${h(c.kinName)} — ĐT: ${h(c.kinPhone)}</td></tr>
-    </table>
-    <h2>B. THÔNG TIN KHÁM BỆNH</h2>
-    <p><b>I. Lý do vào viện, vấn đề sức khỏe:</b> ${dot(r.lyDo)}</p>
-    <p><b>II.1. Quá trình bệnh lý:</b> ${dot(r.benhLy)}</p>
-    <p><b>II.2. Tiền sử bản thân:</b> ${dot(r.tienSuBanThan || c.allergy)}<br><b>Tiền sử gia đình:</b> ${dot(r.tienSuGiaDinh)}</p>
-    <p><b>III.1. Toàn thân:</b> ${dot(r.toanThan)}<br><b>III.2. Khám chuyên khoa — Ngoài miệng:</b> ${dot(r.ngoaiMieng)}<br><b>Trong miệng:</b> ${dot(r.trongMieng)}</p>
-    <p><b>III.3. Sơ đồ răng trước điều trị:</b><br>${(() => {
-      const {dong, khung, note} = Tooth.tomTat(c, 'teeth');
-      const a = dong.map(x => 'R' + x.n + ': ' + h(x.mo)).join('<br>');
-      const b = khung.length ? '<br>Hàm khung tháo lắp: ' + h(khung.join(' và ')) + (note ? ' — ' + h(note) : '') : '';
-      return (a || '<i>chưa ghi nhận</i>') + b;
-    })()}</p>
-    ${(() => {
-      const {dong, khung, note} = Tooth.tomTat(c, 'teethKH');
-      if (!dong.length && !khung.length) return '';
-      const a = dong.map(x => 'R' + x.n + ': ' + h(x.mo)).join('<br>');
-      const b = khung.length ? '<br>Hàm khung tháo lắp: ' + h(khung.join(' và ')) + (note ? ' — ' + h(note) : '') : '';
-      return `<p><b>Sơ đồ răng theo kế hoạch điều trị:</b><br>${a}${b}</p>`;
-    })()}
-    <p><b>III.4. Cận lâm sàng:</b> ${dot(r.canLamSang)}<br><b>III.5. Tóm tắt bệnh án:</b> ${dot(r.tomTat)}</p>
-    <p><b>IV. CHẨN ĐOÁN</b><br>Bệnh chính: <b>${h(icdName(r.chanDoan))||'—'}</b><br>Bệnh kèm theo: ${h(icdName(r.chanDoanKem))||'—'}<br>Biến chứng: ${h(icdName(r.bienChung))||'—'}</p>
-    <p><b>V. Kế hoạch điều trị:</b><br>${h(r.keHoach||'').replace(/\n/g,'<br>')||'—'}</p>
-    <h2>VI. QUÁ TRÌNH ĐIỀU TRỊ</h2>
-    <table><tr><th>Ngày</th><th>Diễn biến bệnh</th><th>Xử trí</th><th>Ghi chú</th></tr>${rows}</table>
-    <p><b>VII. Thời gian điều trị:</b> từ ${r.tuNgay?fmtD(r.tuNgay):'..../..../20....'} đến ${r.denNgay?fmtD(r.denNgay):'..../..../20....'}</p>
-    <div class="sign"><div>Ngày ..... tháng ..... năm 20.....<br><b>Bác sỹ điều trị</b><br>(Ký, ghi rõ họ tên)<br><br><br></div>
-    <div>Ngày ..... tháng ..... năm 20.....<br><b>Đại diện cơ sở KB, CB</b><br>(Ký, đóng dấu)<br><br><br></div></div>
-    <h2>C. TỔNG KẾT BỆNH ÁN</h2>
-    <p><b>1. Tóm tắt quá trình bệnh lý và diễn biến lâm sàng:</b> ${dot(r.tomTat)}</p>
-    <p><b>2. Những dấu hiệu lâm sàng chính:</b> ${dot(r.trongMieng)}</p>
-    <p><b>3. Tóm tắt kết quả xét nghiệm, cận lâm sàng có giá trị chẩn đoán:</b> ${dot(r.canLamSang)}</p>
-    <p><b>4. Phương pháp điều trị:</b> ${h(r.keHoach||'').replace(/\n/g,'<br>')||'—'}</p>
-    <p><b>5. Tình trạng ra viện:</b> ${h(r.ketQua)||'☐ Khỏi &nbsp; ☐ Đỡ &nbsp; ☐ Không thay đổi &nbsp; ☐ Nặng hơn &nbsp; ☐ Chưa xác định'}</p>
-    <p><b>6. Hướng điều trị và các chế độ tiếp theo:</b> <span class="dots" style="display:inline-block;min-width:300px"></span></p>
-    <div class="sign"><div></div><div>Ngày ..... tháng ..... năm 20.....<br><b>Bác sỹ điều trị</b><br>(Ký, ghi rõ họ tên)<br><br><br></div></div>`);
-  },
 
   del(id){
     const c = custById(id);
@@ -1126,11 +1095,12 @@ SCREENS.customers = () => {
       </div>
     </div>`;
     })()}
+    ${HoSo.cardHTML(c)}
     ${Photo.cardHTML(c)}
     <div class="card mb">
       <div class="card-h"><h2>Bệnh án ngoại trú (BA-18)</h2><span class="spacer"></span>
         <button class="btn small" onclick="Cust.recordForm()">Cập nhật bệnh án</button>
-        <button class="btn small" onclick="Cust.printBA18()">${IC.print} In bệnh án</button></div>
+        <button class="btn small" onclick="HoSo.in('ba18')">${IC.print} In bệnh án</button></div>
       <div class="card-b">
         <div class="form-grid" style="gap:8px 16px">
           <div class="f full"><label>Lý do vào viện</label><b>${h(r.lyDo||'—')}</b></div>
@@ -1555,6 +1525,302 @@ SCREENS.treatment = () => {
     <div class="tbl-wrap"><table><thead><tr><th>Ngày / Số</th><th>Nội dung</th><th class="r">Số tiền</th><th>Hóa đơn điện tử</th><th></th></tr></thead><tbody>${recRows}</tbody></table></div></div>`;
 };
 
+/* ---------- Bệnh án điện tử: 5 biểu mẫu giấy của phòng khám, in khổ A4 ----------
+   Lấy thẳng dữ liệu đã nhập trong phần mềm điền vào; ô nào phần mềm chưa có thì để
+   dòng chấm và ô ☐ cho viết tay, đúng như bản giấy đang dùng. */
+const HoSo = {
+  DS: [
+    {k:'ba18',    ten:'Bệnh án ngoại trú RHM',              ms:'MS: BA-18',  mo:'Hành chính, khám bệnh, chẩn đoán, sơ đồ răng, quá trình điều trị'},
+    {k:'theodoi', ten:'Phiếu theo dõi điều trị',            ms:'MS: 36/BV2', mo:'Bảng thời gian · diễn biến bệnh · chỉ định, lấy từ quá trình điều trị'},
+    {k:'camket',  ten:'Giấy cam kết phẫu thuật, thủ thuật', ms:'MS: 01/BV2', mo:'Điền sẵn bác sĩ, người bệnh, chẩn đoán; ô ☐ để đánh dấu tay'},
+    {k:'phieuthu',ten:'Phiếu thu (bảng chi tiết)',          ms:'',           mo:'Nội dung điều trị · số lượng · đơn giá · thành tiền · đã thu · còn lại'},
+    {k:'tuvan',   ten:'Phiếu tư vấn + báo giá',             ms:'',           mo:'Phiếu tư vấn và bảng báo giá các hạng mục đang chờ duyệt'},
+  ],
+
+  cham(n){ return '.'.repeat(n || 60); },
+  gach(v, n){ return v ? h(v) : this.cham(n || 60); },
+  o(danh, nhan){ return `<span class="o-tick">${danh ? '☒' : '☐'}</span> ${nhan}`; },
+
+  /* Đầu trang chung: trái cơ quan chủ quản, giữa tên phiếu, phải mã số */
+  dau(c, tieu, ms, phu){
+    return `<table class="no-border pa-dau"><tr>
+      <td style="width:32%;vertical-align:top">${h(db.clinic.authority || 'Sở Y tế An Giang')}<br><b>${h(db.clinic.legal || db.clinic.name)}</b></td>
+      <td style="width:40%;text-align:center;vertical-align:top"><h1>${tieu}</h1>${phu || ''}</td>
+      <td style="width:26%;vertical-align:top;font-size:11px">${ms ? h(ms) + '<br>' : ''}Số HS: ${h(c.soHS || '…………')}<br>Mã KH: ${h(c.code || '…………')}</td>
+    </tr></table>`;
+  },
+  tuoi(c){
+    if (!c.dob) return '';
+    const d = new Date(c.dob + 'T00:00'), n = new Date();
+    let t = n.getFullYear() - d.getFullYear();
+    if (n.getMonth() < d.getMonth() || (n.getMonth() === d.getMonth() && n.getDate() < d.getDate())) t--;
+    return t >= 0 ? String(t) : '';
+  },
+  ngayKy(){ const d = new Date(); return `Ngày ${d.getDate()} tháng ${d.getMonth() + 1} năm ${d.getFullYear()}`; },
+  /* Bác sĩ hay làm cho khách này nhất; chưa có thì lấy người đang đăng nhập */
+  bacSiCua(c){
+    const dem = {};
+    db.treatments.filter(t => t.customerId === c.id && t.doctorId).forEach(t => dem[t.doctorId] = (dem[t.doctorId] || 0) + 1);
+    const top = Object.keys(dem).sort((a, b) => dem[b] - dem[a])[0];
+    return staffById(top) || (typeof Att !== 'undefined' ? Att.myStaff() : null) || null;
+  },
+  soDoChu(c, lop){
+    const {dong, khung, note} = Tooth.tomTat(c, lop);
+    const a = dong.map(x => 'R' + x.n + ': ' + h(x.mo)).join('; ');
+    const b = khung.length ? ' — Hàm khung tháo lắp: ' + h(khung.join(' và ')) + (note ? ' (' + h(note) + ')' : '') : '';
+    return a + b;
+  },
+
+  cardHTML(c){
+    return `<div class="card mb"><div class="card-h"><h2>Bệnh án điện tử</h2>
+      <span class="hint">5 biểu mẫu của phòng khám · in khổ A4</span></div>
+      <div class="card-b"><div class="ho-so-ds">
+        ${this.DS.map(d => `<button class="ho-so-nut" onclick="HoSo.in('${d.k}')">
+          <span class="hs-ten">${h(d.ten)}</span>
+          ${d.ms ? `<span class="hs-ms">${h(d.ms)}</span>` : ''}
+          <span class="hs-mo">${h(d.mo)}</span>
+          <span class="hs-in">${IC.print} In khổ A4</span></button>`).join('')}
+      </div>
+      <div class="combo-hint" style="margin-top:10px">Thông tin đã nhập trong phần mềm được điền sẵn.
+        Chỗ nào phần mềm chưa có thì để dòng chấm và ô ☐ để viết, đánh dấu tay như bản giấy.</div>
+      </div></div>`;
+  },
+
+  in(k){
+    const c = custById(App.state.custSel);
+    if (!c) { App.toast('Chưa chọn khách hàng'); return; }
+    const fn = this[k];
+    if (typeof fn !== 'function') { App.toast('Chưa có mẫu này'); return; }
+    App.print(fn.call(this, c));
+  },
+
+  /* ---------- 1. Bệnh án ngoại trú RHM (BA-18) ---------- */
+  ba18(c){
+    const r = c.record || {};
+    const ds = (r.dienBien || []).slice().sort((a, b) => (a.date || '') < (b.date || '') ? -1 : 1);
+    const rows = ds.map(v => `<tr><td style="width:80px">${fmtD(v.date)}</td><td>${h(v.db || '')}</td><td>${h(v.xt || '')}</td><td></td></tr>`).join('')
+      || '<tr><td>&nbsp;</td><td></td><td></td><td></td></tr>'.repeat(4);
+    const tuNgay = ds.length ? fmtD(ds[0].date) : '…/…/……';
+    const denNgay = ds.length ? fmtD(ds[ds.length - 1].date) : '…/…/……';
+    const bs = this.bacSiCua(c);
+    const hienTrang = this.soDoChu(c, 'teeth'), keHoach = this.soDoChu(c, 'teethKH');
+    return `
+    ${this.dau(c, 'BỆNH ÁN NGOẠI TRÚ<br>RĂNG HÀM MẶT', 'MS: BA-18')}
+    <h2>A. THÔNG TIN CHUNG</h2>
+    <table class="no-border">
+      <tr><td style="width:22%">1. Họ và tên:</td><td colspan="3"><b>${h((c.name || '').toUpperCase())}</b></td></tr>
+      <tr><td>2. Ngày sinh:</td><td style="width:30%">${c.dob ? fmtD(c.dob) : '……/……/………'} — Tuổi: ${this.gach(this.tuoi(c), 4)}</td>
+          <td style="width:16%">3. Giới tính:</td><td>${this.o(c.gender === 'Nam', 'Nam')} &nbsp; ${this.o(c.gender === 'Nữ', 'Nữ')}</td></tr>
+      <tr><td>4. Điện thoại:</td><td>${this.gach(c.phone, 18)}</td><td>5. Nghề nghiệp:</td><td>${this.gach(c.job, 22)}</td></tr>
+      <tr><td>6. Dân tộc:</td><td>${this.gach(c.danToc, 14)}</td><td>7. Quốc tịch:</td><td>${this.gach(c.quocTich || 'Việt Nam', 14)}</td></tr>
+      <tr><td>8. Địa chỉ:</td><td colspan="3">${this.gach(fullAddr(c), 90)}</td></tr>
+      <tr><td>9. Đối tượng:</td><td colspan="3">${this.o(c.doiTuong === 'BHYT', 'BHYT')} &nbsp; ${this.o(!c.doiTuong || c.doiTuong === 'Thu phí', 'Thu phí')} &nbsp; ${this.o(c.doiTuong === 'Miễn', 'Miễn')} &nbsp; ${this.o(c.doiTuong === 'Khác', 'Khác')}</td></tr>
+      <tr><td>10. Số thẻ BHYT:</td><td colspan="3">${this.gach(c.bhyt, 40)}</td></tr>
+      <tr><td>11. Số Căn cước:</td><td colspan="3">${this.gach(c.cccd, 40)}</td></tr>
+      <tr><td>12. Thân nhân báo tin:</td><td colspan="3">${this.gach(c.kinName, 32)} — Điện thoại: ${this.gach(c.kinPhone, 18)}</td></tr>
+    </table>
+    <h2>B. THÔNG TIN KHÁM BỆNH</h2>
+    <p><b>I. LÝ DO VÀO VIỆN, VẤN ĐỀ SỨC KHỎE:</b> ${this.gach(r.lyDo, 80)}</p>
+    <p><b>II. HỎI BỆNH</b><br>
+      1. Quá trình bệnh lý và diễn biến lâm sàng: ${this.gach(r.quaTrinh, 66)}<br>
+      2. Tiền sử liên quan đến tình trạng bệnh lần này:<br>
+      &nbsp;&nbsp;Dị ứng: ${this.o(!c.allergy, 'Không')} &nbsp; ${this.o(!!c.allergy, 'Có, ghi rõ:')} ${this.gach(c.allergy, 40)}<br>
+      &nbsp;&nbsp;Bản thân: ${this.o(!r.tienSuBanThan, 'Không')} &nbsp; ${this.o(!!r.tienSuBanThan, 'Có, ghi rõ:')} ${this.gach(r.tienSuBanThan, 40)}<br>
+      &nbsp;&nbsp;Gia đình: ${this.o(!r.tienSuGiaDinh, 'Không')} &nbsp; ${this.o(!!r.tienSuGiaDinh, 'Có, ghi rõ:')} ${this.gach(r.tienSuGiaDinh, 40)}</p>
+    <p><b>III. KHÁM BỆNH</b><br>
+      Mạch: ${this.gach(r.mach, 6)} lần/phút &nbsp; Nhiệt độ: ${this.gach(r.nhietDo, 6)} °C &nbsp; Huyết áp: ${this.gach(r.huyetAp, 8)} mmHg<br>
+      Nhịp thở: ${this.gach(r.nhipTho, 6)} lần/phút &nbsp; Cân nặng: ${this.gach(r.canNang, 6)} kg &nbsp; Chiều cao: ${this.gach(r.chieuCao, 6)} cm<br>
+      1. Toàn thân: ${this.o(!r.toanThan, 'Bình thường')} &nbsp; ${this.o(!!r.toanThan, 'Bất thường, ghi rõ:')} ${this.gach(r.toanThan, 48)}<br>
+      2. Khám chuyên khoa<br>
+      &nbsp;&nbsp;Ngoài miệng: ${this.o(!r.ngoaiMieng, 'Bình thường')} &nbsp; ${this.o(!!r.ngoaiMieng, 'Bất thường:')} ${this.gach(r.ngoaiMieng, 44)}<br>
+      &nbsp;&nbsp;Trong miệng: ${this.o(!r.trongMieng, 'Bình thường')} &nbsp; ${this.o(!!r.trongMieng, 'Bất thường:')} ${this.gach(r.trongMieng, 44)}<br>
+      3. Các xét nghiệm, cận lâm sàng cần làm: ${this.o(!r.canLamSang, 'Không')} &nbsp; ${this.o(!!r.canLamSang, 'Có, ghi rõ:')} ${this.gach(r.canLamSang, 40)}<br>
+      4. Tóm tắt bệnh án: ${this.gach(r.tomTat, 66)}</p>
+    <p><b>SƠ ĐỒ RĂNG</b><br>
+      Trước điều trị: ${hienTrang || this.cham(70)}
+      ${keHoach ? '<br>Theo kế hoạch điều trị: ' + keHoach : ''}</p>
+    <p><b>IV. CHẨN ĐOÁN</b> (tên bệnh kèm mã ICD)<br>
+      Bệnh chính: <b>${this.gach(icdName(r.chanDoan), 56)}</b><br>
+      Bệnh kèm theo: ${this.gach(icdName(r.chanDoanKem), 56)}<br>
+      Biến chứng: ${this.gach(icdName(r.bienChung), 56)}</p>
+    <p><b>V. KẾ HOẠCH ĐIỀU TRỊ</b><br>${h(r.keHoach || '').replace(/\n/g, '<br>') || this.cham(100) + '<br>' + this.cham(100)}</p>
+    <h2>VI. QUÁ TRÌNH ĐIỀU TRỊ</h2>
+    <table><tr><th style="width:80px">Ngày</th><th>Diễn biến bệnh</th><th>Xử trí</th><th style="width:80px">Ghi chú</th></tr>${rows}</table>
+    <p style="margin-top:8px"><b>VII. THỜI GIAN ĐIỀU TRỊ</b><br>Điều trị từ ngày ${tuNgay} đến ngày ${denNgay}</p>
+    <div class="sign">
+      <div>${this.ngayKy()}<br><b>Bác sỹ điều trị</b><br>(Ký, ghi rõ họ tên)<br><br><br>${h(bs ? bs.name : '')}</div>
+      <div>${this.ngayKy()}<br><b>Đại diện cơ sở KB, CB</b><br>(Ký, đóng dấu)<br><br><br></div>
+    </div>`;
+  },
+
+  /* ---------- 2. Phiếu theo dõi điều trị (36/BV2) ---------- */
+  theodoi(c){
+    const r = c.record || {};
+    const ds = (r.dienBien || []).slice().sort((a, b) => (a.date || '') < (b.date || '') ? -1 : 1);
+    const rows = ds.map(v => {
+      const bs = staffById(v.doctorId);
+      return `<tr><td style="width:110px">${fmtD(v.date)}</td>
+        <td>${h(v.db || '')}${bs ? '<br><i>BS: ' + h(bs.name) + '</i>' : ''}</td>
+        <td>${h(v.xt || '')}</td></tr>`;
+    }).join('') || '<tr><td>&nbsp;</td><td></td><td></td></tr>'.repeat(6);
+    return `
+    ${this.dau(c, 'PHIẾU THEO DÕI ĐIỀU TRỊ', 'MS: 36/BV2', '<div style="font-size:11px">Tờ số: ……</div>')}
+    <table class="no-border">
+      <tr><td style="width:24%">Họ và tên người bệnh:</td><td><b>${h(c.name || '')}</b></td>
+          <td style="width:14%">Tuổi: ${this.gach(this.tuoi(c), 4)}</td>
+          <td style="width:20%">${this.o(c.gender === 'Nam', 'Nam')} ${this.o(c.gender === 'Nữ', 'Nữ')}</td></tr>
+      <tr><td>Chẩn đoán:</td><td colspan="3">${this.gach(icdName(r.chanDoan), 70)}</td></tr>
+      <tr><td>Chẩn đoán phân biệt:</td><td colspan="3">${this.gach(icdName(r.chanDoanKem), 70)}</td></tr>
+    </table>
+    <table style="margin-top:8px">
+      <tr><th style="width:110px">Thời gian<br>(Ngày, giờ)</th>
+          <th>Diễn biến bệnh<br><span style="font-weight:400">(Viết diễn biến theo cấu trúc như SOAP)</span></th>
+          <th style="width:34%">Chỉ định</th></tr>
+      ${rows}
+    </table>
+    <p style="margin-top:8px"><b>Ghi chú:</b> Bác sỹ ký ngay sau mỗi lần ghi chép trong phần “Diễn biến bệnh” hoặc “Chỉ định”.</p>`;
+  },
+
+  /* ---------- 3. Giấy cam kết phẫu thuật, thủ thuật ---------- */
+  camket(c){
+    const r = c.record || {};
+    const bs = this.bacSiCua(c);
+    const nam = c.dob ? c.dob.slice(0, 4) : '';
+    const oo = n => this.o(false, n);
+    return `
+    ${this.dau(c, 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', 'MS: 01/BV2', '<div style="font-size:12px"><i>Độc lập - Tự do - Hạnh phúc</i></div>')}
+    <h1 style="margin-top:4px">GIẤY CAM KẾT CHẤP THUẬN<br>PHẪU THUẬT, THỦ THUẬT VÀ GÂY MÊ HỒI SỨC</h1>
+    <p style="text-align:center">${oo('Cấp cứu')} &nbsp; ${oo('Bán cấp')} &nbsp; ${oo('Chương trình/Phiên')}</p>
+    <p>Chúng tôi có tên dưới đây cùng làm Bản cam kết như sau:</p>
+    <p><b>I. BÁC SỸ PHẪU THUẬT/THỦ THUẬT/GÂY MÊ HỒI SỨC:</b><br>
+      Tôi tên là: ${this.gach(bs ? bs.name : '', 50)}<br>
+      Chức danh: ${this.gach(bs ? bs.role : '', 24)} &nbsp; Khoa: Răng Hàm Mặt<br>
+      và Bác sỹ: ${this.cham(28)} Chức danh: ${this.cham(18)} (Khoa phẫu thuật Gây mê hồi sức)<br>
+      Được phân công thực hiện phẫu thuật/thủ thuật/gây mê cho người bệnh: <b>${h(c.name || '')}</b><br>
+      Chẩn đoán: ${this.gach(icdName(r.chanDoan), 56)}</p>
+    <p>Chúng tôi đã tư vấn, giải thích đầy đủ, rõ ràng những thông tin liên quan đến cuộc phẫu thuật/thủ thuật/gây mê hồi sức cho người bệnh/thân nhân người bệnh về các vấn đề sau:</p>
+    <p>${oo('Chẩn đoán')} &nbsp; ${oo('Lý do phẫu thuật/thủ thuật')} &nbsp; ${oo('Rủi ro, nguy cơ nếu không thực hiện')}<br>
+      ${oo('Kết quả sau phẫu thuật/thủ thuật (dự kiến)')} ${this.cham(40)}</p>
+    <p><b>Phương pháp phẫu thuật/thủ thuật dự kiến:</b><br>
+      ${oo('Phẫu thuật mở')} &nbsp; ${oo('Phẫu thuật nội soi')} &nbsp; ${oo('Thủ thuật')}</p>
+    <p><b>Phương pháp gây mê hồi sức dự kiến:</b><br>
+      ${oo('Mê nội khí quản')} &nbsp; ${oo('Mê mask thanh quản')} &nbsp; ${oo('Mê tĩnh mạch')}<br>
+      ${oo('Tê tủy sống')} &nbsp; ${oo('Tê ngoài màng cứng')} &nbsp; ${oo('Tê đám rối thần kinh')}<br>
+      ${oo('Tiền mê + Tê tại chỗ')} &nbsp; ${oo('Khác')}</p>
+    <p><b>Các phương pháp điều trị khác ngoài phẫu thuật/thủ thuật:</b>
+      ${oo('Không')} &nbsp; ${oo('Có, cụ thể:')} ${this.cham(36)}</p>
+    <p><b>Nguy cơ, tai biến trong và sau phẫu thuật/thủ thuật có thể xảy ra:</b><br>
+      ${oo('Phản ứng thuốc')} &nbsp; ${oo('Suy hô hấp - tuần hoàn')} &nbsp; ${oo('Chảy máu')}<br>
+      ${oo('Nhiễm trùng')} &nbsp; ${oo('Tử vong')} &nbsp; ${oo('Nguy cơ/rủi ro khác:')} ${this.cham(22)}</p>
+    <p>Chúng tôi đã dành đủ thời gian để người bệnh/thân nhân đặt các câu hỏi liên quan đến phẫu thuật/thủ thuật/gây mê sẽ được thực hiện hoặc các mối quan tâm khác và chúng tôi đã trả lời tất cả các câu hỏi đó.</p>
+    <p>Chúng tôi cam kết phục vụ người bệnh bằng lương tâm và trách nhiệm của người thầy thuốc cùng với tất cả kiến thức, sự hiểu biết về chuyên môn và phương tiện hiện có của <b>${h(db.clinic.legal || db.clinic.name)}</b> để nỗ lực đem lại kết quả tốt nhất cho người bệnh.</p>
+    <p><b>II. NGƯỜI BỆNH/THÂN NHÂN:</b><br>
+      Họ và tên người bệnh: <b>${h(c.name || '')}</b> &nbsp; Năm sinh: ${this.gach(nam, 8)}<br>
+      Họ và tên thân nhân: ${this.gach(c.kinName, 32)} &nbsp; Năm sinh: ${this.cham(8)}<br>
+      Quan hệ với người bệnh: ${this.gach(c.kinRel, 24)}</p>
+    <p>Tôi đã được nghe các Bác sỹ giải thích và đã trao đổi với các Bác sỹ về tất cả các thông tin của cuộc phẫu thuật/thủ thuật/gây mê, những nguy cơ thường gặp có thể xảy ra và mức độ thành công. Tôi đã hiểu lý do phải thực hiện và đồng ý để Bác sỹ thực hiện cho tôi/thân nhân của tôi.</p>
+    <p>Tôi đã được tư vấn những thông tin về chi phí phẫu thuật/thủ thuật/gây mê, vật tư y tế tiêu hao dự kiến sử dụng, tôi cam kết chi trả chi phí khám bệnh, chữa bệnh ngoài phạm vi được hưởng theo quy định của pháp luật về bảo hiểm y tế và các quy định khác.</p>
+    <p>Tôi đã đọc bản cam kết với tinh thần hoàn toàn minh mẫn và hiểu biết. Tôi xin hoàn toàn chịu trách nhiệm với quyết định đồng ý cho Bác sỹ phẫu thuật/thủ thuật cho tôi/thân nhân của tôi.</p>
+    <p>1. Đồng ý xin phẫu thuật, thủ thuật, gây mê hồi sức và để giấy này làm bằng chứng.<br>
+       2. Không đồng ý phẫu thuật, thủ thuật, gây mê hồi sức và để giấy này làm bằng chứng.<br>
+       <i>(Câu 1 và câu 2 do người bệnh, thân nhân của người bệnh tự viết dưới đây)</i></p>
+    <p>${this.cham(100)}<br>${this.cham(100)}</p>
+    <div class="sign">
+      <div><b>PHẪU THUẬT VIÊN/<br>BÁC SỸ THỰC HIỆN THỦ THUẬT</b><br>(Ký, ghi rõ họ tên)<br><br><br>${h(bs ? bs.name : '')}</div>
+      <div><b>BÁC SỸ GÂY MÊ</b><br>(Ký, ghi rõ họ tên)<br><br><br></div>
+      <div>${this.ngayKy()}<br><b>NGƯỜI BỆNH/THÂN NHÂN</b><br>(Ký, ghi rõ họ tên)<br><br><br></div>
+    </div>`;
+  },
+
+  /* ---------- Bảng hạng mục dùng chung cho phiếu thu và báo giá ---------- */
+  bangMuc(ds){
+    const rows = ds.map(t => `<tr><td>${h(t.name)}${t.tooth ? ' — R' + h(t.tooth) : ''}</td>
+      <td class="r" style="width:60px">1</td>
+      <td class="r" style="width:100px">${money(t.price)}</td>
+      <td class="r" style="width:110px">${money(t.price)}</td>
+      <td style="width:100px">${h(t.status || '')}</td></tr>`).join('')
+      || '<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>'.repeat(4);
+    const tong = ds.reduce((s, t) => s + (t.price || 0), 0);
+    return `<table>
+      <tr><th>Nội dung điều trị</th><th class="r">Số lượng</th><th class="r">Đơn giá</th><th class="r">Thành tiền</th><th>Ghi chú</th></tr>
+      ${rows}
+      <tr><td colspan="3" style="text-align:right"><b>Tổng cộng</b></td><td class="r"><b>${money(tong)}</b></td><td></td></tr>
+    </table>
+    <p style="margin-top:6px">Bằng chữ: <i>${h(docTien(tong))}</i></p>`;
+  },
+
+  /* ---------- 4. Phiếu thu khổ A4, có bảng chi tiết ---------- */
+  phieuthu(c){
+    const ds = db.treatments.filter(t => t.customerId === c.id && t.status !== 'Báo giá');
+    const daThu = db.receipts.filter(r => r.customerId === c.id).reduce((s, r) => s + r.amount, 0);
+    const conNo = custDebt(c);
+    const bs = this.bacSiCua(c);
+    const d = new Date();
+    const noi = (db.clinic.addr || 'An Giang').split(',').pop().trim();
+    return `
+    ${this.dau(c, 'PHIẾU THU', '')}
+    <p><b>${h(db.clinic.name)}</b> xác nhận:</p>
+    <table class="no-border">
+      <tr><td style="width:26%">Họ và tên bệnh nhân:</td><td><b>${h(c.name || '')}</b></td></tr>
+      <tr><td>Ngày sinh:</td><td>${c.dob ? fmtD(c.dob) : this.cham(20)}</td></tr>
+      <tr><td>Địa chỉ:</td><td>${this.gach(fullAddr(c), 70)}</td></tr>
+      <tr><td>Số điện thoại:</td><td>${this.gach(c.phone, 20)}</td></tr>
+      <tr><td>Số căn cước công dân:</td><td>${this.gach(c.cccd, 24)}</td></tr>
+    </table>
+    <p>Đã đến khám và điều trị tại ${h(db.clinic.name)} với các thông tin sau:</p>
+    ${this.bangMuc(ds)}
+    <table class="no-border" style="margin-top:6px">
+      <tr><td style="width:26%">Đã thanh toán:</td><td><b>${money(daThu)}</b></td></tr>
+      <tr><td>Còn lại:</td><td><b>${money(conNo)}</b></td></tr>
+    </table>
+    <div class="sign" style="justify-content:flex-end">
+      <div>${h(noi)}, ngày ${d.getDate()} tháng ${d.getMonth() + 1} năm ${d.getFullYear()}<br>
+        <b>Bác sĩ điều trị</b><br>(Ký, ghi rõ họ tên)<br><br><br>${h(bs ? bs.name : '')}</div>
+    </div>`;
+  },
+
+  /* ---------- 5. Phiếu tư vấn + phiếu báo giá ---------- */
+  tuvan(c){
+    const r = c.record || {};
+    const bs = this.bacSiCua(c);
+    const bg = db.treatments.filter(t => t.customerId === c.id && t.status === 'Báo giá');
+    const d = new Date();
+    const oo = n => this.o(false, n);
+    return `
+    ${this.dau(c, 'PHIẾU TƯ VẤN', '')}
+    <p>Lúc ${this.cham(4)} giờ ${this.cham(4)} phút, ngày ${d.getDate()} tháng ${d.getMonth() + 1} năm ${d.getFullYear()}, tại ${h(db.clinic.name)}.</p>
+    <p>Chúng tôi là:<br>1. ${this.gach(bs ? bs.name + (bs.role ? ' — ' + bs.role : '') : '', 56)}<br>2. ${this.cham(56)}</p>
+    <p>Đã tư vấn và giải thích cho bệnh nhân <b>${h(c.name || '')}</b>${c.kinName ? ' / người nhà: ' + h(c.kinName) : ''} các nội dung như sau:</p>
+    <p><b>Chẩn đoán:</b> ${this.gach(icdName(r.chanDoan), 56)}<br>
+      <b>Phương pháp điều trị:</b><br>${h(r.keHoach || '').replace(/\n/g, '<br>') || this.cham(100)}</p>
+    <p><b>Tiên lượng và nguy cơ</b> (phản ứng với thuốc tê, chảy máu, nhiễm trùng, tê môi – má – lưỡi, thời gian phục hồi, tỷ lệ các biến chứng):<br>
+      ${this.cham(100)}<br>${this.cham(100)}</p>
+    <p><b>Cận lâm sàng cần làm:</b> ${this.gach(r.canLamSang, 46)}<br>
+      Xét nghiệm máu: ${this.cham(28)} &nbsp; Chụp X-quang: ${this.cham(28)}</p>
+    <p><b>Ý kiến của bệnh nhân / người nhà bệnh nhân:</b><br>
+      Sau khi nghe bác sĩ tư vấn và giải thích, tôi và các thành viên gia đình mong muốn:<br>
+      ${oo('Tiếp tục điều trị tại phòng khám theo phương thức đã giải thích.')}<br>
+      ${oo('Tiếp tục điều trị, không xét nghiệm hay can thiệp gì thêm.')}<br>
+      ${oo('Khác:')} ${this.cham(56)}</p>
+    <p>Bệnh nhân/người nhà bệnh nhân sau khi nghe giải thích đã hiểu rõ bệnh lý, phương pháp điều trị, các nguy cơ biến chứng…, chấp nhận các rủi ro và chịu trách nhiệm với các lựa chọn trên; đồng thời cam kết thực hiện đầy đủ các nghĩa vụ của bệnh nhân theo quy định của pháp luật và quy định của phòng khám.</p>
+    <div class="sign">
+      <div><b>Bác sĩ điều trị</b><br>(Ký, ghi rõ họ tên)<br><br><br>${h(bs ? bs.name : '')}</div>
+      <div><b>Bệnh nhân/Người nhà</b><br>(Ký, ghi rõ họ tên)<br><br><br></div>
+    </div>
+    <div class="ngat-trang"></div>
+    ${this.dau(c, 'PHIẾU BÁO GIÁ', '')}
+    <table class="no-border">
+      <tr><td style="width:26%">Họ và tên bệnh nhân:</td><td><b>${h(c.name || '')}</b>${c.phone ? ' — ' + h(c.phone) : ''}</td></tr>
+    </table>
+    ${this.bangMuc(bg)}
+    <p style="font-size:11px"><i>Báo giá có giá trị tham khảo, có thể thay đổi khi tình trạng răng thực tế khác với thăm khám ban đầu.</i></p>
+    <div class="sign">
+      <div><b>Bác sĩ điều trị</b><br>(Ký, ghi rõ họ tên)<br><br><br>${h(bs ? bs.name : '')}</div>
+      <div><b>Bệnh nhân/Người nhà</b><br>(Ký, ghi rõ họ tên)<br><br><br></div>
+    </div>`;
+  },
+};
+
 /* ---------- Sơ đồ răng ----------
    Mỗi răng vẽ thành ô 5 vùng (gần / xa / ngoài / trong / nhai) + một vạch cổ răng.
    Gần–xa đổi bên theo phần hàm: răng bên phải bệnh nhân nằm nửa trái sơ đồ nên mặt
@@ -1607,7 +1873,7 @@ const Tooth = {
     if (t.s === 'thaolap')  g.push(`<rect x="2" y="2" width="28" height="28" rx="4" fill="none" stroke="var(--warn)" stroke-width="2.5" stroke-dasharray="4 3"/>`);
     if (t.s === 'implant')  g.push(`<path d="M16 4v24" stroke="var(--accent)" stroke-width="3"/><path d="M10 10h12M10 15h12M10 20h12M10 25h12" stroke="var(--accent)" stroke-width="2"/>`);
     /* Nội nha: vạch dọc ở chân răng — chồng được lên cả răng sứ, đúng thực tế lâm sàng */
-    if (t.nn) g.push(`<path d="M16 6v20" stroke="var(--warn)" stroke-width="2.5" stroke-linecap="round"/><circle cx="16" cy="28" r="2.6" fill="var(--warn)"/>`);
+    if (t.nn && TT_CO_NOI_NHA.includes(t.s)) g.push(`<path d="M16 6v20" stroke="var(--warn)" stroke-width="2.5" stroke-linecap="round"/><circle cx="16" cy="28" r="2.6" fill="var(--warn)"/>`);
     return g.length ? `<svg class="tooth-ov" viewBox="0 0 32 40" width="32" height="40" aria-hidden="true">${g.join('')}</svg>` : '';
   },
   /* Câu mô tả ngắn để hiện khi rê chuột và in ra bệnh án */
@@ -1617,7 +1883,7 @@ const Tooth = {
     const ten = (TOOTH_STATES.find(x=>x[0]===t.s)||[])[1];
     if (t.s && t.s !== 'ok') p.push(ten);
     if ((t.mat||[]).length) p.push((t.s === 'filled' ? 'trám ' : 'sâu ') + t.mat.map(k=>this.tenMat(k).replace(/^Mặt /,'').toLowerCase()).join(', '));
-    if (t.nn) p.push('đã nội nha');
+    if (t.nn && TT_CO_NOI_NHA.includes(t.s)) p.push('đã nội nha');
     if (t.note) p.push(t.note);
     return p.join(' · ');
   },

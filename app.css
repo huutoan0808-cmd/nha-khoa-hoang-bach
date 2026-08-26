@@ -322,6 +322,17 @@ td.r,th.r{text-align:right}
 /* Ô nhập tiền: canh phải, chữ số đều nhau cho dễ soát */
 .o-tien{text-align:right;font-variant-numeric:tabular-nums;letter-spacing:.02em}
 
+/* Bệnh án điện tử: mỗi biểu mẫu một ô bấm */
+.ho-so-ds{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.ho-so-nut{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;
+  border:1px solid var(--line);border-radius:10px;padding:11px 12px;background:var(--surface);cursor:pointer}
+.ho-so-nut:hover{border-color:var(--accent);background:var(--surface2)}
+.hs-ten{font-weight:700;font-size:13.5px;color:var(--ink);line-height:1.3}
+.hs-ms{font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:.03em}
+.hs-mo{font-size:11.5px;color:var(--muted);line-height:1.35}
+.hs-in{display:inline-flex;align-items:center;gap:5px;margin-top:5px;font-size:11.5px;font-weight:700;color:var(--accent-ink)}
+.hs-in svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2}
+
 @media print{
   body > .app, body > .bottom-nav, body > .sheet, body > .sheet-back, body > #toast, body > .modal-back{display:none!important}
   #printArea{display:block;color:#000;font:12.5px/1.5 "Times New Roman",serif}
@@ -333,6 +344,15 @@ td.r,th.r{text-align:right}
   #printArea .p-head{display:flex;justify-content:space-between;font-size:11.5px}
   #printArea .sign{display:flex;justify-content:space-between;margin-top:18px;text-align:center;font-size:12px}
   #printArea .dots{border-bottom:1px dotted #666;min-height:16px}
+  #printArea p{margin:5px 0;text-align:justify}
+  /* Đầu trang biểu mẫu: 3 cột, không kẻ khung */
+  #printArea .pa-dau td{border:none;padding:0 4px;font-size:11.5px}
+  #printArea .pa-dau h1{margin:0;font-size:15px;line-height:1.25}
+  #printArea .o-tick{font-family:"Segoe UI Symbol","DejaVu Sans",sans-serif;font-size:13px}
+  #printArea .sign>div{flex:1;padding:0 6px}
+  #printArea .ngat-trang{page-break-before:always;break-before:page}
+  #printArea table{page-break-inside:auto}
+  #printArea tr{page-break-inside:avoid}
   /* Phiếu thu in khổ A5 — chữ nhỏ lại, khoảng ký tên gọn hơn cho vừa trang */
   #printArea.kho-a5{font-size:11.5px}
   #printArea.kho-a5 h1{font-size:15px;letter-spacing:.06em;margin:4px 0 8px}
