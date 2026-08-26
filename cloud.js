@@ -9,6 +9,11 @@ const Cloud = {
   /* ---------- Cấu hình & phiên đăng nhập ---------- */
   load(){
     try { this.cfg = JSON.parse(localStorage.getItem(this.CFG_KEY) || 'null'); } catch(e){ this.cfg = null; }
+    /* Chưa nối tay thì dùng cấu hình phòng khám nhúng sẵn trong config.js (nếu có),
+       để mở link gốc trên máy mới là ra thẳng ô đăng nhập, khỏi cần liên kết mời. */
+    if ((!this.cfg || !this.cfg.url) && typeof CLINIC_CFG !== 'undefined' && CLINIC_CFG && CLINIC_CFG.u && CLINIC_CFG.k) {
+      this.cfg = {url: String(CLINIC_CFG.u).replace(/\/+$/, ''), key: String(CLINIC_CFG.k).trim()};
+    }
     try { this.session = JSON.parse(localStorage.getItem(this.CFG_KEY + '_ss') || 'null'); } catch(e){ this.session = null; }
   },
   /* Dọn URL người dùng dán: bỏ khoảng trắng, bỏ dấu / cuối,
