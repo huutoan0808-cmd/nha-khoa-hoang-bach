@@ -207,6 +207,24 @@ td.r,th.r{text-align:right}
 .subtab:hover{color:var(--ink2)}
 .subtab.active{color:var(--accent-ink);border-bottom-color:var(--accent)}
 
+/* Lịch tháng: lưới 7 cột, mỗi ô một ngày */
+.thang-lich{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.thang-dau{text-align:center;font-size:11.5px;font-weight:700;color:var(--muted);padding:4px 0}
+.thang-o{min-height:66px;border:1px solid var(--line);border-radius:8px;background:var(--surface);
+  display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:5px 6px;text-align:left;cursor:pointer;overflow:hidden}
+.thang-o:hover{border-color:var(--accent);background:var(--surface2)}
+.thang-o.trong{background:transparent;border-color:transparent;cursor:default}
+.thang-o.hom-nay{border-color:var(--accent);border-width:2px}
+.thang-o.co-hen{background:var(--accent-soft)}
+.thang-so{font-size:12.5px;font-weight:700;color:var(--ink2)}
+.thang-o.hom-nay .thang-so{color:var(--accent-ink)}
+.thang-dem{font-size:11px;font-weight:700;color:var(--accent-ink)}
+.thang-ten{font-size:10.5px;color:var(--muted);line-height:1.25;overflow:hidden;text-overflow:ellipsis;width:100%}
+@media (max-width:767px){
+  .thang-o{min-height:52px;padding:3px 4px}
+  .thang-ten{display:none}
+}
+
 /* Sơ đồ răng */
 .arch{display:flex;gap:4px;justify-content:center;overflow-x:auto;padding:2px}
 .arch .gap-mid{width:12px;flex:none}

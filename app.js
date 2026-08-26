@@ -151,6 +151,11 @@ function migrate() {
       if (!Array.isArray(t.mat)) t.mat = [];
     });
   });
+  /* Diễn biến điều trị cũ (kể cả bản nhập từ sổ Google Sheet) chưa có mã riêng,
+     nên không sửa từng dòng được. Gắn mã cho chúng. */
+  (db.customers || []).forEach(c => {
+    ((c.record || {}).dienBien || []).forEach(v => { if (v && !v.id) v.id = uid(); });
+  });
   (db.customers || []).forEach(c => {
     if (c.addr1 && !c.street) { c.street = String(c.addr1).trim(); }
     delete c.addr1;
@@ -813,23 +818,54 @@ const Cust = {
     save(); App.closeModal(); App.render(); App.toast('Đã lưu bệnh án ✓');
   },
 
-  visitForm(){
-    App.modal('Thêm diễn biến điều trị', `
-    <form class="form-grid" onsubmit="Cust.visitSave(event)">
-      <div class="f"><label>Ngày</label><input type="date" name="date" value="${todayISO()}" required></div>
-      <div class="f full"><label>Diễn biến bệnh</label><textarea name="db" required></textarea></div>
-      <div class="f full"><label>Xử trí</label><textarea name="xt"></textarea></div>
-      <div class="form-actions full"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Thêm</button></div>
+  /* Khách đang xem: tab Khách hàng dùng custSel, tab Điều trị dùng treatCust */
+  aiDangXem(cid){ return custById(cid || (App.cur === 'treatment' ? App.state.treatCust : App.state.custSel)); },
+  dienBienCua(c){ return ((c || {}).record || {}).dienBien || []; },
+
+  visitForm(vid, cid){
+    const c = this.aiDangXem(cid); if (!c) { App.toast('Chưa chọn khách hàng'); return; }
+    const v = vid ? this.dienBienCua(c).find(x => x.id === vid) : null;
+    App.modal((v ? 'Sửa' : 'Thêm') + ' diễn biến điều trị — ' + c.name, `
+    <form class="form-grid" onsubmit="Cust.visitSave(event,'${vid||''}','${c.id}')">
+      <div class="f"><label>Ngày</label><input type="date" name="date" value="${h((v&&v.date)||todayISO())}" required></div>
+      <div class="f"><label>Bác sĩ thực hiện</label><select name="doctorId">
+        <option value="">— chưa ghi —</option>
+        ${db.staff.filter(s=>s.active!==false).map(s=>`<option value="${s.id}"${v&&v.doctorId===s.id?' selected':''}>${h(s.name)}</option>`).join('')}</select></div>
+      <div class="f full"><label>Diễn biến bệnh</label><textarea name="db" required>${h((v&&v.db)||'')}</textarea></div>
+      <div class="f full"><label>Xử trí</label><textarea name="xt">${h((v&&v.xt)||'')}</textarea></div>
+      <div class="form-actions full">
+        ${vid?`<button type="button" class="btn danger" onclick="Cust.visitDel('${vid}','${c.id}')">Xóa</button><span class="spacer"></span>`:''}
+        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+        <button class="btn primary">${v?'Lưu':'Thêm'}</button></div>
     </form>`);
   },
-  visitSave(ev){
+  visitSave(ev, vid, cid){
     ev.preventDefault();
-    const c = custById(App.state.custSel);
+    const c = custById(cid) || this.aiDangXem(); if (!c) return;
     const d = Object.fromEntries(new FormData(ev.target).entries());
-    if (!c.record) c.record = {dienBien:[]};
+    if (!c.record) c.record = {};
     if (!c.record.dienBien) c.record.dienBien = [];
-    c.record.dienBien.push(d);
-    save(); App.closeModal(); App.render(); App.toast('Đã thêm diễn biến ✓');
+    const cu = vid && c.record.dienBien.find(x => x.id === vid);
+    if (cu) Object.assign(cu, d);
+    else c.record.dienBien.push(Object.assign({id: uid()}, d));
+    save(); App.closeModal(); App.render(); App.toast(cu ? 'Đã lưu diễn biến ✓' : 'Đã thêm diễn biến ✓');
+  },
+  visitDel(vid, cid){
+    if (!confirm('Xóa diễn biến này khỏi bệnh án?')) return;
+    const c = custById(cid); if (!c || !c.record) return;
+    c.record.dienBien = (c.record.dienBien||[]).filter(x => x.id !== vid);
+    save(); App.closeModal(); App.render(); App.toast('Đã xóa');
+  },
+  /* Dòng thời gian dùng chung cho cả tab Khách hàng lẫn tab Điều trị */
+  timelineHTML(c){
+    const ds = this.dienBienCua(c).slice().sort((a,b) => (a.date||'') < (b.date||'') ? 1 : -1);
+    if (!ds.length) return '<span class="sub-line">Chưa có diễn biến điều trị — bấm "Thêm diễn biến".</span>';
+    return ds.map(v => {
+      const bs = staffById(v.doctorId);
+      return `<div class="tl-item clickable" onclick="Cust.visitForm('${v.id||''}','${c.id}')" title="Bấm để sửa">
+        <span class="tl-date num">${fmtD(v.date)}</span>
+        <b>${h(v.db)}</b><p>${h(v.xt||'')}${bs?` <span class="sub-line">· ${h(bs.name)}</span>`:''}</p></div>`;
+    }).join('');
   },
 
   printBA18(){
@@ -990,8 +1026,9 @@ SCREENS.customers = () => {
       </div>
     </div>
     <div class="card">
-      <div class="card-h"><h2>Quá trình điều trị</h2><span class="spacer"></span><button class="btn small" onclick="Cust.visitForm()">${IC.plus} Thêm diễn biến</button></div>
-      <div class="card-b"><div class="timeline">${tl}</div></div>
+      <div class="card-h"><h2>Quá trình điều trị</h2><span class="hint">bấm vào một dòng để sửa</span><span class="spacer"></span>
+        <button class="btn small" onclick="Cust.visitForm('','${c.id}')">${IC.plus} Thêm diễn biến</button></div>
+      <div class="card-b"><div class="timeline">${Cust.timelineHTML(c)}</div></div>
     </div>`;
   }
 
@@ -1013,6 +1050,39 @@ SCREENS.customers = () => {
 const Cal = {
   setDate(v){ App.state.calDate = v || todayISO(); App.render(); },
   shift(d){ App.state.calDate = isoAdd(App.state.calDate, d); App.render(); },
+  doiKieu(k){ App.state.calView = k; App.render(); },
+
+  /* Khoảng ngày đang xem, tùy kiểu xem. Tuần tính từ thứ Hai. */
+  khoang(D, kieu){
+    if (kieu === 'tuan') {
+      const d = new Date(D + 'T00:00');
+      const lui = (d.getDay() + 6) % 7;
+      const tu = isoAdd(D, -lui), den = isoAdd(tu, 6);
+      return {tu, den, tieuDe: 'Tuần ' + fmtD(tu) + ' – ' + fmtD(den)};
+    }
+    if (kieu === 'thang') {
+      const y = +D.slice(0,4), m = +D.slice(5,7);
+      const tu = D.slice(0,7) + '-01';
+      const den = isoOf(new Date(y, m, 0));      /* ngày 0 của tháng sau = ngày cuối tháng này */
+      return {tu, den, tieuDe: 'Tháng ' + String(m).padStart(2,'0') + '/' + y};
+    }
+    return {tu: D, den: D, tieuDe: fmtD(D)};
+  },
+  cacNgay(tu, den){ const r = []; for (let d = tu; d <= den; d = isoAdd(d, 1)) r.push(d); return r; },
+  lui(){
+    const k = App.state.calView || 'ngay';
+    App.state.calDate = k === 'ngay' ? isoAdd(App.state.calDate, -1)
+      : k === 'tuan' ? isoAdd(this.khoang(App.state.calDate,'tuan').tu, -7)
+      : isoAdd(this.khoang(App.state.calDate,'thang').tu, -1).slice(0,7) + '-01';
+    App.render();
+  },
+  toi(){
+    const k = App.state.calView || 'ngay';
+    App.state.calDate = k === 'ngay' ? isoAdd(App.state.calDate, 1)
+      : k === 'tuan' ? isoAdd(this.khoang(App.state.calDate,'tuan').den, 1)
+      : isoAdd(this.khoang(App.state.calDate,'thang').den, 1);
+    App.render();
+  },
   form(id){
     const a = id ? db.appointments.find(x=>x.id===id) : {date:App.state.calDate, time:'09:00', dur:30, status:'Chờ xác nhận'};
     const labOpts = db.labs.filter(l=>!l.received).map(l=>`<option value="${l.id}"${a.labOrderId===l.id?' selected':''}>${h(l.type)} ${h(l.teeth)} — ${h(custById(l.customerId)?custById(l.customerId).name:'')}</option>`).join('');
@@ -1060,32 +1130,81 @@ const Cal = {
 };
 
 SCREENS.calendar = () => {
-  const D = App.state.calDate;
-  const appts = db.appointments.filter(a=>a.date===D).sort((a,b)=>a.time<b.time?-1:1);
-  const rows = appts.map(a => {
+  const D = App.state.calDate, kieu = App.state.calView || 'ngay';
+  const {tu, den, tieuDe} = Cal.khoang(D, kieu);
+  const trong = db.appointments.filter(a => a.date >= tu && a.date <= den);
+
+  const dongHen = a => {
     const c = custById(a.customerId); const doc = staffById(a.doctorId);
     const lab = a.labOrderId ? db.labs.find(l=>l.id===a.labOrderId) : null;
     const labWarn = lab && !lab.received ? `<span class="pill danger">Răng chưa về từ lab!</span>` : (lab ? `<span class="pill ok">Hàng lab đã về</span>` : '');
     return `<div class="row-item">
-      <span class="time-chip num">${a.time}</span>
+      <span class="time-chip num">${h(a.time)}</span>
       <span class="r-main"><b>${h(c?c.name:'?')}</b><span>${h(a.service)} · ${h(a.chair||'')} · ${h(doc?doc.name:'')}</span>${labWarn?'<span style="display:block;margin-top:3px">'+labWarn+'</span>':''}</span>
       <select onchange="Cal.status('${a.id}',this.value)" style="padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);font-size:12.5px">
         ${APPT_STATUS.map(s=>`<option${a.status===s?' selected':''}>${s}</option>`).join('')}</select>
       <button class="btn small" onclick="Cal.form('${a.id}')">Sửa</button>
     </div>`;
-  }).join('') || '<div class="sub-line" style="padding:12px 4px">Không có lịch hẹn ngày này. Bấm "Đặt lịch" để thêm.</div>';
+  };
+
+  let than = '';
+  if (kieu === 'ngay') {
+    const rows = trong.sort((a,b)=>a.time<b.time?-1:1).map(dongHen).join('')
+      || '<div class="sub-line" style="padding:12px 4px">Không có lịch hẹn ngày này. Bấm "Đặt lịch" để thêm.</div>';
+    than = `<div class="card"><div class="card-h"><h2>${WEEKD[new Date(D+'T00:00').getDay()]}, ${fmtD(D)}</h2>
+      <span class="hint">${trong.length} lịch hẹn</span></div>
+      <div class="card-b row-list">${rows}</div></div>`;
+  } else if (kieu === 'tuan') {
+    /* Mỗi ngày một thẻ, ngày không có hẹn vẫn hiện để thấy chỗ trống mà xếp khách */
+    than = Cal.cacNgay(tu, den).map(d => {
+      const ds = trong.filter(a => a.date === d).sort((a,b)=>a.time<b.time?-1:1);
+      const homNay = d === todayISO();
+      return `<div class="card mb"><div class="card-h">
+        <h2 style="${homNay?'color:var(--accent-ink)':''}">${WEEKD[new Date(d+'T00:00').getDay()]}, ${fmtD(d)}${homNay?' · hôm nay':''}</h2>
+        <span class="hint">${ds.length||'không có'} lịch hẹn</span><span class="spacer"></span>
+        <button class="btn small" onclick="Cal.setDate('${d}');Cal.doiKieu('ngay')">Mở ngày này</button></div>
+        ${ds.length?`<div class="card-b row-list">${ds.map(dongHen).join('')}</div>`:''}</div>`;
+    }).join('');
+  } else {
+    /* Tháng: lưới 7 cột, mỗi ô là một ngày, bấm vào mở ngày đó */
+    const dau = new Date(tu + 'T00:00');
+    const lui = (dau.getDay() + 6) % 7;                 /* tuần bắt đầu từ thứ Hai */
+    const o = [];
+    for (let i = 0; i < lui; i++) o.push('');
+    Cal.cacNgay(tu, den).forEach(d => o.push(d));
+    while (o.length % 7) o.push('');
+    than = `<div class="card"><div class="card-h"><h2>${h(tieuDe)}</h2><span class="hint">${trong.length} lịch hẹn cả tháng</span></div>
+      <div class="card-b">
+        <div class="thang-lich">
+          ${['T2','T3','T4','T5','T6','T7','CN'].map(x=>`<div class="thang-dau">${x}</div>`).join('')}
+          ${o.map(d => {
+            if (!d) return '<div class="thang-o trong"></div>';
+            const ds = trong.filter(a => a.date === d);
+            const homNay = d === todayISO();
+            return `<button class="thang-o${homNay?' hom-nay':''}${ds.length?' co-hen':''}" onclick="Cal.setDate('${d}');Cal.doiKieu('ngay')"
+              title="${fmtD(d)} — ${ds.length} lịch hẹn">
+              <span class="thang-so num">${+d.slice(8)}</span>
+              ${ds.length?`<span class="thang-dem">${ds.length} hẹn</span>
+                <span class="thang-ten">${ds.slice(0,2).map(a=>h((custById(a.customerId)||{}).name||'?').split(' ').slice(-1)[0]).join(', ')}${ds.length>2?'…':''}</span>`:''}
+            </button>`;
+          }).join('')}
+        </div>
+      </div></div>`;
+  }
 
   return `
   <div class="page-head"><h1>Lịch hẹn</h1><span class="spacer"></span>
     <button class="btn primary" onclick="Cal.form()">${IC.plus} Đặt lịch</button></div>
+  <div class="subtabs">${[['ngay','Ngày'],['tuan','Tuần'],['thang','Tháng']].map(([k,l])=>
+    `<button class="subtab ${kieu===k?'active':''}" onclick="Cal.doiKieu('${k}')">${l}</button>`).join('')}</div>
   <div class="date-nav mb">
-    <button class="btn small" onclick="Cal.shift(-1)">‹ Hôm trước</button>
+    <button class="btn small" onclick="Cal.lui()">‹ ${kieu==='ngay'?'Hôm trước':kieu==='tuan'?'Tuần trước':'Tháng trước'}</button>
     <input type="date" value="${D}" onchange="Cal.setDate(this.value)">
-    <button class="btn small" onclick="Cal.shift(1)">Hôm sau ›</button>
+    <button class="btn small" onclick="Cal.toi()">${kieu==='ngay'?'Hôm sau':kieu==='tuan'?'Tuần sau':'Tháng sau'} ›</button>
     <button class="btn small" onclick="Cal.setDate('${todayISO()}')">Hôm nay</button>
+    <span class="spacer"></span><span class="sub-line">${h(tieuDe)} · ${trong.length} lịch hẹn</span>
   </div>
-  <div class="card"><div class="card-h"><h2>${WEEKD[new Date(D+'T00:00').getDay()]}, ${fmtD(D)}</h2><span class="hint">${appts.length} lịch hẹn</span></div>
-  <div class="card-b row-list">${rows}</div></div>
+  ${than}
   <div class="legend" style="margin-top:10px"><span><i style="background:var(--ok)"></i>Đã xác nhận</span><span><i style="background:var(--warn)"></i>Chờ xác nhận</span><span><i style="background:var(--info)"></i>Đang điều trị</span></div>`;
 };
 
@@ -1275,7 +1394,16 @@ SCREENS.treatment = () => {
   <div class="page-head"><h1>Điều trị & thanh toán</h1><span class="spacer"></span>
     <span style="min-width:230px;flex:1;max-width:320px">${Combo.html('cbTreatCust','treatCust', custLabel(c), custOptions(),
       'Đổi khách: gõ tên, SĐT hoặc mã KH', Treat.onCustPick)}</span>
+    <button class="btn" onclick="App.state.custSel='${c.id}';App.go('customers')">← Hồ sơ khách hàng</button>
     <button class="btn primary" onclick="Treat.payForm()">Thu tiền</button></div>
+  <div class="card mb"><div class="card-b" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+    <div style="flex:1;min-width:200px">
+      <b style="font-size:15px">${h(c.name)}</b> <span class="sub-line">· ${h(c.code||'')}</span><br>
+      <span class="sub-line">${h(c.phone||'chưa có SĐT')} · ${fmtD(c.dob)||'chưa có ngày sinh'} · ${h(fullAddr(c)||'chưa có địa chỉ')}</span>
+      ${c.allergy?`<br><span class="pill danger">⚕ ${h(c.allergy)}</span>`:''}
+    </div>
+    <button class="btn small" onclick="App.state.custSel='${c.id}';App.go('customers')">Xem hồ sơ đầy đủ →</button>
+  </div></div>
   <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
     <div class="card kpi"><div class="k-label">Tổng kế hoạch (đã duyệt)</div><div class="k-value num">${money(total)}</div><div class="k-note">${items.length} hạng mục · ${items.filter(t=>t.status==='Báo giá').length} đang báo giá</div></div>
     <div class="card kpi"><div class="k-label">Đã thanh toán</div><div class="k-value num" style="color:var(--ok)">${money(paid)}</div><div class="k-note">${total?Math.min(100,Math.round(paid/total*100)):0}% kế hoạch</div></div>
@@ -1285,6 +1413,9 @@ SCREENS.treatment = () => {
     <button class="btn small" onclick="Svc.bang()">Bảng giá dịch vụ</button>
     <button class="btn small" onclick="Treat.itemForm()">${IC.plus} Thêm hạng mục</button></div>
     <div class="tbl-wrap"><table><thead><tr><th>Hạng mục</th><th>Răng</th><th>Bác sĩ · người phụ</th><th>Trạng thái</th><th class="r">Đơn giá</th></tr></thead><tbody>${itemRows}</tbody></table></div></div>
+  <div class="card mb"><div class="card-h"><h2>Quá trình điều trị</h2><span class="hint">bấm vào một dòng để sửa</span><span class="spacer"></span>
+    <button class="btn small" onclick="Cust.visitForm('','${c.id}')">${IC.plus} Thêm diễn biến</button></div>
+    <div class="card-b"><div class="timeline">${Cust.timelineHTML(c)}</div></div></div>
   <div class="card mb"><div class="card-h"><h2>Đơn thuốc</h2><span class="hint">liên thông Đơn thuốc quốc gia</span><span class="spacer"></span>
     <button class="btn small" onclick="Treat.rxForm()">${IC.plus} Kê đơn mới</button></div>
     <div class="card-b">${rxBlocks}</div></div>
