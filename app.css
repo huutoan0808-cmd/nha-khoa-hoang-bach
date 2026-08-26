@@ -53,7 +53,11 @@ a{color:var(--accent-ink)}
 .icon-btn .dot{position:absolute;top:7px;right:7px;width:7px;height:7px;border-radius:50%;background:var(--danger);border:2px solid var(--surface)}
 .avatar{width:32px;height:32px;border-radius:50%;background:var(--accent-soft);color:var(--accent-ink);display:grid;place-items:center;font-weight:600;font-size:12px;flex:none}
 
-.sidebar{background:var(--surface);border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:2px}
+/* Cột trái bám theo màn hình: kéo bảng dài xuống vẫn thấy menu, khỏi cuộn ngược lên
+   mới đổi được tab. align-self:start là bắt buộc — không có nó ô lưới bị kéo cao bằng
+   cả trang, mà sticky chỉ ăn khi phần tử thấp hơn khung chứa. */
+.sidebar{background:var(--surface);border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:2px;
+  position:sticky;top:56px;align-self:start;height:calc(100vh - 56px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
 .nav-item{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:8px;color:var(--ink2);font-weight:500;text-align:left;width:100%}
 .nav-item svg{width:18px;height:18px;stroke:currentColor;flex:none}
 .nav-item:hover{background:var(--surface2)}

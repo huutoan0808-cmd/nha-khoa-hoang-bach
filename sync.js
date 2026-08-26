@@ -3,7 +3,7 @@
    Mất mạng vẫn dùng bình thường, có mạng lại thì đẩy lên. */
 'use strict';
 
-const SYNC_TABLES = ['services','staff','customers','treatments','receipts','rx','inventory','appointments','labs','bonuses'];
+const SYNC_TABLES = ['services','staff','customers','treatments','receipts','rx','inventory','appointments','labs','bonuses','invLog'];
 
 const Sync = {
   shadow: {},        /* tbl -> {id: nội dung đã lưu lần trước} */

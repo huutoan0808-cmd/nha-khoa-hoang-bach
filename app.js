@@ -1161,12 +1161,63 @@ SCREENS.treatment = () => {
 };
 
 /* ---------- Kho ---------- */
+/* Mỗi dòng trong db.inventory là MỘT LÔ. Cùng tên nhưng khác hạn sử dụng thì nằm
+   riêng từng lô, để xuất được đúng lô sắp hết hạn trước (FEFO). */
+const LY_DO_XUAT = ['Sử dụng hàng ngày', 'Phòng nha Hoàng Bách Thời Đại'];
+
 const Inv = {
+  /* Sắp lô: hạn gần nhất lên trước, lô không ghi hạn xuống cuối cùng */
+  hanCmp(a, b){
+    const ea = a.expiry || '', eb = b.expiry || '';
+    if (ea && eb) return ea < eb ? -1 : ea > eb ? 1 : 0;
+    if (ea) return -1;
+    if (eb) return 1;
+    return 0;
+  },
+  /* Gom các lô cùng tên thành một mặt hàng */
+  nhom(){
+    const m = new Map();
+    (db.inventory || []).forEach(it => {
+      const k = Combo.norm(it.name || '').trim();
+      if (!k) return;
+      if (!m.has(k)) m.set(k, {key:k, name:it.name, unit:it.unit || '', min:0, los:[], tong:0});
+      const g = m.get(k);
+      g.los.push(it);
+      g.tong += (+it.stock || 0);
+      g.min = Math.max(g.min, +it.min || 0);
+      if (!g.unit && it.unit) g.unit = it.unit;
+    });
+    const arr = [...m.values()];
+    arr.forEach(g => g.los.sort(this.hanCmp));
+    arr.sort((a,b) => a.name.localeCompare(b.name, 'vi'));
+    return arr;
+  },
+  nhomCua(name){ const k = Combo.norm(name||'').trim(); return this.nhom().find(g => g.key === k); },
+
+  /* Gợi ý tên: danh mục lấy từ sổ cũ + những tên đã có sẵn trong kho */
+  goiYTen(){
+    const co = new Map();
+    (typeof VAT_LIEU !== 'undefined' ? VAT_LIEU : []).forEach(v => co.set(Combo.norm(v.n), {t:v.n, s:v.d || ''}));
+    (db.inventory || []).forEach(it => { const k = Combo.norm(it.name||''); if (k && !co.has(k)) co.set(k, {t:it.name, s:it.unit || ''}); });
+    return [...co.values()];
+  },
+  /* Chọn tên trong gợi ý → tự điền đơn vị tính cho khỏi gõ lại */
+  chonTen(val){
+    const k = Combo.norm(val);
+    const v = (typeof VAT_LIEU !== 'undefined' ? VAT_LIEU : []).find(x => Combo.norm(x.n) === k)
+           || (db.inventory || []).find(x => Combo.norm(x.name||'') === k);
+    const dv = v ? (v.d || v.unit || '') : '';
+    const o = document.querySelector('#modalBody [name="unit"]');
+    if (o && dv && !o.value.trim()) o.value = dv;
+  },
+
   form(id){
     const it = id ? db.inventory.find(x=>x.id===id) : {};
-    App.modal(id?'Sửa vật tư':'Thêm vật tư', `
+    App.modal(id?'Sửa lô vật tư':'Nhập vật tư vào kho', `
     <form class="form-grid" onsubmit="Inv.save(event,'${id||''}')">
-      <div class="f full"><label>Tên vật tư / hàng hóa</label><input name="name" required value="${h(it.name||'')}"></div>
+      <div class="f full"><label>Tên vật tư / hàng hóa</label>
+        ${Combo.html('cbVL','name', it.name||'', this.goiYTen(), 'Gõ tên vật tư…', v => Inv.chonTen(v),
+          'Gõ vài chữ là ra gợi ý từ danh mục phòng khám, chọn xong tự điền đơn vị tính. Không có trong danh mục thì cứ gõ tự do.')}</div>
       <div class="f"><label>Đơn vị</label><input name="unit" value="${h(it.unit||'')}" placeholder="hộp, tuýp, cái..."></div>
       <div class="f"><label>Tồn kho</label><input type="number" name="stock" value="${it.stock??''}" required></div>
       <div class="f"><label>Định mức tối thiểu</label><input type="number" name="min" value="${it.min??''}"></div>
@@ -1194,46 +1245,193 @@ const Inv = {
     db.inventory = db.inventory.filter(x=>x.id!==id);
     save(); App.closeModal(); App.render(); App.toast('Đã xóa');
   },
-  adjust(id, sign){
-    const it = db.inventory.find(x=>x.id===id);
-    const v = prompt((sign>0?'Nhập kho':'Xuất kho') + ' — số lượng (' + it.unit + '):', '1');
+  /* Thêm một LÔ MỚI cho vật tư đã có — dùng khi mua lô khác hạn sử dụng */
+  formTen(name){
+    const g = this.nhomCua(name);
+    this.form();
+    setTimeout(() => {
+      const b = document.getElementById('modalBody'); if (!b || !g) return;
+      const inp = b.querySelector('[name="name"]'); if (inp) inp.value = g.name;
+      const dv = b.querySelector('[name="unit"]'); if (dv) dv.value = g.unit || '';
+      const mn = b.querySelector('[name="min"]'); if (mn && g.min) mn.value = g.min;
+      const ex = b.querySelector('[name="expiry"]'); if (ex) ex.focus();
+    }, 0);
+  },
+
+  /* Nhập thêm vào đúng một lô đã có (không đổi hạn sử dụng) */
+  nhapLo(id){
+    const it = db.inventory.find(x=>x.id===id); if (!it) return;
+    const v = prompt('Nhập thêm vào lô' + (it.expiry ? ' HSD ' + fmtD(it.expiry) : ' không ghi hạn') +
+      ' — số lượng (' + (it.unit||'') + '):', '1');
     const n = num(v); if (!n) return;
-    it.stock = Math.max(0, it.stock + sign*n);
-    save(); App.render(); App.toast((sign>0?'+':'−') + n + ' ' + it.unit + ' → tồn ' + it.stock);
+    it.stock = Math.max(0, (+it.stock||0) + n);
+    this.ghiNhatKy({name:it.name, unit:it.unit, qty:n, sign:1, reason:'Nhập kho', lots:[{expiry:it.expiry||'', qty:n}]});
+    save(); App.render(); App.toast('+' + n + ' ' + (it.unit||'') + ' → lô còn ' + it.stock);
+  },
+
+  /* Tính trước xem xuất bấy nhiêu thì trừ vào những lô nào — hạn gần nhất trước */
+  chiaLo(name, sl){
+    const g = this.nhomCua(name);
+    const ra = [];
+    let con = sl;
+    if (!g) return {ra, con, thieu: sl};
+    g.los.filter(l => (+l.stock||0) > 0).sort(this.hanCmp).forEach(l => {
+      if (con <= 0) return;
+      const lay = Math.min(con, +l.stock||0);
+      ra.push({lo:l, qty:lay});
+      con -= lay;
+    });
+    return {ra, thieu: Math.max(0, con)};
+  },
+
+  xuatForm(name){
+    const g = this.nhomCua(name);
+    if (!g) { App.toast('Không tìm thấy vật tư này'); return; }
+    const T = todayISO();
+    const loRows = g.los.map(l => {
+      const qua = l.expiry && l.expiry < T;
+      return `<tr><td>${l.expiry ? fmtD(l.expiry) : '<span class="sub-line">không ghi hạn</span>'}
+        ${qua ? '<span class="pill danger">quá hạn</span>' : ''}</td>
+        <td class="r num">${l.stock}</td><td class="sub-line">${h(l.supplier||'—')}</td></tr>`;
+    }).join('');
+    App.modal('Xuất kho — ' + g.name, `
+    <form class="form-grid" onsubmit="Inv.xuatSave(event,'${h(g.name).replace(/'/g,"\\'")}')">
+      <div class="note-block full">Tồn tất cả các lô: <b>${g.tong} ${h(g.unit)}</b> · ${g.los.length} lô.
+        Phần mềm <b>tự trừ lô có hạn sử dụng gần nhất trước</b>, hết lô đó mới sang lô sau.</div>
+      <div class="f"><label>Số lượng xuất (${h(g.unit||'đơn vị')})</label>
+        <input type="number" name="qty" min="1" step="1" value="1" required oninput="Inv.xemTruoc('${h(g.name).replace(/'/g,"\\'")}')"></div>
+      <div class="f"><label>Ngày xuất</label><input type="date" name="date" value="${T}"></div>
+      <div class="f full"><label>Lý do xuất</label>
+        <select name="reason" onchange="Inv.hienOKhac(this.value)">
+          ${LY_DO_XUAT.map(x => `<option value="${h(x)}">${h(x)}</option>`).join('')}
+          <option value="khac">Lý do khác…</option>
+        </select></div>
+      <div class="f full" id="oKhac" style="display:none"><label>Ghi rõ lý do</label>
+        <input name="reasonOther" placeholder="Vd: trả hàng lỗi, hủy do quá hạn…"></div>
+      <div class="full" id="xemTruoc"></div>
+      <div class="card full" style="margin-top:4px"><div class="card-h"><h2>Các lô đang có</h2></div>
+        <div class="tbl-wrap"><table><thead><tr><th>Hạn sử dụng</th><th class="r">Tồn</th><th>Nơi mua</th></tr></thead>
+          <tbody>${loRows}</tbody></table></div></div>
+      <div class="form-actions full">
+        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+        <button class="btn primary">Xuất kho</button></div>
+    </form>`);
+    this.xemTruoc(g.name);
+  },
+  hienOKhac(v){
+    const o = document.getElementById('oKhac');
+    if (o) o.style.display = v === 'khac' ? '' : 'none';
+  },
+  xemTruoc(name){
+    const box = document.getElementById('xemTruoc'); if (!box) return;
+    const sl = num((document.querySelector('#modalBody [name="qty"]')||{}).value);
+    if (!sl) { box.innerHTML = ''; return; }
+    const {ra, thieu} = this.chiaLo(name, sl);
+    const g = this.nhomCua(name);
+    box.innerHTML = `<div class="note-block">Sẽ trừ: ${ra.map(x =>
+      `<b>${x.qty} ${h(g.unit)}</b> ở lô ${x.lo.expiry ? 'HSD ' + fmtD(x.lo.expiry) : 'không ghi hạn'}`).join(' · ') || '—'}
+      ${thieu ? `<br><span style="color:var(--danger);font-weight:700">Thiếu ${thieu} ${h(g.unit)} — kho không đủ.</span>` : ''}</div>`;
+  },
+  xuatSave(ev, name){
+    ev.preventDefault();
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    const sl = num(d.qty);
+    if (!sl) { App.toast('Chưa nhập số lượng'); return; }
+    const lyDo = d.reason === 'khac' ? (d.reasonOther || '').trim() : d.reason;
+    if (!lyDo) { App.toast('Chọn "Lý do khác" thì phải ghi rõ lý do'); return; }
+    const {ra, thieu} = this.chiaLo(name, sl);
+    if (thieu) { App.toast('Kho chỉ còn ' + (sl - thieu) + ' — không xuất được ' + sl); return; }
+    const g = this.nhomCua(name);
+    ra.forEach(x => { x.lo.stock = Math.max(0, (+x.lo.stock||0) - x.qty); });
+    this.ghiNhatKy({name: g.name, unit: g.unit, qty: sl, sign: -1, reason: lyDo, date: d.date || todayISO(),
+      lots: ra.map(x => ({expiry: x.lo.expiry || '', qty: x.qty}))});
+    save(); App.closeModal(); App.render();
+    App.toast('Đã xuất ' + sl + ' ' + (g.unit||'') + ' — ' + lyDo);
+  },
+
+  ghiNhatKy(o){
+    if (!db.invLog) db.invLog = [];
+    const me = (typeof Att !== 'undefined' && Att.myStaff && Att.myStaff()) || null;
+    db.invLog.unshift(Object.assign({id: uid(), date: todayISO(), time: nowHM(),
+      staffId: me ? me.id : '', staffName: me ? me.name : (Cloud.who() || '')}, o));
+    if (db.invLog.length > 4000) db.invLog.length = 4000;
+  },
+
+  nhatKy(){
+    const rows = (db.invLog || []).slice(0, 300).map(r => `<tr>
+      <td class="num">${fmtD(r.date)}<br><span class="sub-line">${h(r.time||'')}</span></td>
+      <td><b>${h(r.name)}</b><br><span class="sub-line">${(r.lots||[]).map(l =>
+        (l.qty + ' × ' + (l.expiry ? 'HSD ' + fmtD(l.expiry) : 'không hạn'))).join(' · ')}</span></td>
+      <td class="r num" style="font-weight:700;color:${r.sign>0?'var(--ok)':'var(--danger)'}">${r.sign>0?'+':'−'}${r.qty} ${h(r.unit||'')}</td>
+      <td>${h(r.reason||'')}</td><td class="sub-line">${h(r.staffName||'')}</td></tr>`).join('')
+      || '<tr><td colspan="5" class="sub-line">Chưa có lần nhập xuất nào.</td></tr>';
+    App.modal('Nhật ký nhập — xuất kho', `
+      <div class="tbl-wrap"><table style="min-width:640px">
+        <thead><tr><th>Ngày</th><th>Vật tư / lô</th><th class="r">Số lượng</th><th>Lý do</th><th>Người làm</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`);
   },
 };
 
 SCREENS.inventory = () => {
   const q = Combo.norm(App.state.invQ);
-  const list = !q ? db.inventory : db.inventory.filter(it =>
-    Combo.norm(it.name).includes(q) || Combo.norm(it.supplier||'').includes(q));
+  const nhom = Inv.nhom().filter(g => !q || Combo.norm(g.name).includes(q)
+    || g.los.some(l => Combo.norm(l.supplier||'').includes(q)));
   const warn = db.inventory.filter(it => invStatus(it)[0] !== 'ok').length;
-  const value = db.inventory.reduce((s,it)=>s+(it.buy||0)*it.stock,0);
-  const rows = list.map(it => {
-    const [k,label] = invStatus(it);
-    return `<tr><td><b>${h(it.name)}</b><br><span class="sub-line">${h(it.supplier||'—')}</span></td>
-    <td>${h(it.unit)}</td>
-    <td class="r num" ${k==='danger'?'style="color:var(--danger);font-weight:700"':k==='warn'?'style="color:var(--warn);font-weight:700"':''}>${it.stock}</td>
-    <td class="r num">${it.min||0}</td>
-    <td class="num">${it.expiry?fmtD(it.expiry):'—'}</td>
-    <td class="r num">${it.buy?money(it.buy):'—'}</td>
-    <td class="r num">${it.sell?money(it.sell):'—'}</td>
-    <td><span class="pill ${k}">${label}</span></td>
-    <td style="white-space:nowrap"><button class="btn small" onclick="Inv.adjust('${it.id}',1)">+Nhập</button>
-      <button class="btn small" onclick="Inv.adjust('${it.id}',-1)">−Xuất</button>
-      <button class="btn small" onclick="Inv.form('${it.id}')">Sửa</button></td></tr>`;
-  }).join('') || '<tr><td colspan="9" class="sub-line">Không tìm thấy vật tư.</td></tr>';
+  const value = db.inventory.reduce((s,it)=>s+(it.buy||0)*(+it.stock||0),0);
+  const nhieuLo = Inv.nhom().filter(g => g.los.length > 1).length;
+  const esc = s => h(s).replace(/'/g, "\\'");
+
+  const rows = nhom.map(g => {
+    /* Trạng thái của cả mặt hàng lấy theo lô xấu nhất — hết hạn / dưới định mức */
+    const tt = g.los.map(l => invStatus(Object.assign({}, l, {min:g.min})));
+    const k = tt.some(x=>x[0]==='danger') ? 'danger' : tt.some(x=>x[0]==='warn') ? 'warn' : 'ok';
+    const label = (tt.find(x=>x[0]===k) || ['ok','Đủ hàng'])[1];
+    const dau = g.los[0];
+    const head = `<tr>
+      <td><b>${h(g.name)}</b><br><span class="sub-line">${g.los.length} lô${g.los.length>1?' · xuất lô hạn gần nhất trước':''}</span></td>
+      <td>${h(g.unit)}</td>
+      <td class="r num" style="font-weight:700${k==='danger'?';color:var(--danger)':k==='warn'?';color:var(--warn)':''}">${g.tong}</td>
+      <td class="r num">${g.min||0}</td>
+      <td class="num">${dau && dau.expiry ? fmtD(dau.expiry) : '—'}</td>
+      <td><span class="pill ${k}">${h(label)}</span></td>
+      <td style="white-space:nowrap">
+        <button class="btn small primary" onclick="Inv.xuatForm('${esc(g.name)}')">−Xuất</button>
+        <button class="btn small" onclick="Inv.formTen('${esc(g.name)}')">+Lô mới</button></td></tr>`;
+    /* Chỉ trải các lô ra khi mặt hàng có nhiều hơn một lô — một lô thì bày ra rối mắt */
+    const los = g.los.length < 2 ? '' : g.los.map((l,i) => {
+      const [lk,ll] = invStatus(Object.assign({}, l, {min:g.min}));
+      return `<tr style="background:var(--bg-soft)">
+        <td style="padding-left:26px"><span class="sub-line">${i===0?'▸ xuất trước — ':'▸ '}${l.expiry?'HSD '+fmtD(l.expiry):'không ghi hạn'}
+          ${l.supplier?' · '+h(l.supplier):''}</span></td>
+        <td></td>
+        <td class="r num" ${lk==='danger'?'style="color:var(--danger)"':''}>${l.stock}</td>
+        <td></td><td class="num">${l.expiry?fmtD(l.expiry):'—'}</td>
+        <td><span class="pill ${lk}">${h(ll)}</span></td>
+        <td style="white-space:nowrap"><button class="btn small" onclick="Inv.nhapLo('${l.id}')">+Nhập</button>
+          <button class="btn small" onclick="Inv.form('${l.id}')">Sửa</button></td></tr>`;
+    }).join('');
+    const motLo = g.los.length === 1
+      ? `<tr style="background:var(--bg-soft)"><td style="padding-left:26px"><span class="sub-line">${dau.supplier?h(dau.supplier):'chưa ghi nơi bán'}
+          · giá nhập ${dau.buy?money(dau.buy):'—'}${dau.sell?' · giá bán '+money(dau.sell):''}</span></td>
+        <td></td><td></td><td></td><td></td><td></td>
+        <td style="white-space:nowrap"><button class="btn small" onclick="Inv.nhapLo('${dau.id}')">+Nhập</button>
+          <button class="btn small" onclick="Inv.form('${dau.id}')">Sửa</button></td></tr>` : '';
+    return head + los + motLo;
+  }).join('') || '<tr><td colspan="7" class="sub-line">Không tìm thấy vật tư.</td></tr>';
 
   return `
   <div class="page-head"><h1>Kho vật tư</h1><span class="spacer"></span>
-    <button class="btn primary" onclick="Inv.form()">${IC.plus} Thêm vật tư</button>
-    <div class="sub">${db.inventory.length} mặt hàng · ${warn} cần chú ý · giá trị tồn ${money(value)}</div></div>
+    <button class="btn" onclick="Inv.nhatKy()">Nhật ký nhập xuất</button>
+    <button class="btn primary" onclick="Inv.form()">${IC.plus} Nhập vật tư</button>
+    <div class="sub">${nhom.length} mặt hàng · ${db.inventory.length} lô${nhieuLo?' · '+nhieuLo+' mặt hàng có nhiều lô':''} · ${warn} cần chú ý · giá trị tồn ${money(value)}</div></div>
   <div class="searchbar">${IC.search}<input placeholder="Tìm vật tư, nhà cung cấp..." value="${h(App.state.invQ)}"
     oninput="App.state.invQ=this.value;App.render();const i=document.querySelector('.searchbar input');i.focus();i.setSelectionRange(i.value.length,i.value.length)"></div>
-  <div class="card"><div class="tbl-wrap"><table style="min-width:900px">
-    <thead><tr><th>Vật tư · Nơi bán</th><th>ĐV</th><th class="r">Tồn</th><th class="r">Định mức</th><th>HSD</th><th class="r">Giá nhập</th><th class="r">Giá bán</th><th>Trạng thái</th><th></th></tr></thead>
+  <div class="card"><div class="tbl-wrap"><table style="min-width:760px">
+    <thead><tr><th>Vật tư · lô</th><th>ĐV</th><th class="r">Tồn</th><th class="r">Định mức</th><th>HSD gần nhất</th><th>Trạng thái</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div></div>
-  <div class="note-block" style="margin-top:12px">Cảnh báo tự động: <b>Quá hạn</b> (đỏ) khi HSD đã qua · <b>Sắp hết hạn</b> (vàng) khi còn ≤ 60 ngày · <b>Dưới định mức</b> (đỏ) khi tồn ≤ định mức tối thiểu.</div>`;
+  <div class="note-block" style="margin-top:12px">Cùng một tên vật tư nhưng <b>khác hạn sử dụng thì tách thành từng lô riêng</b>.
+    Khi xuất, phần mềm <b>tự trừ lô có hạn gần nhất trước</b>, hết lô đó mới sang lô sau — hàng cũ đi trước, đỡ phải bỏ vì quá hạn.<br>
+    Cảnh báo tự động: <b>Quá hạn</b> (đỏ) khi HSD đã qua · <b>Sắp hết hạn</b> (vàng) khi còn ≤ 60 ngày · <b>Dưới định mức</b> (đỏ) khi tồn ≤ định mức tối thiểu.</div>`;
 };
 
 /* ---------- Chấm công bằng mã QR ---------- */
