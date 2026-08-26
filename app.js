@@ -1573,6 +1573,19 @@ const Att = {
     } catch(e){ App.toast('Liên kết hỏng hoặc chép thiếu — xin quản lý gửi lại'); }
   },
 
+  /* Mở từ biểu tượng ngoài màn hình thì không có thanh địa chỉ để dán —
+     nút này lấy thẳng liên kết đang nằm trong bộ nhớ tạm của máy. */
+  async pasteInvite(){
+    const el = document.getElementById('inviteIn');
+    if (!el) return;
+    try {
+      const t = await navigator.clipboard.readText();
+      if (!t || !/#(setup|cc)=/.test(t)) { App.toast('Bộ nhớ tạm chưa có liên kết mời — chép lại bên Zalo/Safari'); return; }
+      el.value = t.trim();
+      this.useInvite();
+    } catch(e){ App.toast('Máy không cho đọc bộ nhớ tạm — bấm giữ vào ô trên rồi chọn Dán'); }
+  },
+
   inviteForm(){
     const url = this.inviteUrl();
     if (!url) { App.toast('Chưa cấu hình kết nối — làm Hướng dẫn kết nối trước'); this.wizard(); return; }
@@ -1600,13 +1613,17 @@ const Att = {
       return `<div style="max-width:520px;margin:0 auto">
         <div class="page-head"><h1>${h(db.clinic.name)}</h1>
           <div class="sub">Máy này chưa nối vào dữ liệu chung của phòng khám</div></div>
+        <div class="note-block mb">Mỗi trình duyệt — và cả biểu tượng bạn kéo ra màn hình điện thoại —
+          được máy coi là <b>một ngăn riêng</b>, không thấy được ngăn kia. Nên nối ở Safari xong,
+          mở từ biểu tượng vẫn phải nối lại <b>một lần</b> ở đây. Nối rồi thì lần sau chỉ cần đăng nhập.</div>
         <div class="card mb"><div class="card-b">
           <div class="f"><label>Dán liên kết mời từ quản lý</label>
             <input id="inviteIn" placeholder="https://…#setup=…" autocomplete="off"></div>
           <div class="form-actions" style="justify-content:flex-start;margin-top:10px">
-            <button class="btn primary" onclick="Att.useInvite()">Nối vào phòng khám</button></div>
+            <button class="btn primary" onclick="Att.useInvite()">Nối vào phòng khám</button>
+            <button class="btn" onclick="Att.pasteInvite()">Dán từ bộ nhớ tạm</button></div>
           <div class="combo-hint">Quản lý lấy liên kết này ở <b>Nhân sự → Chấm công → Cài đặt → Mời nhân viên</b>.
-            Nối một lần, những lần sau chỉ cần đăng nhập.</div>
+            Chép liên kết bên Zalo/Safari rồi bấm <b>Dán từ bộ nhớ tạm</b> cho nhanh.</div>
         </div></div>
         ${buoc('•', 'Bạn là quản lý, đang cài lần đầu?', 'Tạo cơ sở dữ liệu chung trên Supabase (miễn phí) rồi dán khóa vào đây.',
           `<button class="btn" onclick="Att.wizard()">Bắt đầu cài đặt</button>`)}
