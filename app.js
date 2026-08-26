@@ -92,7 +92,8 @@ function seed() {
   return {ver: 1,
     clinic: {name:'Nha Khoa Hoàng Bách', legal:'Công ty TNHH Nha Khoa Hoàng Bách – Gò Quao',
              authority:'Sở Y tế An Giang', addr:'Rạch Giá, An Giang', phone:'', taxCode:'', maCSKCB:'',
-             shiftStart:'08:00', wifiIp:''},
+             caSangVao:'07:00', caSangRa:'12:00', caChieuVao:'13:00', caChieuRa:'17:00',
+             treCho:5, wifiIp:''},
     seq: {cust: 1, receipt: 1},
     services, staff: [], customers: [], treatments: [], receipts: [], rx: [],
     inventory: [], appointments: [], labs: [], attLog: [], bonuses: []};
@@ -107,6 +108,16 @@ function load() {
 function save() { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
 /* Nâng cấp dữ liệu cũ về một ô địa chỉ duy nhất (số nhà + đường gộp chung) */
 function migrate() {
+  /* Trước đây chỉ có một mốc "giờ vào ca". Nay là hai buổi: sáng 7–12, chiều 13–17. */
+  const cl = db.clinic || (db.clinic = {});
+  if (!cl.caSangVao) {
+    cl.caSangVao  = '07:00';   /* giờ thật của phòng khám, không lấy mốc 08:00 cũ */
+    cl.caSangRa   = '12:00';
+    cl.caChieuVao = '13:00';
+    cl.caChieuRa  = '17:00';
+  }
+  if (cl.treCho == null) cl.treCho = 5;
+  delete cl.shiftStart;
   (db.customers || []).forEach(c => {
     if (c.addr1 && !c.street) { c.street = String(c.addr1).trim(); }
     delete c.addr1;
@@ -1228,10 +1239,57 @@ SCREENS.inventory = () => {
 /* ---------- Chấm công bằng mã QR ---------- */
 const QR_PREFIX = 'NKHB-CC:';
 const nowHM = () => { const d = new Date(); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); };
+const hm2m = t => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t||'')); return m ? (+m[1])*60 + (+m[2]) : null; };
+const m2hm = n => n == null ? '' : String(Math.floor(n/60)).padStart(2,'0') + ':' + String(Math.round(n)%60).padStart(2,'0');
+const gioPhut = n => { n = Math.round(n); const g = Math.floor(n/60), p = n%60; return !n ? '—' : (g ? g+'h' : '') + (p ? String(p).padStart(g?2:1,'0')+"'" : (g?'':'0')); };
+
 const Att = {
   stream: null, timer: null,
 
   logOf(staffId, date){ return (db.attLog||[]).find(x => x.staffId === staffId && x.date === date); },
+
+  /* ---------- Ca làm việc: sáng 7–12, chiều 13–17 ----------
+     Giờ nghỉ trưa 12–13 nằm ngoài cả hai ca nên không được tính công. Nhờ vậy người
+     ở lại buổi trưa và người về rồi quay lại đều ra cùng số giờ, khỏi phải chấm công
+     bốn lần một ngày. Ai về trưa không quay lại thì chỉ được công buổi sáng. */
+  ca(){
+    const c = db.clinic || {};
+    return [{ten:'Sáng',  s: hm2m(c.caSangVao  || '07:00'), e: hm2m(c.caSangRa  || '12:00')},
+            {ten:'Chiều', s: hm2m(c.caChieuVao || '13:00'), e: hm2m(c.caChieuRa || '17:00')}];
+  },
+  phutChuan(){ return this.ca().reduce((s,c) => s + Math.max(0, c.e - c.s), 0); },
+  moTaCa(){ const c = this.ca(); return `Sáng ${m2hm(c[0].s)}–${m2hm(c[0].e)} · Chiều ${m2hm(c[1].s)}–${m2hm(c[1].e)}`; },
+
+  /* Tính một ngày công: số phút làm thật, trễ bao lâu, về sớm bao lâu, làm buổi nào */
+  tinh(log){
+    const r = {phut:0, cong:0, tre:0, som:0, buoi:[], veTrua:false, dangLam:false};
+    if (!log || !log.inAt) return r;
+    const ca = this.ca(), cho = +(db.clinic.treCho ?? 5);
+    const vao = hm2m(log.inAt), ra = log.outAt ? hm2m(log.outAt) : null;
+    /* Chưa chấm ra: hôm nay thì tạm tính tới lúc này, ngày cũ thì để trống chờ sửa tay */
+    const het = ra != null ? ra : (log.date === todayISO() ? hm2m(nowHM()) : null);
+    r.dangLam = ra == null;
+    if (vao == null || het == null) return r;
+    ca.forEach(c => {
+      let a = Math.max(vao, c.s), b = Math.min(het, c.e);
+      /* Đã tha trễ mấy phút thì cũng đừng trừ công mấy phút đó, kẻo tha mà vẫn phạt.
+         Chỉ làm tròn khi đã chấm ra hẳn, đang làm dở thì tính thật tới lúc này. */
+      if (ra != null) { if (vao <= c.s + cho) a = c.s; if (ra >= c.e - cho) b = c.e; }
+      const p = b - a;
+      if (p > 0) { r.phut += p; r.buoi.push(c.ten); }
+    });
+    r.cong = this.phutChuan() ? r.phut / this.phutChuan() : 0;
+    /* Đi trễ: tính theo buổi mà người đó bắt đầu làm */
+    if (vao > ca[0].s + cho && vao < ca[0].e) r.tre = vao - ca[0].s;
+    else if (vao > ca[1].s + cho && vao < ca[1].e) r.tre = vao - ca[1].s;
+    if (ra != null) {
+      /* Ra trong khoảng nghỉ trưa = về trưa, nghỉ buổi chiều — không coi là về sớm */
+      if (ra >= ca[0].e - cho && ra <= ca[1].s + cho) r.veTrua = true;
+      else if (ra < ca[0].e - cho) r.som = ca[0].e - ra;
+      else if (ra > ca[1].s && ra < ca[1].e - cho) r.som = ca[1].e - ra;
+    }
+    return r;
+  },
 
   /* Quét được mã → vào ca, quét lần nữa → ra ca */
   async record(staffId, viaQR){
@@ -1296,15 +1354,18 @@ const Att = {
     const st = this.myStaff();
     if (!st) return '';
     const T = todayISO(), l = this.logOf(st.id, T);
-    const start = db.clinic.shiftStart || '08:00';
+    const t = this.tinh(l);
     const nut = !l ? 'Chấm công vào ca' : (!l.outAt ? 'Chấm công ra ca' : 'Cập nhật giờ ra');
     return `<div class="card mb"><div class="card-b" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
       <div style="flex:1;min-width:180px">
-        <div class="sub-line">Chấm công hôm nay · ${h(st.name)}</div>
-        <div style="display:flex;gap:18px;margin-top:4px">
+        <div class="sub-line">Chấm công hôm nay · ${h(st.name)} · ${h(this.moTaCa())}</div>
+        <div style="display:flex;gap:18px;margin-top:4px;flex-wrap:wrap;align-items:center">
           <div><span class="sub-line">Vào</span> <b class="num" style="font-size:16px">${l&&l.inAt?h(l.inAt):'—'}</b>
-            ${l&&l.inAt&&l.inAt>start?'<span class="pill warn">trễ</span>':''}</div>
-          <div><span class="sub-line">Ra</span> <b class="num" style="font-size:16px">${l&&l.outAt?h(l.outAt):'—'}</b></div>
+            ${t.tre?'<span class="pill warn">trễ '+gioPhut(t.tre)+'</span>':''}</div>
+          <div><span class="sub-line">Ra</span> <b class="num" style="font-size:16px">${l&&l.outAt?h(l.outAt):'—'}</b>
+            ${t.veTrua?'<span class="pill mutedp">về trưa</span>':''}${t.som?'<span class="pill warn">về sớm '+gioPhut(t.som)+'</span>':''}</div>
+          ${l&&l.inAt?`<div><span class="sub-line">Làm được</span> <b class="num" style="font-size:16px">${gioPhut(t.phut)}</b>
+            ${t.dangLam?'<span class="pill info">đang tính</span>':''}</div>`:''}
         </div>
       </div>
       <button class="btn primary" onclick="Att.selfCheck('${st.id}')">${nut}</button>
@@ -1365,7 +1426,9 @@ const Att = {
             <div style="margin-top:12px;display:flex;gap:18px;justify-content:center">
               <div><div class="sub-line">Giờ vào</div><div class="num" style="font-size:20px;font-weight:700">${l&&l.inAt?l.inAt:'—'}</div></div>
               <div><div class="sub-line">Giờ ra</div><div class="num" style="font-size:20px;font-weight:700">${l&&l.outAt?l.outAt:'—'}</div></div>
+              <div><div class="sub-line">Làm được</div><div class="num" style="font-size:20px;font-weight:700">${gioPhut(Att.tinh(l).phut)}</div></div>
             </div>
+            <div class="sub-line" style="margin-top:8px">${h(Att.moTaCa())} · nghỉ trưa không tính công</div>
             ${l&&l.net==='outside'?'<div class="pill danger" style="margin-top:10px">Chấm ngoài mạng phòng khám</div>':''}
           </div></div>
           <button class="btn primary" style="width:100%;justify-content:center;padding:14px" onclick="Att.selfCheck('${st.id}')">${next}</button>
@@ -1531,10 +1594,18 @@ const Att = {
   /* Tổng hợp tháng từ nhật ký quét — dùng cho bảng lương */
   summary(staffId, month){
     const logs = (db.attLog||[]).filter(x => x.staffId===staffId && monthOf(x.date)===month);
-    const start = (db.clinic && db.clinic.shiftStart) || '08:00';
-    let days = 0, late = 0, outside = 0;
-    logs.forEach(l => { if (l.inAt) { days++; if (l.inAt > start) late++; if (l.net === 'outside') outside++; } });
-    return {days, late, outside, logs};
+    let days = 0, late = 0, outside = 0, phut = 0, cong = 0, veTrua = 0, som = 0, phutTre = 0;
+    logs.forEach(l => {
+      if (!l.inAt) return;
+      days++;
+      if (l.net === 'outside') outside++;
+      const t = Att.tinh(l);
+      phut += t.phut; cong += t.cong;
+      if (t.tre) { late++; phutTre += t.tre; }
+      if (t.som) som++;
+      if (t.veTrua) veTrua++;
+    });
+    return {days, late, outside, logs, phut, cong, veTrua, som, phutTre};
   },
   /* ---------- Link mời: nhân viên bấm vào là máy tự cấu hình ---------- */
   inviteUrl(){
@@ -1905,8 +1976,15 @@ create policy p_rec   on records    for all to authenticated using (true) with c
                <button type="button" class="btn small" onclick="Att.logout()">Đăng xuất</button>`
             : `<button type="button" class="btn small primary" onclick="Att.loginForm()">Đăng nhập</button>`) : ''}
         </div></div>
-      <div class="f"><label>Giờ vào ca chuẩn</label><input type="time" name="shiftStart" value="${h(db.clinic.shiftStart||'08:00')}"></div>
-      <div class="f"><label>Địa chỉ mạng phòng khám</label><input name="wifiIp" value="${h(db.clinic.wifiIp||'')}" placeholder="chưa đặt"></div>
+      <div class="f"><label>Ca sáng — vào</label><input type="time" name="caSangVao" value="${h(db.clinic.caSangVao||'07:00')}"></div>
+      <div class="f"><label>Ca sáng — ra</label><input type="time" name="caSangRa" value="${h(db.clinic.caSangRa||'12:00')}"></div>
+      <div class="f"><label>Ca chiều — vào</label><input type="time" name="caChieuVao" value="${h(db.clinic.caChieuVao||'13:00')}"></div>
+      <div class="f"><label>Ca chiều — ra</label><input type="time" name="caChieuRa" value="${h(db.clinic.caChieuRa||'17:00')}"></div>
+      <div class="f"><label>Cho phép trễ (phút)</label><input type="number" name="treCho" min="0" max="60" value="${h(String(db.clinic.treCho ?? 5))}"></div>
+      <div class="note-block full">Khoảng <b>giữa hai ca là giờ nghỉ trưa, không tính công</b>. Nhờ vậy người ở lại buổi trưa
+        và người về rồi quay lại đều ra cùng số giờ — không ai phải chấm công bốn lần một ngày.
+        Ai về trưa rồi nghỉ luôn thì phần mềm chỉ tính công buổi sáng.</div>
+      <div class="f full"><label>Địa chỉ mạng phòng khám</label><input name="wifiIp" value="${h(db.clinic.wifiIp||'')}" placeholder="chưa đặt"></div>
       <div class="note-block full">Trình duyệt không đọc được tên wifi, nên phần mềm đối chiếu <b>địa chỉ mạng (IP)</b> của phòng khám thay thế: đứng ở phòng khám dùng wifi phòng khám thì IP trùng, chấm công ở nhà thì bị đánh dấu <b>ngoài mạng phòng khám</b>.
         Bấm nút bên dưới khi đang ngồi tại phòng khám và <b>đã nối wifi phòng khám</b> để ghi nhận.</div>
       <div class="form-actions full">
@@ -1918,7 +1996,13 @@ create policy p_rec   on records    for all to authenticated using (true) with c
   settingsSave(ev){
     ev.preventDefault();
     const d = Object.fromEntries(new FormData(ev.target).entries());
-    db.clinic.shiftStart = d.shiftStart; db.clinic.wifiIp = (d.wifiIp||'').trim();
+    /* Kiểm tra trước khi ghi, kẻo giờ sai lọt vào rồi tính công lệch */
+    const g = ['caSangVao','caSangRa','caChieuVao','caChieuRa'].map(k => hm2m(d[k]));
+    if (g.some(x => x == null)) { App.toast('Chưa nhập đủ bốn mốc giờ của hai ca'); return; }
+    if (g[1] <= g[0] || g[3] <= g[2] || g[2] < g[1]) { App.toast('Giờ ca chưa hợp lý — ca chiều phải bắt đầu sau khi ca sáng kết thúc'); return; }
+    ['caSangVao','caSangRa','caChieuVao','caChieuRa'].forEach(k => db.clinic[k] = d[k]);
+    db.clinic.treCho = Math.max(0, +d.treCho || 0);
+    db.clinic.wifiIp = (d.wifiIp||'').trim();
     save(); App.closeModal(); App.render(); App.toast('Đã lưu cài đặt ✓');
   },
 };
@@ -2028,9 +2112,10 @@ SCREENS.hr = () => {
       ${Perm.only('caidat', `<button class="btn small" onclick="Att.accountsPanel()">Tài khoản truy cập</button>`)}
       <button class="btn small" onclick="HR.staffForm()">${IC.plus} Thêm nhân viên</button></div>
     <div class="tbl-wrap"><table style="min-width:900px">
-      <thead><tr><th>Nhân viên</th><th class="r">Lương cứng</th><th class="r">Hoa hồng</th><th class="r">Thưởng</th><th class="r">Phạt</th><th class="r">BHXH (10,5%)</th><th class="r">Thực lãnh</th><th></th></tr></thead>
+      <thead><tr><th>Nhân viên</th><th class="r">Công</th><th class="r">Lương cứng</th><th class="r">Hoa hồng</th><th class="r">Thưởng</th><th class="r">Phạt</th><th class="r">BHXH (10,5%)</th><th class="r">Thực lãnh</th><th></th></tr></thead>
       <tbody>${payRows.map(({st,com,bon,pen,bhxh,net}) => `<tr>
         <td><span class="cell-who"><span class="avatar">${h(st.name.split(' ').slice(-1)[0].slice(0,2))}</span><span><b>${h(st.name)}</b><span>${h(st.role)}</span></span></span></td>
+        <td class="r num">${(() => { const s = Att.summary(st.id, M); return s.cong ? s.cong.toFixed(2).replace(/\.?0+$/,'') + '<br><span class="sub-line">' + gioPhut(s.phut) + '</span>' : '—'; })()}</td>
         <td class="r num">${money(st.base)}</td><td class="r num">${money(com)}</td>
         <td class="r num" style="color:var(--ok)">${bon?'+'+money(bon):'0'}</td>
         <td class="r num" style="color:var(--danger)">${pen?'−'+money(pen):'0'}</td>
@@ -2040,25 +2125,36 @@ SCREENS.hr = () => {
     <div class="note-block" style="margin-top:12px">BHXH khấu trừ <b>10,5%</b> lương đóng bảo hiểm của người lao động; doanh nghiệp đóng thêm <b>21,5%</b> hạch toán chi phí.</div>`;
 
   if (tab === 'attendance') {
-    const T = todayISO(), start = db.clinic.shiftStart || '08:00';
+    const T = todayISO();
     const netPill = n => n==='clinic' ? '<span class="pill ok">Tại phòng khám</span>'
       : n==='outside' ? '<span class="pill danger">Ngoài mạng phòng khám</span>' : '<span class="pill mutedp">Chưa rõ mạng</span>';
     const today = db.staff.map(st => {
-      const l = Att.logOf(st.id, T);
+      const l = Att.logOf(st.id, T), t = Att.tinh(l);
+      const nhan = !l || !l.inAt ? '' : [
+        t.tre    ? `<span class="pill warn">trễ ${gioPhut(t.tre)}</span>` : '',
+        t.veTrua ? `<span class="pill mutedp">về trưa</span>` : '',
+        t.som    ? `<span class="pill warn">về sớm ${gioPhut(t.som)}</span>` : '',
+        t.dangLam? `<span class="pill info">đang làm</span>` : '',
+      ].filter(Boolean).join(' ');
       return `<tr><td><b>${h(st.name)}</b><br><span class="sub-line">${h(st.role)}</span></td>
-        <td class="num">${l&&l.inAt ? (l.inAt + (l.inAt>start?' <span class="pill warn">trễ</span>':'')) : '—'}</td>
-        <td class="num">${l&&l.outAt ? l.outAt : '—'}</td>
-        <td>${l ? netPill(l.net) : '<span class="sub-line">chưa chấm công</span>'}</td>
+        <td class="num">${l&&l.inAt ? h(l.inAt) : '—'}</td>
+        <td class="num">${l&&l.outAt ? h(l.outAt) : '—'}</td>
+        <td class="num">${l&&l.inAt ? gioPhut(t.phut) : '—'}<br><span class="sub-line">${t.buoi.join(' + ')||''}</span></td>
+        <td>${l ? (netPill(l.net) + (nhan ? '<br>' + nhan : '')) : '<span class="sub-line">chưa chấm công</span>'}</td>
         <td style="white-space:nowrap">
           <button class="btn small" onclick="Att.showCard('${st.id}')">Mã QR</button>
           <button class="btn small" onclick="Att.editForm('${st.id}','${T}')">Sửa</button></td></tr>`;
     }).join('');
     const sum = db.staff.map(st => {
       const s = Att.summary(st.id, M);
-      return `<tr><td><b>${h(st.name)}</b></td><td class="r num">${s.days}</td>
-        <td class="r num" ${s.late?'style="color:var(--warn);font-weight:700"':''}>${s.late}</td>
-        <td class="r num" ${s.outside?'style="color:var(--danger);font-weight:700"':''}>${s.outside}</td>
-        <td>${s.late>=2?'<span class="pill warn">Trễ nhiều</span>':s.days?'<span class="pill ok">Bình thường</span>':'<span class="pill mutedp">Chưa có dữ liệu</span>'}</td></tr>`;
+      return `<tr><td><b>${h(st.name)}</b></td>
+        <td class="r num" style="font-weight:700">${s.cong ? s.cong.toFixed(2).replace(/\.?0+$/,'') : '0'}</td>
+        <td class="r num">${gioPhut(s.phut)}</td>
+        <td class="r num">${s.days}</td>
+        <td class="r num" ${s.late?'style="color:var(--warn);font-weight:700"':''}>${s.late?s.late+' ('+gioPhut(s.phutTre)+')':'0'}</td>
+        <td class="r num" ${s.som?'style="color:var(--warn)"':''}>${s.som}</td>
+        <td class="r num">${s.veTrua}</td>
+        <td class="r num" ${s.outside?'style="color:var(--danger);font-weight:700"':''}>${s.outside}</td></tr>`;
     }).join('');
     body = `
     <div class="page-head" style="margin-bottom:12px">
@@ -2068,16 +2164,19 @@ SCREENS.hr = () => {
       ${Perm.only('caidat', `<button class="btn" onclick="Att.clinicQR()">Mã QR phòng khám</button>
       <button class="btn" onclick="Att.settingsForm()">Cài đặt</button>`)}
       <span class="spacer"></span>
-      <span class="sub-line">Giờ vào ca chuẩn ${h(start)}${db.clinic.wifiIp?' · mạng phòng khám đã đặt':' · chưa đặt mạng phòng khám'}</span>
+      <span class="sub-line">${h(Att.moTaCa())}${db.clinic.wifiIp?' · mạng phòng khám đã đặt':' · chưa đặt mạng phòng khám'}</span>
     </div>
     <div class="card mb"><div class="card-h"><h2>Hôm nay — ${fmtD(T)}</h2><span class="hint">nhân viên quét mã QR ở quầy để ghi giờ vào / giờ ra</span></div>
-      <div class="tbl-wrap"><table style="min-width:640px">
-        <thead><tr><th>Nhân viên</th><th>Giờ vào</th><th>Giờ ra</th><th>Mạng khi chấm công</th><th></th></tr></thead>
+      <div class="tbl-wrap"><table style="min-width:780px">
+        <thead><tr><th>Nhân viên</th><th>Giờ vào</th><th>Giờ ra</th><th>Làm được</th><th>Ghi nhận</th><th></th></tr></thead>
         <tbody>${today}</tbody></table></div></div>
     <div class="card"><div class="card-h"><h2>Tổng hợp tháng ${M.slice(5)}/${M.slice(0,4)}</h2><span class="hint">tự cộng từ nhật ký quét mã</span></div>
-      <div class="tbl-wrap"><table style="min-width:560px">
-        <thead><tr><th>Nhân viên</th><th class="r">Số công</th><th class="r">Đi trễ</th><th class="r">Chấm ngoài phòng khám</th><th></th></tr></thead>
-        <tbody>${sum}</tbody></table></div></div>`;
+      <div class="tbl-wrap"><table style="min-width:760px">
+        <thead><tr><th>Nhân viên</th><th class="r">Số công</th><th class="r">Tổng giờ</th><th class="r">Ngày có mặt</th><th class="r">Đi trễ</th><th class="r">Về sớm</th><th class="r">Về trưa</th><th class="r">Chấm ngoài PK</th></tr></thead>
+        <tbody>${sum}</tbody></table></div></div>
+    <div class="note-block" style="margin-top:12px">Một ngày đủ ca = <b>${gioPhut(Att.phutChuan())}</b> (${h(Att.moTaCa())}) = <b>1 công</b>.
+      Giờ nghỉ trưa không tính công, nên <b>ai ở lại buổi trưa và ai về rồi quay lại đều ra cùng số giờ</b> — chỉ cần chấm vào lúc đến và chấm ra lúc về hẳn.
+      Ai về trưa không quay lại thì chỉ được công buổi sáng.</div>`;
   }
 
   if (tab === 'commission') body = `
