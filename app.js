@@ -1541,7 +1541,6 @@ SCREENS.treatment = () => {
   <div class="page-head"><h1>Điều trị & thanh toán</h1><span class="spacer"></span>
     <span style="min-width:230px;flex:1;max-width:320px">${Combo.html('cbTreatCust','treatCust', custLabel(c), custOptions(),
       'Đổi khách: gõ tên, SĐT hoặc mã KH', Treat.onCustPick)}</span>
-    <button class="btn" onclick="Cust.moHoSo('${c.id}')">← Hồ sơ khách hàng</button>
     <button class="btn primary" onclick="Treat.payForm()">Thu tiền</button></div>
   <div class="card mb"><div class="card-b" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
     <div style="flex:1;min-width:200px">
