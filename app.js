@@ -181,7 +181,11 @@ function load() {
   if (!db || !Array.isArray(db.customers)) db = seed();
   migrate(); save();
 }
-function save() { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+function save() {
+  /* Bảng phân bổ tiền đã thu tính sẵn cho nhanh — dữ liệu đổi thì phải tính lại */
+  if (typeof QT !== 'undefined') QT._thu = null;
+  localStorage.setItem(DB_KEY, JSON.stringify(db));
+}
 /* Nâng cấp dữ liệu cũ về một ô địa chỉ duy nhất (số nhà + đường gộp chung) */
 function migrate() {
   /* Trước đây chỉ có một mốc "giờ vào ca". Nay là hai buổi: sáng 7–12, chiều 13–17. */
@@ -213,6 +217,12 @@ function migrate() {
       });
     });
   });
+  /* Thứ tự nhân viên do quản lý tự kéo thả. Phải lưu thành số trên từng người thì
+     các máy khác đồng bộ về mới giữ đúng thứ tự — thứ tự trong mảng không đồng bộ được. */
+  if (Array.isArray(db.staff)) {
+    db.staff.forEach((st, i) => { if (typeof st.thuTu !== 'number') st.thuTu = i; });
+    db.staff.sort((a, b) => a.thuTu - b.thuTu);
+  }
   /* Quy trình công đoạn: lần đầu thì nạp bảng gốc của phòng khám. Đã có rồi thì chỉ
      bổ sung quy trình mới, KHÔNG đè lên tỷ lệ quản lý đã chỉnh. */
   if (!db.quyTrinh) db.quyTrinh = [];
@@ -3535,12 +3545,54 @@ const QT = {
     const r = st && st.model && st.model.cd;
     return (r && r[buoc.b] != null && r[buoc.b] !== '') ? +r[buoc.b] : (buoc.p != null ? +buoc.p : null);
   },
-  /* Tiền công của một lần làm: số tiền cố định thì lấy thẳng, không thì % trên giá đã trừ lab */
-  tienBuoc(t, q, buoc, st){
+  /* Tiền công ĐẦY ĐỦ của một bước, chưa xét khách đã trả tới đâu */
+  tienBuocDay(t, q, buoc, st){
     if (buoc.tien != null) return +buoc.tien || 0;
     const goc = Math.max(0, (+t.price || 0) - (q && q.truLab ? (+t.tienLab || 0) : 0));
     const p = this.pctCua(st, buoc);
     return p == null ? 0 : goc * p / 100;
+  },
+  /* Tiền công THỰC HƯỞNG = tiền đầy đủ × phần khách đã thanh toán cho hạng mục đó.
+     Khách trả 60% thì mọi người trong ca cùng nhận 60%, trả nốt thì nhận nốt. */
+  tienBuoc(t, q, buoc, st){
+    return this.tienBuocDay(t, q, buoc, st) * this.tyLeThu(t);
+  },
+
+  /* ---------- Khách đã trả tới đâu cho từng hạng mục ----------
+     Phiếu thu ghi theo khách chứ không theo từng hạng mục, nên phải rải tiền ra:
+     phiếu nào có ghi nhóm dịch vụ thì rải vào hạng mục cùng nhóm trước, hết mới rải
+     sang hạng mục khác; trong mỗi nhóm thì hạng mục làm trước được trả trước.
+     Phiếu thu chuyển từ sổ cũ (old) không rải, vì đó là số dư đầu kỳ. */
+  _thu: null,
+  phanBoThu(){
+    if (this._thu) return this._thu;
+    const m = {}, theoKhach = {};
+    db.treatments.forEach(t => {
+      if (t.status === 'Báo giá') return;
+      (theoKhach[t.customerId] = theoKhach[t.customerId] || []).push(t);
+      m[t.id] = 0;
+    });
+    const sxNgay = (a, b) => (a.date || '') < (b.date || '') ? -1 : 1;
+    Object.keys(theoKhach).forEach(cid => {
+      const muc = theoKhach[cid].sort(sxNgay);
+      db.receipts.filter(r => r.customerId === cid && !r.old).sort(sxNgay).forEach(r => {
+        let con = +r.amount || 0;
+        const rai = ds => ds.forEach(t => {
+          if (con <= 0) return;
+          const lay = Math.min(con, Math.max(0, (+t.price || 0) - m[t.id]));
+          m[t.id] += lay; con -= lay;
+        });
+        if (r.group) rai(muc.filter(t => t.group === r.group));
+        rai(muc);
+      });
+    });
+    this._thu = m;
+    return m;
+  },
+  daThu(t){ return t ? (this.phanBoThu()[t.id] || 0) : 0; },
+  tyLeThu(t){
+    if (!t || !(+t.price)) return 1;          /* giá 0 thì coi như không còn gì để thu */
+    return Math.min(1, this.daThu(t) / (+t.price));
   },
 
   /* Các lần làm công đoạn trong tháng, kèm tiền — dùng cho bảng lương và bảng hoa hồng */
@@ -3576,10 +3628,12 @@ const QT = {
       return;
     }
     const daLam = t.cd || [];
+    const ty = this.tyLeThu(t), thu = this.daThu(t);
     const rows = q.buoc.map(b => {
       const x = daLam.find(y => y.b === b.b) || {};
       const st = staffById(x.s);
-      const tien = x.s ? this.tienBuoc(t, q, b, st) : this.tienBuoc(t, q, b, null);
+      const day = this.tienBuocDay(t, q, b, st);
+      const thuc = day * ty;
       return `<tr>
         <td><label style="display:flex;gap:8px;align-items:center;cursor:pointer">
           <input type="checkbox" name="lam" value="${b.b}"${x.s?' checked':''}> <b>${h(b.t)}</b></label>
@@ -3588,19 +3642,23 @@ const QT = {
           <option value="">— chọn người làm —</option>
           ${nv.map(s=>`<option value="${s.id}"${x.s===s.id?' selected':''}>${h(s.name)}</option>`).join('')}</select></td>
         <td><input type="date" name="ngay_${b.b}" value="${h(x.d||todayISO())}"></td>
-        <td class="r num">${money(tien)}</td></tr>`;
+        <td class="r num">${money(day)}</td>
+        <td class="r num" style="font-weight:600">${money(thuc)}</td></tr>`;
     }).join('');
     const goc = Math.max(0, (+t.price||0) - (q.truLab ? (+t.tienLab||0) : 0));
     App.modal('Công đoạn — ' + t.name + (t.tooth ? ' (R' + t.tooth + ')' : ''), `
     <form class="form-grid" onsubmit="QT.ghiSave(event,'${tid}')">
       <div class="note-block full">Khách: <b>${h(c?c.name:'')}</b> · Quy trình: <b>${h(q.ten)}</b> ·
         Giá dịch vụ: <b>${money(t.price)}</b>${q.truLab?` · Tiền lab: <b>${money(t.tienLab||0)}</b> → tính % trên <b>${money(goc)}</b>`:''}</div>
+      <div class="note-block full" style="border-color:var(--accent)">Khách đã thanh toán cho hạng mục này:
+        <b>${money(thu)} / ${money(t.price)}</b> = <b>${Math.round(ty*100)}%</b>.
+        Tiền công mọi người nhận <b>đúng bằng phần khách đã trả</b>; khách trả nốt thì phần còn lại tự cộng vào.</div>
       ${q.truLab?`<div class="f full"><label>Tiền lab (trừ trước khi tính %)</label>
         ${Tien.o('tienLab', t.tienLab||0)}
         ${q.labGY.length?`<div class="combo-hint">Mức thường dùng: ${q.labGY.map(([n,v])=>
           `<button type="button" class="link-btn" onclick="this.form.tienLab.value=Tien.dinh('${v}')">${h(n)} ${money(v)}</button>`).join(' · ')}</div>`:''}</div>`:''}
       <div class="full"><div class="tbl-wrap"><table style="min-width:560px">
-        <thead><tr><th>Công đoạn</th><th>Người làm</th><th>Ngày</th><th class="r">Tiền công</th></tr></thead>
+        <thead><tr><th>Công đoạn</th><th>Người làm</th><th>Ngày</th><th class="r">Đủ 100%</th><th class="r">Thực nhận</th></tr></thead>
         <tbody>${rows}</tbody></table></div></div>
       <div class="f full"><label>Đổi quy trình áp dụng</label>
         <select name="qtId">${this.ds().map(x=>`<option value="${x.id}"${x.id===q.id?' selected':''}>${h(x.ten)}</option>`).join('')}</select></div>
@@ -3743,7 +3801,7 @@ const QT = {
     const ds = this.congThang(month);
     if (!ds.length) return '<div class="sub-line">Chưa ghi công đoạn nào trong tháng này. Vào tab Điều trị, bấm một hạng mục rồi chọn <b>Công đoạn</b>.</div>';
     return `<div class="tbl-wrap"><table style="min-width:720px">
-      <thead><tr><th>Ngày</th><th>Người làm</th><th>Khách · hạng mục</th><th>Công đoạn</th><th class="r">Tỷ lệ</th><th class="r">Tiền công</th></tr></thead>
+      <thead><tr><th>Ngày</th><th>Người làm</th><th>Khách · hạng mục</th><th>Công đoạn</th><th class="r">Tỷ lệ</th><th class="r">Khách đã trả</th><th class="r">Tiền công</th></tr></thead>
       <tbody>${ds.map(x => {
         const st = staffById(x.staffId), c = custById(x.t.customerId);
         const p = this.pctCua(st, x.buoc);
@@ -3753,6 +3811,7 @@ const QT = {
           <td>${h(c?c.name:'?')}<br><span class="sub-line">${h(x.t.name)}${x.t.tooth?' — R'+h(x.t.tooth):''}</span></td>
           <td>${h(x.buoc.t)}<br><span class="sub-line">${h(x.q.ten)}</span></td>
           <td class="r num">${x.buoc.tien!=null?'theo lần':p+'%'}${rieng?' <span class="pill info">riêng</span>':''}</td>
+          <td class="r num">${Math.round(this.tyLeThu(x.t)*100)}%</td>
           <td class="r num" style="font-weight:600">${money(x.tien)}</td></tr>`;
       }).join('')}</tbody></table></div>`;
   },
@@ -3779,6 +3838,58 @@ const HR = {
   revenueOf(st, month){ return db.receipts.filter(r => monthOf(r.date)===month && r.doctorId===st.id).reduce((s,r)=>s+r.amount,0); },
   bonusOf(stId, month){ return db.bonuses.filter(b=>b.staffId===stId && monthOf(b.date)===month && b.amount>0).reduce((s,b)=>s+b.amount,0); },
   penaltyOf(stId, month){ return -db.bonuses.filter(b=>b.staffId===stId && monthOf(b.date)===month && b.amount<0).reduce((s,b)=>s+b.amount,0); },
+  /* ---------- Kéo thả đổi thứ tự nhân viên trong bảng lương ----------
+     Điện thoại không dùng được kéo thả của trình duyệt nên có thêm hai nút mũi tên. */
+  _keo: null,
+  keoBatDau(ev){
+    const tr = ev.target.closest('tr');
+    this._keo = tr.dataset.id;
+    tr.classList.add('dang-keo');
+    ev.dataTransfer.effectAllowed = 'move';
+    try { ev.dataTransfer.setData('text/plain', this._keo); } catch(e){}
+  },
+  keoQua(ev){
+    if (!this._keo) return;
+    ev.preventDefault();
+    const tr = ev.target.closest('tr');
+    if (!tr || tr.dataset.id === this._keo) return;
+    document.querySelectorAll('#bangLuong tr').forEach(x => x.classList.remove('tha-tren','tha-duoi'));
+    const r = tr.getBoundingClientRect();
+    tr.classList.add(ev.clientY < r.top + r.height / 2 ? 'tha-tren' : 'tha-duoi');
+  },
+  keoTha(ev){
+    ev.preventDefault();
+    const tr = ev.target.closest('tr');
+    if (!tr || !this._keo || tr.dataset.id === this._keo) return;
+    const r = tr.getBoundingClientRect();
+    this.chuyen(this._keo, tr.dataset.id, ev.clientY < r.top + r.height / 2);
+  },
+  keoXong(){
+    this._keo = null;
+    document.querySelectorAll('#bangLuong tr').forEach(x => x.classList.remove('dang-keo','tha-tren','tha-duoi'));
+  },
+  /* Rút người ra rồi chèn lại trước/sau người kia, xong đánh số lại từ đầu */
+  chuyen(id, moc, truoc){
+    const i = db.staff.findIndex(x => x.id === id);
+    if (i < 0) return;
+    const [st] = db.staff.splice(i, 1);
+    let j = db.staff.findIndex(x => x.id === moc);
+    if (j < 0) j = db.staff.length; else if (!truoc) j++;
+    db.staff.splice(j, 0, st);
+    this.danhSoLai();
+  },
+  doiCho(id, huong){
+    const i = db.staff.findIndex(x => x.id === id), j = i + huong;
+    if (i < 0 || j < 0 || j >= db.staff.length) return;
+    const t = db.staff[i]; db.staff[i] = db.staff[j]; db.staff[j] = t;
+    this.danhSoLai();
+  },
+  danhSoLai(){
+    const now = Date.now();
+    db.staff.forEach((x, k) => { if (x.thuTu !== k) { x.thuTu = k; x._up = now; } });
+    save(); App.render();
+  },
+
   /* Danh sách nhân viên để sửa tên, chức danh, quyền — mở được từ cả hai mục Nhân sự */
   dsNhanVien(){
     if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới sửa được hồ sơ nhân viên'); return; }
@@ -3890,8 +4001,15 @@ SCREENS.hr = () => {
       <button class="btn small" onclick="HR.staffForm()">${IC.plus} Thêm nhân viên</button></div>
     <div class="tbl-wrap"><table style="min-width:900px">
       <thead><tr><th>Nhân viên</th><th class="r">Công</th><th class="r">Lương cứng</th><th class="r">Hoa hồng</th><th class="r">Thưởng</th><th class="r">Phạt</th><th class="r">BHXH (10,5%)</th><th class="r">Thực lãnh</th><th></th></tr></thead>
-      <tbody>${payRows.map(({st,com,bon,pen,bhxh,net}) => `<tr>
-        <td><span class="cell-who"><span class="avatar">${h(st.name.split(' ').slice(-1)[0].slice(0,2))}</span><span><b>${h(st.name)}</b><span>${h(st.role)}</span></span></span></td>
+      <tbody id="bangLuong">${payRows.map(({st,com,bon,pen,bhxh,net}, i) => `<tr draggable="true" data-id="${st.id}"
+        ondragstart="HR.keoBatDau(event)" ondragover="HR.keoQua(event)" ondrop="HR.keoTha(event)" ondragend="HR.keoXong(event)">
+        <td><span class="cell-who"><span class="keo-tay" title="Kéo để đổi thứ tự">⋮⋮</span>
+          <span class="avatar">${h(st.name.split(' ').slice(-1)[0].slice(0,2))}</span>
+          <span><b>${h(st.name)}</b><span>${h(st.role)}</span></span>
+          <span class="keo-nut">
+            <button class="btn small" title="Lên" ${i===0?'disabled':''} onclick="HR.doiCho('${st.id}',-1)">↑</button>
+            <button class="btn small" title="Xuống" ${i===payRows.length-1?'disabled':''} onclick="HR.doiCho('${st.id}',1)">↓</button>
+          </span></span></td>
         <td class="r num">${(() => { const s = Att.summary(st.id, M); return s.cong ? s.cong.toFixed(2).replace(/\.?0+$/,'') + '<br><span class="sub-line">' + gioPhut(s.phut) + '</span>' : '—'; })()}</td>
         <td class="r num">${money(st.base)}</td><td class="r num">${money(com)}</td>
         <td class="r num" style="color:var(--ok)">${bon?'+'+money(bon):'0'}</td>
@@ -3899,6 +4017,8 @@ SCREENS.hr = () => {
         <td class="r num" style="color:var(--danger)">−${money(bhxh)}</td>
         <td class="r num" style="font-weight:700">${money(net)}</td>
         <td><button class="btn small" onclick="HR.staffForm('${st.id}')">Sửa</button></td></tr>`).join('')}</tbody></table></div></div>
+    <div class="note-block" style="margin-top:12px">Kéo dấu <b>⋮⋮</b> để đổi thứ tự nhân viên trong bảng —
+      trên điện thoại thì dùng hai nút <b>↑ ↓</b>. Thứ tự này đồng bộ sang mọi máy.</div>
     <div class="note-block" style="margin-top:12px">BHXH khấu trừ <b>10,5%</b> lương đóng bảo hiểm của người lao động; doanh nghiệp đóng thêm <b>21,5%</b> hạch toán chi phí.</div>`;
 
   if (tab === 'attendance') {
@@ -3963,6 +4083,8 @@ SCREENS.hr = () => {
       <span class="spacer"></span></div>
     <div class="note-block mb">Hoa hồng tính theo <b>công đoạn đã làm</b>: ai làm bước nào hưởng bước đó,
       nên một ca chia được cho nhiều người. Phục hình thì <b>trừ tiền lab rồi mới tính %</b>.
+      Tiền công <b>tính theo mức khách đã thanh toán</b> cho hạng mục đó: khách trả 60% thì cả ca nhận 60%,
+      trả nốt thì phần còn lại tự cộng vào tháng thu tiền.
       Ghi công đoạn ở tab <b>Điều trị</b> → cột <b>Công đoạn</b> của từng hạng mục.</div>
     <div class="card mb"><div class="card-h"><h2>Tổng hoa hồng tháng ${M.slice(5)}/${M.slice(0,4)}</h2></div>
     <div class="tbl-wrap"><table>
