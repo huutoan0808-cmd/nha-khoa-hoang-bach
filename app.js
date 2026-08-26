@@ -192,9 +192,14 @@ const App = {
     this.cur = id; this.closeSheet(); this.render(); window.scrollTo({top:0});
   },
   render(){
-    /* Máy chưa nối vào phòng khám, hoặc đã nối nhưng chưa đăng nhập → màn hình chào */
-    const chuaSanSang = (!Cloud.configured() || !Cloud.loggedIn())
-      && !App.state.skipWelcome && !db.customers.length && location.hash.slice(0,3) !== '#cc';
+    /* Máy đã nối vào phòng khám thì BẮT BUỘC đăng nhập mới xem được dữ liệu.
+       Trước đây còn xét thêm !db.customers.length, nên máy nào đã có sẵn dữ liệu thì
+       đăng xuất xong vẫn vào thẳng app — đó là lỗ hổng, nay bỏ hẳn điều kiện đó.
+       Máy chưa nối (dùng riêng, không có đám mây) thì vẫn cho dùng như cũ. */
+    const quaQR = location.hash.slice(0,3) === '#cc';
+    const chuaSanSang = !quaQR && (Cloud.configured()
+      ? !Cloud.loggedIn()
+      : (!App.state.skipWelcome && !db.customers.length));
     if (chuaSanSang) {
       document.querySelector('.app').classList.add('solo');
       document.querySelector('.sidebar').style.display = 'none';
@@ -330,12 +335,17 @@ const App = {
   },
 
   async doLogout(){
-    if (!confirm('Đăng xuất khỏi máy này?')) return;
+    if (!confirm('Đăng xuất khỏi máy này?\n\nDữ liệu sẽ được đẩy lên đám mây rồi xóa khỏi máy này, để người khác cầm máy không xem được. Lần sau đăng nhập sẽ tự tải về lại.')) return;
+    App.closeModal();
     App.toast('Đang đẩy nốt dữ liệu lên…');
-    try { await Sync.run(true); } catch(e){}
+    let xong = false;
+    try { xong = !!(await Sync.run(true)); } catch(e){ xong = false; }
+    /* Đẩy không được (mất mạng) thì GIỮ dữ liệu trên máy, đừng xóa kẻo mất phần vừa nhập */
+    if (!xong && !confirm('Chưa đẩy được dữ liệu lên đám mây — có thể do mất mạng.\n\nVẫn đăng xuất? Phần vừa nhập sẽ được giữ lại trên máy, lần sau đăng nhập vào sẽ đẩy lên tiếp.')) return;
     Cloud.logout();
-    App.closeModal(); App.render();
-    App.toast('Đã đăng xuất');
+    if (xong) { try { localStorage.removeItem(DB_KEY); } catch(e){} }
+    /* Nạp lại trang, bỏ luôn phần #… trên địa chỉ để ra thẳng ô đăng nhập */
+    location.replace(location.pathname + location.search);
   },
 
   async syncNow(){
@@ -382,8 +392,10 @@ const guessRole = txt => {
   return 'letan';
 };
 const Perm = {
-  /* Chưa nối đám mây thì đây là máy riêng của chủ phòng khám — mở toàn quyền */
-  offline(){ return !Cloud.configured() || !Cloud.loggedIn(); },
+  /* Chưa nối đám mây thì đây là máy riêng, dữ liệu chỉ nằm ở máy đó — mở toàn quyền.
+     Máy ĐÃ nối phòng khám mà chưa đăng nhập thì KHÔNG có quyền gì: trước đây chỗ này
+     cũng trả về toàn quyền, nên đăng xuất xong lại thành quản lý. */
+  offline(){ return !Cloud.configured(); },
   me(){
     const email = (Cloud.who() || '').toLowerCase();
     if (!email) return null;
@@ -1326,7 +1338,7 @@ const Att = {
       if (!st && locked) {
         body = `<div class="note-block" style="background:var(--danger-soft);color:var(--danger)">
           Tài khoản của <b>${h(locked.name)}</b> đã bị khóa truy cập. Liên hệ quản lý nếu đây là nhầm lẫn.</div>
-          <div class="form-actions"><button class="btn" onclick="Att.logout();App.render()">Đăng xuất</button></div>`;
+          <div class="form-actions"><button class="btn" onclick="Att.logout()">Đăng xuất</button></div>`;
       } else if (!st) {
         const ds = db.staff.map(x => (x.email || '(chưa gắn email)') + ' — ' + x.name).join('<br>');
         body = `<div class="note-block" style="background:var(--danger-soft);color:var(--danger)">
@@ -1341,7 +1353,7 @@ const Att = {
           <div class="form-actions">
             <button class="btn primary" onclick="Att.reloadStaff()">Tải lại</button>
             <span class="spacer"></span>
-            <button class="btn" onclick="Att.logout();App.render()">Đăng xuất</button></div>`;
+            <button class="btn" onclick="Att.logout()">Đăng xuất</button></div>`;
       } else {
         const l = this.logOf(st.id, T);
         const next = !l ? 'Chấm công vào ca' : (!l.outAt ? 'Chấm công ra ca' : 'Cập nhật giờ ra');
@@ -1360,7 +1372,7 @@ const Att = {
           <div class="form-actions" style="margin-top:14px">
             <button class="btn small" onclick="Att.sync()">Tải lại</button>
             <span class="spacer"></span>
-            <button class="btn small" onclick="Att.logout();App.render()">Đăng xuất</button>
+            <button class="btn small" onclick="Att.logout()">Đăng xuất</button>
             <button class="btn small" onclick="location.hash='';location.reload()">Vào phần mềm</button></div>`;
       }
     }
@@ -1607,8 +1619,9 @@ const Att = {
       <div class="card"><div class="card-b">
         <div class="note-block mb">Máy này đã nối vào phòng khám. Đăng nhập bằng tài khoản quản lý cấp cho bạn.</div>
         <div class="form-actions" style="justify-content:flex-start">
-          <button class="btn primary" onclick="Att.loginForm()">Đăng nhập</button>
-          <button class="btn" onclick="App.state.skipWelcome=1;App.render()">Xem sau</button></div>
+          <button class="btn primary" onclick="Att.loginForm()">Đăng nhập</button></div>
+        <div class="combo-hint" style="margin-top:10px">Quên mật khẩu thì nhắn quản lý cấp lại.
+          Không có nút bỏ qua — dữ liệu bệnh nhân chỉ mở khi đã đăng nhập.</div>
       </div></div></div>`;
   },
 
@@ -1838,7 +1851,8 @@ create policy p_rec   on records    for all to authenticated using (true) with c
       App.toast('Xin chào ' + ((Att.myStaff() || {}).name || Cloud.who()));
     } catch(e){ App.toast('Đăng nhập không được: ' + e.message); }
   },
-  logout(){ Cloud.logout(); App.render(); App.toast('Đã đăng xuất'); },
+  /* Mọi nút Đăng xuất đều đi chung một đường: đẩy dữ liệu lên rồi mới thoát */
+  logout(){ App.doLogout(); },
 
   /* Đẩy công lên đám mây rồi lấy về bản mới nhất */
   async sync(){
