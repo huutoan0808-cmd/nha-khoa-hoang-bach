@@ -449,6 +449,7 @@ const App = {
         <div style="margin-top:12px"><span class="pill ${stt.k}">${h(stt.t)}</span></div>
       </div></div>
       <div class="form-actions" style="justify-content:flex-start;flex-wrap:wrap">
+        <button class="btn" onclick="Svc.bang()">Bảng giá dịch vụ</button>
         ${!chuaDangNhap ? `<button class="btn" onclick="App.closeModal();App.syncNow()">Đồng bộ ngay</button>
         <button class="btn" onclick="App.passwordForm()">Đổi mật khẩu</button>` : ''}
         ${Cloud.configured() && !Cloud.loggedIn() ? `<button class="btn primary" onclick="App.closeModal();Att.loginForm()">Đăng nhập</button>` : ''}
@@ -1348,7 +1349,9 @@ const Treat = {
         ${Combo.html('cbService','name', (db.services.find(s=>s.id===t.serviceId)||{}).name || t.name || '',
           db.services.map(s=>({t:s.name, s:s.group+' · '+money(s.price)})),
           'Gõ tên dịch vụ, vd: implant, tram, cao voi', Treat.onServicePick,
-          'Gõ không dấu cũng ra. Dịch vụ mới thì cứ gõ rồi tự điền giá.')}</div>
+          'Gõ không dấu cũng ra. Dịch vụ mới thì cứ gõ rồi tự điền giá.')}
+        <div class="combo-hint">Sửa tên, loại hoặc giá dịch vụ ở
+          <button type="button" class="link-btn" onclick="Svc.bang()">Bảng giá dịch vụ</button>.</div></div>
       <input type="hidden" name="group" value="${h(t.group||'')}">
       <div class="f"><label>Răng / vị trí</label><input name="tooth" value="${h(t.tooth||'')}" placeholder="R36, 2 hàm..."></div>
       <div class="f"><label>Đơn giá (₫)</label>${Tien.o('price', t.price, 'required')}</div>
@@ -1554,7 +1557,7 @@ SCREENS.treatment = () => {
     <div class="card kpi"><div class="k-label">Còn lại</div><div class="k-value num" ${debt?'style="color:var(--danger)"':''}>${money(debt)}</div><div class="k-note">${debt?'nhắc khách theo lịch trả góp':'không còn công nợ'}</div></div>
   </div>
   <div class="card mb"><div class="card-h"><h2>Kế hoạch điều trị — ${h(c.name)}</h2><span class="spacer"></span>
-    <button class="btn small" onclick="Svc.bang()">Bảng giá dịch vụ</button>
+    <button class="btn small" onclick="Svc.bang()">Bảng giá · sửa giá dịch vụ</button>
     <button class="btn small" onclick="Treat.itemForm()">${IC.plus} Thêm hạng mục</button></div>
     <div class="tbl-wrap"><table><thead><tr><th>Hạng mục</th><th>Răng</th><th>Bác sĩ · người phụ</th><th>Trạng thái</th><th class="r">Đơn giá</th></tr></thead><tbody>${itemRows}</tbody></table></div></div>
   <div class="card mb"><div class="card-h"><h2>Quá trình điều trị</h2><span class="hint">bấm vào một dòng để sửa</span><span class="spacer"></span>
@@ -2340,24 +2343,34 @@ const Tooth = {
 const NHOM_DV = ['Phục hình sứ','Phục hình tháo lắp','Trám răng','Nhổ răng','Điều trị tủy',
                  'Implant','Chỉnh nha','Nha chu','Thẩm mỹ','Khác'];
 const Svc = {
-  bang(){
+  bang(q){
+    if (q != null) App.state.svcQ = q;
+    const tim = Combo.norm(App.state.svcQ || '');
     const sua = Perm.can('caidat');
-    const theoNhom = NHOM_DV.map(g => ({g, ds: db.services.filter(s => s.group === g)}))
-      .concat([{g:'(chưa xếp nhóm)', ds: db.services.filter(s => !NHOM_DV.includes(s.group))}])
+    const loc = ds => ds.filter(s => !tim || Combo.norm(s.name).includes(tim) || Combo.norm(s.group||'').includes(tim));
+    const theoNhom = NHOM_DV.map(g => ({g, ds: loc(db.services.filter(s => s.group === g))}))
+      .concat([{g:'(chưa xếp nhóm)', ds: loc(db.services.filter(s => !NHOM_DV.includes(s.group)))}])
       .filter(x => x.ds.length);
+    const chuaGia = db.services.filter(s => !s.price).length;
     const rows = theoNhom.map(({g, ds}) => `
       <tr><td colspan="${sua?3:2}" style="background:var(--surface2);font-weight:700">${h(g)} <span class="sub-line">· ${ds.length} dịch vụ</span></td></tr>
-      ${ds.map(s => `<tr><td>${h(s.name)}</td><td class="r num" style="font-weight:600">${money(s.price)}</td>
-        ${sua?`<td style="white-space:nowrap"><button class="btn small" onclick="Svc.form('${s.id}')">Sửa</button></td>`:''}</tr>`).join('')}`).join('');
+      ${ds.map(s => `<tr${sua?` class="clickable" onclick="Svc.form('${s.id}')"`:''}><td>${h(s.name)}</td>
+        <td class="r num" style="font-weight:600">${s.price ? money(s.price) : '<span class="pill warn">chưa đặt giá</span>'}</td>
+        ${sua?`<td style="white-space:nowrap"><button class="btn small" onclick="event.stopPropagation();Svc.form('${s.id}')">Sửa</button></td>`:''}</tr>`).join('')}`).join('');
     App.modal('Bảng giá dịch vụ', `
       ${sua ? `<div class="form-actions" style="justify-content:flex-start;margin-bottom:10px">
-        <button class="btn primary" onclick="Svc.form()">${IC.plus} Thêm dịch vụ</button></div>`
+        <button class="btn primary" onclick="Svc.form()">${IC.plus} Thêm dịch vụ</button>
+        ${chuaGia?`<span class="pill warn">${chuaGia} dịch vụ chưa đặt giá</span>`:''}</div>`
       : '<div class="note-block mb">Chỉ quản lý mới sửa được bảng giá. Bạn xem để báo giá cho khách.</div>'}
+      <div class="searchbar" style="margin-bottom:10px">${IC.search}<input id="svcQ" placeholder="Tìm tên dịch vụ hoặc nhóm..."
+        value="${h(App.state.svcQ||'')}" autocomplete="off"
+        oninput="Svc.bang(this.value);const i=document.getElementById('svcQ');i.focus();i.setSelectionRange(i.value.length,i.value.length)"></div>
       <div class="tbl-wrap"><table style="min-width:420px">
         <thead><tr><th>Dịch vụ</th><th class="r">Đơn giá</th>${sua?'<th></th>':''}</tr></thead>
-        <tbody>${rows || `<tr><td colspan="3" class="sub-line">Chưa có dịch vụ nào.</td></tr>`}</tbody></table></div>
-      <div class="note-block" style="margin-top:12px">Sửa giá ở đây <b>không làm đổi giá của những hạng mục đã lập trước đó</b> —
-        hồ sơ cũ giữ nguyên giá lúc chốt. Giá mới chỉ áp cho hạng mục lập từ bây giờ.</div>`);
+        <tbody>${rows || `<tr><td colspan="3" class="sub-line">Không tìm thấy dịch vụ nào.</td></tr>`}</tbody></table></div>
+      <div class="note-block" style="margin-top:12px">Bấm vào một dòng để sửa <b>tên, nhóm dịch vụ và giá</b>.
+        Sửa giá ở đây <b>không làm đổi giá của những hạng mục đã lập trước đó</b> — hồ sơ cũ giữ nguyên giá lúc chốt,
+        giá mới chỉ áp cho hạng mục lập từ bây giờ.</div>`);
   },
   form(id){
     if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới sửa được bảng giá'); return; }
