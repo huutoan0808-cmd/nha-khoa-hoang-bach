@@ -210,14 +210,24 @@ td.r,th.r{text-align:right}
 /* Sơ đồ răng */
 .arch{display:flex;gap:4px;justify-content:center;overflow-x:auto;padding:2px}
 .arch .gap-mid{width:12px;flex:none}
-.tooth{flex:none;width:32px;height:42px;border-radius:8px 8px 10px 10px;border:1.5px solid var(--line);background:var(--surface2);display:grid;place-items:center;font-size:10.5px;font-weight:700;color:var(--ink2)}
-.tooth.sel{outline:2px solid var(--accent);outline-offset:1px}
-.tooth.t-filled{background:var(--info-soft);border-color:var(--info);color:var(--info)}
-.tooth.t-rct{background:var(--warn-soft);border-color:var(--warn);color:var(--warn)}
-.tooth.t-caries{background:var(--danger-soft);border-color:var(--danger);color:var(--danger)}
-.tooth.t-implant{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
-.tooth.t-crown{background:var(--accent-soft);border-color:var(--accent-ink);color:var(--accent-ink)}
-.tooth.t-missing{background:transparent;border-style:dashed;color:var(--muted);opacity:.6}
+/* Mỗi răng = ô 5 vùng mặt răng (SVG) + số răng bên dưới. Lớp ký hiệu (mất răng,
+   răng sứ, implant, nội nha) vẽ chồng lên bằng SVG thứ hai đặt tuyệt đối. */
+.tooth{flex:none;width:36px;padding:2px;border-radius:8px;border:1.5px solid transparent;background:none;
+  display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer}
+.tooth:hover{border-color:var(--accent);background:var(--surface2)}
+.tooth.co-van-de .tooth-no{color:var(--danger);font-weight:800}
+.tooth-svg{position:relative;width:32px;height:40px;display:block}
+.tooth-svg svg{position:absolute;inset:0}
+.tooth-svg .tooth-ov{pointer-events:none}
+.tooth-no{font-size:10.5px;font-weight:700;color:var(--ink2);line-height:1}
+.arch-lb{display:flex;justify-content:space-between;max-width:640px;margin:0 auto;font-size:11px;color:var(--muted)}
+/* Ô màu trong phần chú thích cho các ký hiệu không phải màu đặc */
+.legend i.lg-nn{background:var(--warn);border-radius:2px;width:4px;height:12px;margin-right:9px}
+.legend i.lg-kl{background:repeating-linear-gradient(180deg,var(--ink2) 0 2px,transparent 2px 4px);border:1.5px solid var(--ink2)}
+.legend i.lg-ts{background:transparent;border:2px solid var(--accent-ink)}
+.legend i.lg-tl{background:transparent;border:2px dashed var(--warn)}
+.legend i.lg-im{background:repeating-linear-gradient(180deg,var(--accent) 0 2px,transparent 2px 4px)}
+.legend i.lg-mat{background:transparent;border:1.5px dashed var(--muted);position:relative}
 .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--ink2);margin-top:10px}
 .legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:5px;vertical-align:-1px}
 .tooth-info{margin-top:8px;padding:10px 14px;border-radius:8px;background:var(--surface2);font-size:13px;color:var(--ink2);border:1px dashed var(--line)}
