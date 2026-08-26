@@ -213,6 +213,12 @@ function migrate() {
       });
     });
   });
+  /* Quy trình công đoạn: lần đầu thì nạp bảng gốc của phòng khám. Đã có rồi thì chỉ
+     bổ sung quy trình mới, KHÔNG đè lên tỷ lệ quản lý đã chỉnh. */
+  if (!db.quyTrinh) db.quyTrinh = [];
+  QT.MAU.forEach(m => {
+    if (!db.quyTrinh.some(q => q.id === m.id)) db.quyTrinh.push(JSON.parse(JSON.stringify(m)));
+  });
   /* Bổ sung dịch vụ cơ bản còn thiếu, giá 0 để quản lý điền. Món đã có thì bỏ qua,
      không đụng tới giá đang dùng. */
   if (Array.isArray(db.services)) {
@@ -1365,7 +1371,8 @@ const Treat = {
           .map(s=>`<option value="${s.id}"${t.assistantId===s.id?' selected':''}>${h(s.name)}${s.role?' · '+h(s.role):''}</option>`).join('')}</select></div>
       <div class="f"><label>Trạng thái</label><select name="status">${TREAT_STATUS.map(s=>`<option${t.status===s?' selected':''}>${s}</option>`).join('')}</select></div>
       <div class="form-actions full">
-        ${id?`<button type="button" class="btn danger" onclick="Treat.itemDel('${id}')">Xóa</button><span class="spacer"></span>`:''}
+        ${id?`<button type="button" class="btn danger" onclick="Treat.itemDel('${id}')">Xóa</button>
+        <button type="button" class="btn" onclick="QT.ghi('${id}')">Công đoạn & hoa hồng</button><span class="spacer"></span>`:''}
         <button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu</button></div>
     </form>`);
   },
@@ -1513,11 +1520,15 @@ SCREENS.treatment = () => {
   const itemRows = items.map(t => {
     const st = t.status==='Hoàn tất'?'ok':t.status==='Đang điều trị'?'info':t.status==='Chờ điều trị'?'warn':'mutedp';
     const phu = staffById(t.assistantId);
+    const q = QT.cua(t), xong = (t.cd||[]).length;
     return `<tr class="clickable" onclick="Treat.itemForm('${t.id}')"><td><b>${h(t.name)}</b><br><span class="sub-line">${h(t.group)}</span></td>
     <td class="num">${h(t.tooth||'—')}</td>
     <td>${h((staffById(t.doctorId)||{}).name||'—')}${phu?`<br><span class="sub-line">phụ: ${h(phu.name)}</span>`:''}</td>
-    <td><span class="pill ${st}">${t.status}</span></td><td class="r num">${money(t.price)}</td></tr>`;
-  }).join('') || '<tr><td colspan="5" class="sub-line">Chưa có hạng mục — bấm "Thêm hạng mục".</td></tr>';
+    <td><span class="pill ${st}">${t.status}</span></td><td class="r num">${money(t.price)}</td>
+    <td onclick="event.stopPropagation()">${q
+      ? `<button class="btn small" onclick="QT.ghi('${t.id}')">Công đoạn ${xong}/${q.buoc.length}</button>`
+      : '<span class="sub-line">—</span>'}</td></tr>`;
+  }).join('') || '<tr><td colspan="6" class="sub-line">Chưa có hạng mục — bấm "Thêm hạng mục".</td></tr>';
 
   const recRows = recs.map(r => `<tr><td class="num">${fmtD(r.date)}<br><span class="sub-line num">${h(r.no)}</span></td>
     <td>${h(r.desc)}<br><span class="sub-line">${h(r.method)} · ${h(r.group||'')}</span></td>
@@ -1558,7 +1569,7 @@ SCREENS.treatment = () => {
   <div class="card mb"><div class="card-h"><h2>Kế hoạch điều trị — ${h(c.name)}</h2><span class="spacer"></span>
     <button class="btn small" onclick="Svc.bang()">Bảng giá · sửa giá dịch vụ</button>
     <button class="btn small" onclick="Treat.itemForm()">${IC.plus} Thêm hạng mục</button></div>
-    <div class="tbl-wrap"><table><thead><tr><th>Hạng mục</th><th>Răng</th><th>Bác sĩ · người phụ</th><th>Trạng thái</th><th class="r">Đơn giá</th></tr></thead><tbody>${itemRows}</tbody></table></div></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Hạng mục</th><th>Răng</th><th>Bác sĩ · người phụ</th><th>Trạng thái</th><th class="r">Đơn giá</th><th>Công đoạn</th></tr></thead><tbody>${itemRows}</tbody></table></div></div>
   <div class="card mb"><div class="card-h"><h2>Quá trình điều trị</h2><span class="hint">bấm vào một dòng để sửa</span><span class="spacer"></span>
     <button class="btn small" onclick="Cust.visitForm('','${c.id}')">${IC.plus} Thêm diễn biến</button></div>
     <div class="card-b"><div class="timeline">${Cust.timelineHTML(c)}</div></div></div>
@@ -3451,20 +3462,319 @@ create policy p_rec   on records    for all to authenticated using (true) with c
   },
 };
 
+/* ================= Hoa hồng theo công đoạn =================
+   Mỗi loại dịch vụ có một quy trình gồm nhiều công đoạn, mỗi công đoạn ăn một tỷ lệ
+   (hoặc một số tiền cố định). Ai làm công đoạn nào thì hưởng phần đó — nên cùng một ca
+   có thể chia cho nhiều người. Với phục hình thì TRỪ TIỀN LAB trước rồi mới tính %.
+   Tỷ lệ mặc định lấy theo bảng của phòng khám, nhưng đặt riêng cho từng người được. */
+const QT = {
+  /* Bảng gốc của phòng khám. b = mã bước (giữ cố định để không mất dữ liệu khi đổi tên),
+     t = tên, p = phần trăm, tien = số tiền cố định (dùng thay cho %). */
+  MAU: [
+    {id:'qt_su', ten:'Phục hình sứ', nhom:['Phục hình sứ'], truLab:true,
+     labGY:[['Sứ kim loại',180000],['Titan',280000],['Zirconia',600000]],
+     buoc:[
+      {b:'su_tv',   t:'Tư vấn',                          p:10},
+      {b:'su_mai',  t:'Mài cùi',                         p:30},
+      {b:'su_ld',   t:'Lấy dấu + che cùi / làm răng tạm', p:10},
+      {b:'su_thu',  t:'Thử răng / thử sườn',             p:10},
+      {b:'su_gtam', t:'Gắn tạm sứ',                      p:15},
+      {b:'su_gsht', t:'Gắn sứ hoàn tất (GSHT)',          p:15},
+      {b:'su_chinh',t:'Chỉnh ê / đau',                   p:2},
+     ]},
+    {id:'qt_tlban', ten:'Tháo lắp bán hàm', nhom:[], truLab:true, labGY:[],
+     buoc:[
+      {b:'tlb_tv',  t:'Tư vấn',                     p:10},
+      {b:'tlb_ld',  t:'LD + mài chỉnh sơ khởi',     p:25},
+      {b:'tlb_thu', t:'Thử răng / thử khung',       p:20},
+      {b:'tlb_giao',t:'Giao hàm',                   p:25},
+      {b:'tlb_dau', t:'Chỉnh đau',                  p:5},
+     ]},
+    {id:'qt_tltoan', ten:'Tháo lắp toàn hàm', nhom:['Phục hình tháo lắp'], truLab:true,
+     labGY:[['Răng 300k',50000],['Răng 400k',90000],['Răng 500k',120000],['Răng 1.000k',250000]],
+     buoc:[
+      {b:'tlt_tv',   t:'Tư vấn',                        p:10},
+      {b:'tlt_ldsk', t:'LDSK',                          p:10},
+      {b:'tlt_vanh', t:'Chạy vành khít + LD lần 2',     p:25},
+      {b:'tlt_tqt',  t:'Ghi tương quan tâm',            p:10},
+      {b:'tlt_thu',  t:'Thử răng',                      p:10},
+      {b:'tlt_giao', t:'Giao hàm',                      p:10},
+      {b:'tlt_dau',  t:'Chỉnh đau',                     p:5},
+     ]},
+    {id:'qt_noinha', ten:'Nội nha', nhom:['Điều trị tủy'], truLab:false, labGY:[],
+     buoc:[
+      {b:'nn_tv',   t:'Tư vấn',                            p:10},
+      {b:'nn_ssot', t:'SSOT',                              p:50},
+      {b:'nn_thuoc',t:'Thay thuốc',                        p:5},
+      {b:'nn_bot',  t:'BOT',                               p:10},
+      {b:'nn_tram', t:'Trám kết thúc',                     p:10},
+      {b:'nn_tk',   t:'Tái khám chụp phim KT sau 6 tháng', p:5},
+     ]},
+    {id:'qt_tay', ten:'Tẩy trắng', nhom:['Thẩm mỹ'], truLab:false, labGY:[],
+     buoc:[
+      {b:'ty_tv',  t:'Tư vấn',    tien:10000},
+      {b:'ty_lam', t:'Tẩy trắng', tien:50000},
+     ]},
+    {id:'qt_implant', ten:'Implant', nhom:['Implant'], truLab:false, labGY:[],
+     buoc:[{b:'im_tv', t:'Tư vấn', tien:300000}]},
+    {id:'qt_prf', ten:'PRF', nhom:[], truLab:false, labGY:[],
+     buoc:[{b:'prf_tv', t:'Tư vấn', p:5}, {b:'prf_mau', t:'Rút máu', p:5}]},
+  ],
+
+  ds(){ return db.quyTrinh || []; },
+  boId(id){ return this.ds().find(q => q.id === id) || null; },
+  /* Quy trình dùng cho một hạng mục: gán tay thì theo đó, chưa gán thì đoán theo nhóm */
+  cua(t){
+    if (!t) return null;
+    if (t.qtId) return this.boId(t.qtId);
+    return this.ds().find(q => (q.nhom||[]).includes(t.group)) || null;
+  },
+  buocCua(q, b){ return q ? (q.buoc||[]).find(x => x.b === b) : null; },
+  /* Tỷ lệ áp cho một người ở một bước: đặt riêng thì theo riêng, không thì theo bảng gốc */
+  pctCua(st, buoc){
+    const r = st && st.model && st.model.cd;
+    return (r && r[buoc.b] != null && r[buoc.b] !== '') ? +r[buoc.b] : (buoc.p != null ? +buoc.p : null);
+  },
+  /* Tiền công của một lần làm: số tiền cố định thì lấy thẳng, không thì % trên giá đã trừ lab */
+  tienBuoc(t, q, buoc, st){
+    if (buoc.tien != null) return +buoc.tien || 0;
+    const goc = Math.max(0, (+t.price || 0) - (q && q.truLab ? (+t.tienLab || 0) : 0));
+    const p = this.pctCua(st, buoc);
+    return p == null ? 0 : goc * p / 100;
+  },
+
+  /* Các lần làm công đoạn trong tháng, kèm tiền — dùng cho bảng lương và bảng hoa hồng */
+  congThang(month, staffId){
+    const ra = [];
+    db.treatments.forEach(t => {
+      const q = this.cua(t); if (!q) return;
+      (t.cd || []).forEach(x => {
+        if (!x.d || monthOf(x.d) !== month) return;
+        if (staffId && x.s !== staffId) return;
+        const buoc = this.buocCua(q, x.b); if (!buoc) return;
+        const st = staffById(x.s);
+        ra.push({t, q, buoc, staffId: x.s, date: x.d, tien: this.tienBuoc(t, q, buoc, st)});
+      });
+    });
+    return ra.sort((a,b) => a.date < b.date ? 1 : -1);
+  },
+  hoaHong(staffId, month){ return this.congThang(month, staffId).reduce((s,x) => s + x.tien, 0); },
+
+  /* ---------- Ghi công đoạn đã làm trên một hạng mục ---------- */
+  ghi(tid){
+    const t = db.treatments.find(x => x.id === tid); if (!t) return;
+    const q = this.cua(t);
+    const c = custById(t.customerId);
+    const nv = db.staff.filter(s => s.active !== false);
+    if (!q) {
+      App.modal('Công đoạn — ' + t.name, `
+        <div class="note-block">Dịch vụ này thuộc nhóm <b>${h(t.group||'—')}</b>, chưa gắn quy trình công đoạn nào.</div>
+        <div class="f full" style="margin-top:10px"><label>Chọn quy trình áp dụng</label>
+          <select id="qtChon">${this.ds().map(x=>`<option value="${x.id}">${h(x.ten)}</option>`).join('')}</select></div>
+        <div class="form-actions full"><button class="btn" onclick="App.closeModal()">Hủy</button>
+          <button class="btn primary" onclick="QT.ganQT('${tid}')">Áp dụng</button></div>`);
+      return;
+    }
+    const daLam = t.cd || [];
+    const rows = q.buoc.map(b => {
+      const x = daLam.find(y => y.b === b.b) || {};
+      const st = staffById(x.s);
+      const tien = x.s ? this.tienBuoc(t, q, b, st) : this.tienBuoc(t, q, b, null);
+      return `<tr>
+        <td><label style="display:flex;gap:8px;align-items:center;cursor:pointer">
+          <input type="checkbox" name="lam" value="${b.b}"${x.s?' checked':''}> <b>${h(b.t)}</b></label>
+          <span class="sub-line">${b.tien != null ? money(b.tien) : b.p + '%'}</span></td>
+        <td><select name="ng_${b.b}">
+          <option value="">— chọn người làm —</option>
+          ${nv.map(s=>`<option value="${s.id}"${x.s===s.id?' selected':''}>${h(s.name)}</option>`).join('')}</select></td>
+        <td><input type="date" name="ngay_${b.b}" value="${h(x.d||todayISO())}"></td>
+        <td class="r num">${money(tien)}</td></tr>`;
+    }).join('');
+    const goc = Math.max(0, (+t.price||0) - (q.truLab ? (+t.tienLab||0) : 0));
+    App.modal('Công đoạn — ' + t.name + (t.tooth ? ' (R' + t.tooth + ')' : ''), `
+    <form class="form-grid" onsubmit="QT.ghiSave(event,'${tid}')">
+      <div class="note-block full">Khách: <b>${h(c?c.name:'')}</b> · Quy trình: <b>${h(q.ten)}</b> ·
+        Giá dịch vụ: <b>${money(t.price)}</b>${q.truLab?` · Tiền lab: <b>${money(t.tienLab||0)}</b> → tính % trên <b>${money(goc)}</b>`:''}</div>
+      ${q.truLab?`<div class="f full"><label>Tiền lab (trừ trước khi tính %)</label>
+        ${Tien.o('tienLab', t.tienLab||0)}
+        ${q.labGY.length?`<div class="combo-hint">Mức thường dùng: ${q.labGY.map(([n,v])=>
+          `<button type="button" class="link-btn" onclick="this.form.tienLab.value=Tien.dinh('${v}')">${h(n)} ${money(v)}</button>`).join(' · ')}</div>`:''}</div>`:''}
+      <div class="full"><div class="tbl-wrap"><table style="min-width:560px">
+        <thead><tr><th>Công đoạn</th><th>Người làm</th><th>Ngày</th><th class="r">Tiền công</th></tr></thead>
+        <tbody>${rows}</tbody></table></div></div>
+      <div class="f full"><label>Đổi quy trình áp dụng</label>
+        <select name="qtId">${this.ds().map(x=>`<option value="${x.id}"${x.id===q.id?' selected':''}>${h(x.ten)}</option>`).join('')}</select></div>
+      <div class="form-actions full">
+        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+        <button class="btn primary">Lưu công đoạn</button></div>
+    </form>`);
+  },
+  ganQT(tid){
+    const t = db.treatments.find(x => x.id === tid);
+    t.qtId = document.getElementById('qtChon').value;
+    save(); App.closeModal(); this.ghi(tid);
+  },
+  ghiSave(ev, tid){
+    ev.preventDefault();
+    const f = ev.target, t = db.treatments.find(x => x.id === tid);
+    const d = Object.fromEntries(new FormData(f).entries());
+    if (d.tienLab != null) t.tienLab = num(d.tienLab);
+    t.qtId = d.qtId;
+    const lam = [...f.querySelectorAll('[name="lam"]:checked')].map(x => x.value);
+    const thieu = [];
+    t.cd = lam.map(b => {
+      const s = (f.querySelector(`[name="ng_${b}"]`)||{}).value || '';
+      if (!s) thieu.push(b);
+      return {b, s, d: (f.querySelector(`[name="ngay_${b}"]`)||{}).value || todayISO()};
+    }).filter(x => x.s);
+    save(); App.closeModal(); App.render();
+    App.toast(thieu.length ? 'Đã lưu — ' + thieu.length + ' công đoạn chưa chọn người làm nên bỏ qua'
+                           : 'Đã lưu công đoạn ✓');
+  },
+
+  /* ---------- Cài đặt quy trình (quản lý) ---------- */
+  bang(){
+    if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới sửa được quy trình'); return; }
+    App.modal('Quy trình & tỷ lệ hoa hồng theo công đoạn', `
+      <div class="note-block mb">Mỗi loại dịch vụ có một quy trình. Ai làm công đoạn nào thì hưởng phần đó —
+        một ca chia được cho nhiều người. Phục hình thì <b>trừ tiền lab rồi mới tính %</b>.
+        Muốn một người có tỷ lệ riêng thì sửa trong <b>hồ sơ nhân viên</b>.</div>
+      ${this.ds().map(q => `<div class="rx mb"><div class="rx-head">
+          <b>${h(q.ten)}</b> <span class="sub-line">${q.truLab?'· trừ tiền lab trước':''}
+          ${(q.nhom||[]).length?'· nhóm: '+h(q.nhom.join(', ')):'· chưa gắn nhóm dịch vụ'}</span>
+          <span class="spacer"></span><span class="pill ${this.tongPct(q)>100?'danger':'mutedp'}">${this.tongPct(q)}%</span></div>
+        <div class="card-b"><div class="tbl-wrap"><table style="min-width:420px">
+          <thead><tr><th>Công đoạn</th><th class="r">Tỷ lệ / số tiền</th><th></th></tr></thead>
+          <tbody>${q.buoc.map(b=>`<tr><td>${h(b.t)}</td>
+            <td class="r num">${b.tien!=null?money(b.tien):b.p+'%'}</td>
+            <td><button class="btn small" onclick="QT.buocForm('${q.id}','${b.b}')">Sửa</button></td></tr>`).join('')}</tbody></table></div>
+          <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
+            <button class="btn small" onclick="QT.buocForm('${q.id}')">${IC.plus} Thêm công đoạn</button>
+            <button class="btn small" onclick="QT.nhomForm('${q.id}')">Gắn nhóm dịch vụ</button></div>
+        </div></div>`).join('')}`);
+  },
+  tongPct(q){ return (q.buoc||[]).reduce((s,b) => s + (b.p || 0), 0); },
+  buocForm(qid, bid){
+    const q = this.boId(qid); const b = bid ? this.buocCua(q, bid) : {};
+    App.modal((bid?'Sửa':'Thêm') + ' công đoạn — ' + q.ten, `
+    <form class="form-grid" onsubmit="QT.buocSave(event,'${qid}','${bid||''}')">
+      <div class="f full"><label>Tên công đoạn</label><input name="t" required value="${h(b.t||'')}"></div>
+      <div class="f"><label>Tỷ lệ (%)</label><input type="number" name="p" step="0.5" min="0" max="100" value="${b.p!=null?b.p:''}" placeholder="Vd: 30"></div>
+      <div class="f"><label>Hoặc số tiền cố định (₫)</label>${Tien.o('tien', b.tien!=null?b.tien:'')}</div>
+      <div class="note-block full">Điền <b>một trong hai</b>. Có số tiền cố định thì phần trăm bị bỏ qua —
+        dùng cho những việc trả theo lần như tư vấn implant, tẩy trắng.</div>
+      <div class="form-actions full">
+        ${bid?`<button type="button" class="btn danger" onclick="QT.buocDel('${qid}','${bid}')">Xóa</button><span class="spacer"></span>`:''}
+        <button type="button" class="btn" onclick="QT.bang()">Quay lại</button><button class="btn primary">Lưu</button></div>
+    </form>`);
+  },
+  buocSave(ev, qid, bid){
+    ev.preventDefault();
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    const q = this.boId(qid);
+    const tien = num(d.tien), p = d.p === '' ? null : num(d.p);
+    if (!tien && p == null) { App.toast('Phải nhập tỷ lệ % hoặc số tiền cố định'); return; }
+    const o = {t: (d.t||'').trim()};
+    if (tien) o.tien = tien; else o.p = p;
+    let b = bid && this.buocCua(q, bid);
+    if (b) { delete b.p; delete b.tien; Object.assign(b, o); }
+    else q.buoc.push(Object.assign({b: 'b' + uid()}, o));
+    save(); this.bang(); App.toast('Đã lưu công đoạn ✓');
+  },
+  buocDel(qid, bid){
+    const q = this.boId(qid), b = this.buocCua(q, bid);
+    const dung = db.treatments.filter(t => (t.cd||[]).some(x => x.b === bid)).length;
+    if (!confirm('Xóa công đoạn "' + b.t + '"?' + (dung ? '\n\n' + dung + ' hạng mục đã ghi công đoạn này, phần hoa hồng đó sẽ không còn được tính.' : ''))) return;
+    q.buoc = q.buoc.filter(x => x.b !== bid);
+    save(); this.bang(); App.toast('Đã xóa');
+  },
+  nhomForm(qid){
+    const q = this.boId(qid);
+    App.modal('Gắn nhóm dịch vụ — ' + q.ten, `
+    <form class="form-grid" onsubmit="QT.nhomSave(event,'${qid}')">
+      <div class="f full"><label>Hạng mục thuộc những nhóm này sẽ tự dùng quy trình trên</label>
+        <div class="check-list">${NHOM_DV.map(g=>`<label><input type="checkbox" name="nhom" value="${h(g)}"${(q.nhom||[]).includes(g)?' checked':''}> ${h(g)}</label>`).join('')}</div></div>
+      <div class="f full"><div class="check-row">
+        <label><input type="checkbox" name="truLab"${q.truLab?' checked':''}> Trừ tiền lab trước khi tính %</label></div></div>
+      <div class="form-actions full">
+        <button type="button" class="btn" onclick="QT.bang()">Quay lại</button><button class="btn primary">Lưu</button></div>
+    </form>`);
+  },
+  nhomSave(ev, qid){
+    ev.preventDefault();
+    const f = ev.target, q = this.boId(qid);
+    q.nhom = [...f.querySelectorAll('[name="nhom"]:checked')].map(x => x.value);
+    q.truLab = !!f.querySelector('[name="truLab"]:checked');
+    save(); this.bang(); App.toast('Đã lưu ✓');
+  },
+
+  /* ---------- Tỷ lệ riêng của từng người ---------- */
+  riengForm(stId){
+    const st = staffById(stId); if (!st) return;
+    const r = (st.model && st.model.cd) || {};
+    App.modal('Tỷ lệ hoa hồng riêng — ' + st.name, `
+    <form class="form-grid" onsubmit="QT.riengSave(event,'${stId}')">
+      <div class="note-block full">Để trống thì dùng tỷ lệ chung của phòng khám. Chỉ điền ô nào muốn khác đi.</div>
+      ${this.ds().map(q => `<div class="full"><div class="rx"><div class="rx-head"><b>${h(q.ten)}</b></div>
+        <div class="card-b"><div class="form-grid">
+          ${q.buoc.map(b => `<div class="f"><label>${h(b.t)}
+            <span class="sub-line">chung: ${b.tien!=null?money(b.tien):b.p+'%'}</span></label>
+            ${b.tien!=null ? `<div class="sub-line" style="padding:8px 0">Trả theo lần — không đổi bằng %</div>` :
+              `<input type="number" step="0.5" min="0" max="100" name="${b.b}" value="${r[b.b]!=null?r[b.b]:''}" placeholder="theo chung">`}</div>`).join('')}
+        </div></div></div></div>`).join('')}
+      <div class="form-actions full">
+        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu</button></div>
+    </form>`);
+  },
+  riengSave(ev, stId){
+    ev.preventDefault();
+    const st = staffById(stId);
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    const cd = {};
+    Object.keys(d).forEach(k => { if (d[k] !== '' && d[k] != null) cd[k] = num(d[k]); });
+    if (!st.model) st.model = {};
+    st.model.cd = cd;
+    save(); App.closeModal(); App.render();
+    App.toast(Object.keys(cd).length ? 'Đã đặt ' + Object.keys(cd).length + ' tỷ lệ riêng ✓' : 'Đã bỏ hết tỷ lệ riêng, dùng chung');
+  },
+
+  /* ---------- Bảng hoa hồng theo công đoạn ---------- */
+  bangThang(month){
+    const ds = this.congThang(month);
+    if (!ds.length) return '<div class="sub-line">Chưa ghi công đoạn nào trong tháng này. Vào tab Điều trị, bấm một hạng mục rồi chọn <b>Công đoạn</b>.</div>';
+    return `<div class="tbl-wrap"><table style="min-width:720px">
+      <thead><tr><th>Ngày</th><th>Người làm</th><th>Khách · hạng mục</th><th>Công đoạn</th><th class="r">Tỷ lệ</th><th class="r">Tiền công</th></tr></thead>
+      <tbody>${ds.map(x => {
+        const st = staffById(x.staffId), c = custById(x.t.customerId);
+        const p = this.pctCua(st, x.buoc);
+        const rieng = st && st.model && st.model.cd && st.model.cd[x.buoc.b] != null;
+        return `<tr><td class="num">${fmtD(x.date)}</td>
+          <td><b>${h(st?st.name:'?')}</b></td>
+          <td>${h(c?c.name:'?')}<br><span class="sub-line">${h(x.t.name)}${x.t.tooth?' — R'+h(x.t.tooth):''}</span></td>
+          <td>${h(x.buoc.t)}<br><span class="sub-line">${h(x.q.ten)}</span></td>
+          <td class="r num">${x.buoc.tien!=null?'theo lần':p+'%'}${rieng?' <span class="pill info">riêng</span>':''}</td>
+          <td class="r num" style="font-weight:600">${money(x.tien)}</td></tr>`;
+      }).join('')}</tbody></table></div>`;
+  },
+};
+
 /* ---------- Nhân sự ---------- */
 const HR = {
   tab(t){ App.state.hrTab = t; App.render(); },
   commissionOf(st, month){
     const recs = db.receipts.filter(r => monthOf(r.date) === month);
+    /* Hoa hồng theo công đoạn: ai làm bước nào hưởng bước đó, cộng thẳng vào lương */
+    const cd = QT.hoaHong(st.id, month);
+    if (!st.model || st.model.type === 'congDoan') return cd;
     if (st.model.type === 'svcGroup') {
-      return recs.filter(r=>r.doctorId===st.id).reduce((s,r)=> s + r.amount * ((st.model.rates[r.group] ?? st.model.def) / 100), 0);
+      return cd + recs.filter(r=>r.doctorId===st.id).reduce((s,r)=> s + r.amount * ((st.model.rates[r.group] ?? st.model.def) / 100), 0);
     }
-    if (st.model.type === 'perCase') return recs.reduce((s,r)=>s+r.amount,0) * st.model.rate / 100;
+    if (st.model.type === 'perCase') return cd + recs.reduce((s,r)=>s+r.amount,0) * st.model.rate / 100;
     if (st.model.type === 'referral') {
       const newIds = db.customers.filter(c=>monthOf(c.createdAt)===month).map(c=>c.id);
-      return recs.filter(r=>newIds.includes(r.customerId)).reduce((s,r)=>s+r.amount,0) * st.model.rate / 100;
+      return cd + recs.filter(r=>newIds.includes(r.customerId)).reduce((s,r)=>s+r.amount,0) * st.model.rate / 100;
     }
-    return 0;
+    return cd;
   },
   revenueOf(st, month){ return db.receipts.filter(r => monthOf(r.date)===month && r.doctorId===st.id).reduce((s,r)=>s+r.amount,0); },
   bonusOf(stId, month){ return db.bonuses.filter(b=>b.staffId===stId && monthOf(b.date)===month && b.amount>0).reduce((s,b)=>s+b.amount,0); },
@@ -3505,6 +3815,10 @@ const HR = {
       </select></div>
       <div class="f"><label>Lương cứng (₫)</label>${Tien.o('base', st.base||0)}</div>
       <div class="f"><label>Chỉ tiêu KPI doanh thu (₫)</label>${Tien.o('kpiTarget', st.kpiTarget||0)}</div>
+      <div class="f full"><label>Hoa hồng theo công đoạn</label>
+        ${id?`<button type="button" class="btn" onclick="QT.riengForm('${id}')">Đặt tỷ lệ riêng cho người này</button>
+        <div class="combo-hint">Không đặt gì thì dùng tỷ lệ chung của phòng khám.</div>`
+        :'<div class="combo-hint">Lưu nhân viên xong mới đặt được tỷ lệ riêng.</div>'}</div>
       <div class="note-block full">Email phải trùng với tài khoản đã tạo trong Supabase → <b>Authentication → Users</b>
         thì nhân viên mới tự quét mã QR chấm công được.</div>
       <div class="form-actions full">
@@ -3644,15 +3958,26 @@ SCREENS.hr = () => {
   }
 
   if (tab === 'commission') body = `
-    <div class="note-block mb">Hoa hồng tính tự động từ <b>phiếu thu thực tế</b>. Bác sĩ: % theo nhóm dịch vụ (Implant 20%, Phục hình sứ 15%, Chỉnh nha 12%, còn lại 10%) · Phụ tá: 2% doanh thu ca tham gia · Lễ tân: 1% doanh thu khách mới.</div>
-    <div class="card"><div class="card-h"><h2>Hoa hồng tháng ${M.slice(5)}/${M.slice(0,4)}</h2></div>
+    <div class="page-head" style="margin-bottom:12px">
+      ${Perm.only('caidat', `<button class="btn" onclick="QT.bang()">Quy trình & tỷ lệ công đoạn</button>`)}
+      <span class="spacer"></span></div>
+    <div class="note-block mb">Hoa hồng tính theo <b>công đoạn đã làm</b>: ai làm bước nào hưởng bước đó,
+      nên một ca chia được cho nhiều người. Phục hình thì <b>trừ tiền lab rồi mới tính %</b>.
+      Ghi công đoạn ở tab <b>Điều trị</b> → cột <b>Công đoạn</b> của từng hạng mục.</div>
+    <div class="card mb"><div class="card-h"><h2>Tổng hoa hồng tháng ${M.slice(5)}/${M.slice(0,4)}</h2></div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th>Nhân viên</th><th>Mô hình</th><th class="r">Doanh thu thực hiện</th><th class="r">Hoa hồng</th></tr></thead>
+      <thead><tr><th>Nhân viên</th><th class="r">Số công đoạn</th><th class="r">Theo công đoạn</th><th class="r">Tổng hoa hồng</th><th></th></tr></thead>
       <tbody>${db.staff.map(st => {
-        const rev = st.model.type==='svcGroup' ? HR.revenueOf(st, M) : db.receipts.filter(r=>monthOf(r.date)===M).reduce((s,r)=>s+r.amount,0);
-        const model = st.model.type==='svcGroup'?'% theo nhóm dịch vụ':st.model.type==='perCase'?st.model.rate+'% ca tham gia':st.model.rate+'% doanh thu khách mới';
-        return `<tr><td><b>${h(st.name)}</b><br><span class="sub-line">${h(st.role)}</span></td><td>${model}</td>
-        <td class="r num">${money(rev)}</td><td class="r num" style="font-weight:700">${money(HR.commissionOf(st, M))}</td></tr>`;}).join('')}</tbody></table></div></div>`;
+        const ds = QT.congThang(M, st.id);
+        return `<tr><td><b>${h(st.name)}</b><br><span class="sub-line">${h(st.role||'')}</span></td>
+          <td class="r num">${ds.length}</td>
+          <td class="r num">${money(QT.hoaHong(st.id, M))}</td>
+          <td class="r num" style="font-weight:700">${money(HR.commissionOf(st, M))}</td>
+          <td>${Perm.only('caidat', `<button class="btn small" onclick="QT.riengForm('${st.id}')">Tỷ lệ riêng</button>`)}</td></tr>`;
+      }).join('')}</tbody></table></div></div>
+    <div class="card"><div class="card-h"><h2>Chi tiết công đoạn đã làm</h2>
+      <span class="hint">tháng ${M.slice(5)}/${M.slice(0,4)}</span></div>
+      <div class="card-b">${QT.bangThang(M)}</div></div>`;
 
   if (tab === 'kpi') body = `
     <div class="card mb"><div class="card-h"><h2>KPI doanh thu bác sĩ — tháng ${M.slice(5)}</h2></div><div class="card-b hbars" style="gap:16px">
