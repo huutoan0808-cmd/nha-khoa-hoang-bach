@@ -214,6 +214,14 @@ const App = {
       $('#mainArea').innerHTML = Att.checkinScreen();
       return;
     }
+    /* Chữ trên nút tròn góc trên = tên người đang đăng nhập */
+    const meBtn = document.getElementById('meBtn');
+    if (meBtn) {
+      const me = Att.myStaff();
+      const nm = (me && me.name) || Cloud.who() || '';
+      meBtn.textContent = nm ? nm.split(/[\s@.]+/).filter(Boolean).slice(-1)[0].slice(0,2).toUpperCase() : '?';
+      meBtn.title = nm ? nm + ' — ' + Perm.label() : 'Chưa đăng nhập';
+    }
     const NAVOK = NAV.filter(n => Perm.tabs().includes(n.id));
     if (!Perm.tabs().includes(this.cur)) this.cur = NAVOK[0] ? NAVOK[0].id : 'dashboard';
     $('#sideNav').innerHTML = NAVOK.map(n => `<button class="nav-item ${n.id===this.cur?'active':''}" onclick="App.go('${n.id}')">${n.icon} ${n.label}</button>`).join('') +
@@ -270,6 +278,66 @@ const App = {
       <div class="form-actions"><button class="btn" onclick="App.closeModal()">Đóng</button>
         <button class="btn primary" onclick="App.closeModal();App.syncNow()">Đồng bộ ngay</button></div>`);
   },
+  /* Menu tài khoản ở nút tròn góc trên — ai cũng vào được, kể cả không phải quản lý */
+  accountMenu(){
+    const st = Att.myStaff();
+    const stt = Sync.status();
+    const chuaDangNhap = !Cloud.configured() || !Cloud.loggedIn();
+    App.modal('Tài khoản', `
+      <div class="card mb"><div class="card-b">
+        ${chuaDangNhap
+          ? `<div class="sub-line">Chưa đăng nhập — máy này đang dùng riêng, dữ liệu không dùng chung với ai.</div>`
+          : `<div style="display:flex;align-items:center;gap:12px">
+               <span class="avatar" style="width:44px;height:44px;font-size:16px">${h(((st&&st.name)||Cloud.who()||'?').split(' ').slice(-1)[0].slice(0,2))}</span>
+               <div><b style="font-size:15px">${h((st&&st.name)||Cloud.who())}</b>
+                 <div class="sub-line">${h(Perm.label())}${st&&st.role?' · '+h(st.role):''}</div>
+                 <div class="sub-line num">${h(Cloud.who())}</div></div>
+             </div>`}
+        <div style="margin-top:12px"><span class="pill ${stt.k}">${h(stt.t)}</span></div>
+      </div></div>
+      <div class="form-actions" style="justify-content:flex-start;flex-wrap:wrap">
+        ${!chuaDangNhap ? `<button class="btn" onclick="App.closeModal();App.syncNow()">Đồng bộ ngay</button>
+        <button class="btn" onclick="App.passwordForm()">Đổi mật khẩu</button>` : ''}
+        ${Cloud.configured() && !Cloud.loggedIn() ? `<button class="btn primary" onclick="App.closeModal();Att.loginForm()">Đăng nhập</button>` : ''}
+        <span class="spacer"></span>
+        ${Cloud.loggedIn() ? `<button class="btn danger" onclick="App.doLogout()">Đăng xuất</button>` : ''}
+      </div>
+      ${Cloud.loggedIn() ? `<div class="combo-hint">Đăng xuất chỉ thoát khỏi máy này. Dữ liệu trên đám mây vẫn nguyên,
+        đăng nhập lại là có đủ. Dữ liệu chưa kịp đồng bộ sẽ được đẩy lên trước khi thoát.</div>` : ''}`);
+  },
+  /* Ai cũng tự đổi được mật khẩu của chính mình */
+  passwordForm(){
+    App.modal('Đổi mật khẩu', `
+    <form class="form-grid" onsubmit="App.passwordSave(event)">
+      <div class="f full"><label>Mật khẩu mới</label>
+        <input name="p1" type="password" required minlength="6" autocomplete="new-password"></div>
+      <div class="f full"><label>Gõ lại mật khẩu mới</label>
+        <input name="p2" type="password" required minlength="6" autocomplete="new-password"></div>
+      <div class="note-block full">Tối thiểu 6 ký tự. Đổi xong vẫn dùng email cũ để đăng nhập.
+        Các máy khác đang đăng nhập sẵn không bị thoát ra.</div>
+      <div class="form-actions full"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+        <button class="btn primary">Đổi mật khẩu</button></div>
+    </form>`);
+  },
+  async passwordSave(ev){
+    ev.preventDefault();
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    if (d.p1 !== d.p2) { App.toast('Hai ô mật khẩu chưa giống nhau'); return; }
+    if (String(d.p1).length < 6) { App.toast('Mật khẩu phải từ 6 ký tự trở lên'); return; }
+    App.toast('Đang đổi…');
+    try { await Cloud.changePassword(d.p1); App.closeModal(); App.toast('Đã đổi mật khẩu ✓'); }
+    catch(e){ App.toast('Không đổi được: ' + e.message); }
+  },
+
+  async doLogout(){
+    if (!confirm('Đăng xuất khỏi máy này?')) return;
+    App.toast('Đang đẩy nốt dữ liệu lên…');
+    try { await Sync.run(true); } catch(e){}
+    Cloud.logout();
+    App.closeModal(); App.render();
+    App.toast('Đã đăng xuất');
+  },
+
   async syncNow(){
     if (!Cloud.configured()) { App.toast('Chưa kết nối đám mây — vào Nhân sự → Chấm công → Cài đặt'); Att.wizard(); return; }
     if (!Cloud.loggedIn()) { App.toast('Hãy đăng nhập trước'); Att.loginForm(); return; }
@@ -1667,9 +1735,14 @@ create policy p_rec   on records    for all to authenticated using (true) with c
         <thead><tr><th>Nhân viên</th><th>Email đăng nhập</th><th>Quyền</th><th>Trạng thái</th><th></th></tr></thead>
         <tbody>${rows || '<tr><td colspan="5" class="sub-line">Chưa có nhân viên nào.</td></tr>'}</tbody></table></div>
       <div class="note-block" style="margin-top:12px">
-        <b>Khóa</b> = người đó đăng nhập vào sẽ không còn quyền xem gì, dùng khi nhân viên nghỉ việc.
-        Muốn xóa hẳn tài khoản khỏi hệ thống thì vào Supabase → <b>Authentication → Users</b> → xóa dòng đó
-        (phần mềm không tự xóa được vì lý do an toàn).</div>
+        <b>Khóa</b> = người đó đăng nhập vào sẽ không còn quyền xem gì, dùng khi nhân viên nghỉ việc.<br>
+        <b>Mỗi người tự đổi mật khẩu</b> ở nút tròn góc trên phải → <i>Đổi mật khẩu</i>.</div>
+      <div class="note-block" style="background:var(--warn-soft);color:var(--warn)">
+        <b>Về việc xem mật khẩu:</b> không ai xem được mật khẩu của người khác, kể cả bạn — hệ thống
+        không lưu mật khẩu dạng đọc được mà chỉ lưu bản mã hóa một chiều. Đây là cách bảo vệ tiêu chuẩn.<br>
+        Nhân viên quên mật khẩu thì bạn <b>cấp lại cái mới</b>: vào Supabase → <b>Authentication → Users</b>
+        → bấm dấu <b>⋮</b> cuối dòng người đó → <b>Update user</b> → đặt mật khẩu mới rồi báo cho họ.
+        Xóa hẳn tài khoản cũng ở đó (⋮ → Delete user).</div>
       <div class="form-actions">
         <button type="button" class="btn" onclick="App.closeModal()">Đóng</button>
         <button type="button" class="btn" onclick="HR.staffForm()">${IC.plus} Thêm nhân viên</button>

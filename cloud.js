@@ -150,6 +150,11 @@ const Cloud = {
     const o = {}; rows.forEach(r => o[r.key] = r.value); return o;
   },
 
+  /* Tự đổi mật khẩu của chính mình (cần đang đăng nhập) */
+  async changePassword(newPass){
+    return await this.auth('/auth/v1/user', {method: 'PUT', body: {password: newPass}});
+  },
+
   /* ---------- Tạo tài khoản cho nhân viên ---------- */
   async signup(email, password){
     return await this.req('/auth/v1/signup', {
