@@ -316,6 +316,9 @@ td.r,th.r{text-align:right}
 
 /* ===== In ấn ===== */
 #printArea{display:none}
+/* Ô nhập tiền: canh phải, chữ số đều nhau cho dễ soát */
+.o-tien{text-align:right;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+
 @media print{
   body > .app, body > .bottom-nav, body > .sheet, body > .sheet-back, body > #toast, body > .modal-back{display:none!important}
   #printArea{display:block;color:#000;font:12.5px/1.5 "Times New Roman",serif}
@@ -327,6 +330,12 @@ td.r,th.r{text-align:right}
   #printArea .p-head{display:flex;justify-content:space-between;font-size:11.5px}
   #printArea .sign{display:flex;justify-content:space-between;margin-top:18px;text-align:center;font-size:12px}
   #printArea .dots{border-bottom:1px dotted #666;min-height:16px}
+  /* Phiếu thu in khổ A5 — chữ nhỏ lại, khoảng ký tên gọn hơn cho vừa trang */
+  #printArea.kho-a5{font-size:11.5px}
+  #printArea.kho-a5 h1{font-size:15px;letter-spacing:.06em;margin:4px 0 8px}
+  #printArea.kho-a5 table{font-size:11.5px}
+  #printArea.kho-a5 .p-head{font-size:10.5px}
+  #printArea.kho-a5 .sign{margin-top:14px;font-size:11px}
 }
 
 /* ===== Responsive ===== */

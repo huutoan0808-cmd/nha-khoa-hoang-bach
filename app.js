@@ -14,7 +14,38 @@ const isoAdd = (iso, days) => { const d = new Date(iso + 'T00:00'); d.setDate(d.
 const fmtD = iso => iso ? iso.slice(8,10) + '/' + iso.slice(5,7) + '/' + iso.slice(0,4) : '—';
 const monthOf = iso => iso ? iso.slice(0,7) : '';
 const WEEKD = ['CN','T2','T3','T4','T5','T6','T7'];
-const num = v => { const n = parseFloat(String(v == null ? '' : v).replace(/[^\d.-]/g, '')); return isNaN(n) ? 0 : n; };
+const num = v => {
+  let s = String(v == null ? '' : v).replace(/\s/g, '');
+  /* Ô tiền cho gõ kiểu Việt Nam "2.500.000". Chỉ bỏ dấu chấm khi đúng dạng nhóm ba
+     chữ số, để "2.5" vẫn hiểu là hai phẩy năm chứ không thành hai mươi lăm. */
+  if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+  const n = parseFloat(s.replace(/[^\d.-]/g, ''));
+  return isNaN(n) ? 0 : n;
+};
+
+/* Ô nhập tiền: vừa gõ vừa tự chấm ngăn hàng nghìn cho dễ đọc */
+const Tien = {
+  o(name, val, them){
+    const v = (val == null || val === '') ? '' : this.dinh(String(val));
+    return `<input type="text" inputmode="numeric" name="${h(name)}" value="${h(v)}" autocomplete="off"
+      class="o-tien" oninput="Tien.go(this)" ${them || ''}>`;
+  },
+  dinh(s){
+    const am = /^-/.test(String(s));
+    const d = String(s).replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+    return (am && d ? '-' : '') + (d ? d.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '');
+  },
+  go(el){
+    const cu = el.value, tai = el.selectionStart;
+    const soChuSoTruoc = cu.slice(0, tai).replace(/\D/g, '').length;
+    el.value = this.dinh(cu);
+    /* Đặt lại con trỏ theo SỐ CHỮ SỐ đứng trước nó, không theo vị trí ký tự —
+       vì thêm bớt dấu chấm sẽ làm lệch vị trí ký tự. */
+    let i = 0, dem = 0;
+    while (i < el.value.length && dem < soChuSoTruoc) { if (/\d/.test(el.value[i])) dem++; i++; }
+    try { el.setSelectionRange(i, i); } catch(e){}
+  },
+};
 
 /* ================= Danh mục ================= */
 const SERVICE_GROUPS = ['Phục hình sứ','Phục hình tháo lắp','Trám răng','Nhổ răng','Điều trị tủy','Implant','Chỉnh nha','Nha chu','Thẩm mỹ'];
@@ -192,6 +223,35 @@ const custDebt = c => {
 };
 const custLastVisit = c => { const ds = db.receipts.filter(r => r.customerId===c.id).map(r=>r.date).concat(db.appointments.filter(a=>a.customerId===c.id && a.date<=todayISO()).map(a=>a.date)); return ds.sort().pop() || ''; };
 const icdName = code => { const f = ICD.find(i => i[0] === code); return f ? f[0]+' — '+f[1] : (code || ''); };
+/* Đọc số tiền thành chữ — phiếu thu bắt buộc có dòng "bằng chữ" */
+const DOC_SO = ['không','một','hai','ba','bốn','năm','sáu','bảy','tám','chín'];
+function doc3(n, dayDu) {
+  const tram = Math.floor(n/100), chuc = Math.floor(n/10)%10, dv = n%10;
+  let s = '';
+  if (tram || dayDu) { s += DOC_SO[tram] + ' trăm'; if (!chuc && dv) s += ' linh'; }
+  if (chuc > 1) {
+    s += ' ' + DOC_SO[chuc] + ' mươi';
+    if (dv === 1) s += ' mốt'; else if (dv === 5) s += ' lăm'; else if (dv) s += ' ' + DOC_SO[dv];
+  } else if (chuc === 1) {
+    s += ' mười';
+    if (dv === 5) s += ' lăm'; else if (dv) s += ' ' + DOC_SO[dv];
+  } else if (dv) s += ' ' + DOC_SO[dv];
+  return s.trim();
+}
+function docTien(v) {
+  let n = Math.round(Math.abs(+v || 0));
+  if (!n) return 'Không đồng';
+  const bac = ['', ' nghìn', ' triệu', ' tỷ'];
+  const nhom = [];
+  while (n > 0) { nhom.push(n % 1000); n = Math.floor(n / 1000); }
+  let s = '';
+  for (let i = nhom.length - 1; i >= 0; i--) {
+    if (!nhom[i]) continue;                       /* nhóm rỗng thì bỏ qua */
+    s += (s ? ' ' : '') + doc3(nhom[i], i < nhom.length - 1 && !!s) + (bac[i] || '');
+  }
+  return s.charAt(0).toUpperCase() + s.slice(1) + ' đồng';
+}
+
 function invStatus(it) {
   const T = todayISO();
   if (it.expiry && it.expiry < T) return ['danger','Quá hạn'];
@@ -415,7 +475,18 @@ const App = {
     this.toast('Đã tải file sao lưu ✓ — cất giữ cẩn thận');
   },
   restorePick(){ $('#restoreFile').click(); },
-  print(html){ $('#printArea').innerHTML = html; setTimeout(()=>window.print(), 60); },
+  /* kho: 'A5' cho phiếu thu, mặc định A4 cho bệnh án và đơn thuốc.
+     Khổ giấy phải đặt bằng @page, mà @page không nhận class, nên phải bơm một thẻ
+     style riêng và đổi nội dung nó trước mỗi lần in. */
+  print(html, kho){
+    const a5 = kho === 'A5';
+    $('#printArea').innerHTML = html;
+    $('#printArea').className = a5 ? 'kho-a5' : '';
+    let st = document.getElementById('printPage');
+    if (!st) { st = document.createElement('style'); st.id = 'printPage'; document.head.appendChild(st); }
+    st.textContent = a5 ? '@page{size:A5 portrait;margin:10mm}' : '@page{size:A4 portrait;margin:14mm}';
+    setTimeout(() => window.print(), 60);
+  },
 };
 
 /* ================= PHÂN QUYỀN THEO VAI TRÒ ================= */
@@ -1248,7 +1319,7 @@ const Treat = {
           'Gõ không dấu cũng ra. Dịch vụ mới thì cứ gõ rồi tự điền giá.')}</div>
       <input type="hidden" name="group" value="${h(t.group||'')}">
       <div class="f"><label>Răng / vị trí</label><input name="tooth" value="${h(t.tooth||'')}" placeholder="R36, 2 hàm..."></div>
-      <div class="f"><label>Đơn giá (₫)</label><input type="number" name="price" value="${t.price||''}" required></div>
+      <div class="f"><label>Đơn giá (₫)</label>${Tien.o('price', t.price, 'required')}</div>
       <div class="f"><label>Bác sĩ</label><select name="doctorId">
         <option value="">— chưa phân —</option>
         ${db.staff.filter(s=>s.active!==false && (Perm.roleOf(s)==='bacsi' || /bác sĩ/i.test(s.role||'')))
@@ -1292,7 +1363,7 @@ const Treat = {
     App.modal('Thu tiền — ' + c.name, `
     <form class="form-grid" onsubmit="Treat.paySave(event)">
       <div class="f full"><label>Nội dung</label><input name="desc" required placeholder="Vd: Trả góp đợt 2 — bọc sứ R36"></div>
-      <div class="f"><label>Số tiền (₫)</label><input type="number" name="amount" required value="${debt||''}"></div>
+      <div class="f"><label>Số tiền (₫)</label>${Tien.o('amount', debt, 'required')}</div>
       <div class="f"><label>Hình thức</label><select name="method">${PAY_METHODS.map(m=>`<option>${m}</option>`).join('')}</select></div>
       <div class="f"><label>Bác sĩ thực hiện</label><select name="doctorId">${db.staff.filter(s=>s.role.includes('Bác sĩ')).map(s=>`<option value="${s.id}">${h(s.name)}</option>`).join('')}</select></div>
       <div class="f"><label>Nhóm dịch vụ (tính hoa hồng)</label><select name="group">${SERVICE_GROUPS.concat(['Khác']).map(g=>`<option>${g}</option>`).join('')}</select></div>
@@ -1303,9 +1374,12 @@ const Treat = {
   paySave(ev){
     ev.preventDefault();
     const d = Object.fromEntries(new FormData(ev.target).entries());
-    const r = {id:uid(), no:'PT-'+(db.seq.receipt++), date:todayISO(), customerId:App.state.treatCust, desc:d.desc, method:d.method, amount:num(d.amount), staffId:'st4', doctorId:d.doctorId, group:d.group, invoice:null};
+    const me = Att.myStaff();
+    const r = {id:uid(), no:'PT-'+(db.seq.receipt++), date:todayISO(), customerId:App.state.treatCust, desc:d.desc, method:d.method, amount:num(d.amount), staffId:me?me.id:'', doctorId:d.doctorId, group:d.group, invoice:null};
     db.receipts.push(r);
     save(); App.closeModal(); App.render(); App.toast('Đã lập ' + r.no + ' ✓');
+    /* Lập xong mở luôn cửa sổ in khổ A5 — khách còn ngồi đó, khỏi phải tìm nút In */
+    Treat.printReceipt(r.id);
   },
   invoice(rid){
     const r = db.receipts.find(x=>x.id===rid);
@@ -1313,18 +1387,32 @@ const Treat = {
     save(); App.render(); App.toast('Đã phát hành HĐĐT qua Viettel SInvoice ✓ (mô phỏng — bản thật cần tài khoản SInvoice)');
   },
   printReceipt(rid){
-    const r = db.receipts.find(x=>x.id===rid); const c = custById(r.customerId);
+    const r = db.receipts.find(x=>x.id===rid); if (!r) { App.toast('Không tìm thấy phiếu thu'); return; }
+    const c = custById(r.customerId);
+    const thu = staffById(r.doctorId);
+    const conNo = c ? custDebt(c) : 0;
+    const ngay = new Date(r.date + 'T00:00');
     App.print(`
-    <div class="p-head"><div><b>${h(db.clinic.name)}</b><br>${h(db.clinic.addr)}<br>ĐT: ${h(db.clinic.phone)}</div><div>Số: <b>${h(r.no)}</b><br>Ngày: ${fmtD(r.date)}</div></div>
+    <div class="p-head">
+      <div><b>${h(db.clinic.name)}</b><br>${h(db.clinic.legal||'')}<br>${h(db.clinic.addr)}${db.clinic.phone?'<br>ĐT: '+h(db.clinic.phone):''}</div>
+      <div style="text-align:right">Số: <b>${h(r.no)}</b><br>Ngày ${ngay.getDate()} tháng ${ngay.getMonth()+1} năm ${ngay.getFullYear()}</div>
+    </div>
     <h1>PHIẾU THU</h1>
     <table class="no-border">
-      <tr><td>Họ tên người nộp:</td><td><b>${h(c?c.name:'')}</b> (${h(c?c.code:'')})</td></tr>
-      <tr><td>Nội dung thu:</td><td>${h(r.desc)}</td></tr>
-      <tr><td>Số tiền:</td><td><b>${money(r.amount)}</b></td></tr>
-      <tr><td>Hình thức:</td><td>${h(r.method)}</td></tr>
+      <tr><td style="width:34%">Họ tên người nộp tiền:</td><td><b>${h(c?c.name:'')}</b>${c&&c.code?' — '+h(c.code):''}</td></tr>
+      ${c&&c.phone?`<tr><td>Điện thoại:</td><td>${h(c.phone)}</td></tr>`:''}
+      ${c&&fullAddr(c)?`<tr><td>Địa chỉ:</td><td>${h(fullAddr(c))}</td></tr>`:''}
+      <tr><td>Lý do nộp:</td><td>${h(r.desc)}</td></tr>
+      <tr><td>Số tiền:</td><td><b style="font-size:15px">${money(r.amount)}</b></td></tr>
+      <tr><td>Bằng chữ:</td><td><i>${h(docTien(r.amount))}</i></td></tr>
+      <tr><td>Hình thức thanh toán:</td><td>${h(r.method)}</td></tr>
+      ${conNo?`<tr><td>Còn nợ sau phiếu này:</td><td><b>${money(conNo)}</b></td></tr>`:''}
       ${r.invoice?`<tr><td>Hóa đơn điện tử:</td><td>${h(r.invoice.no)} — mã tra cứu ${h(r.invoice.code)}</td></tr>`:''}
     </table>
-    <div class="sign"><div><b>Người nộp tiền</b><br>(Ký, họ tên)<br><br><br></div><div><b>Người thu tiền</b><br>(Ký, họ tên)<br><br><br></div></div>`);
+    <div class="sign">
+      <div><b>Người nộp tiền</b><br>(Ký, ghi rõ họ tên)<br><br><br><br></div>
+      <div><b>Người thu tiền</b><br>(Ký, ghi rõ họ tên)<br><br><br>${h(thu?thu.name:'')}</div>
+    </div>`, 'A5');
   },
   rxForm(){
     const c = custById(App.state.treatCust);
@@ -1551,7 +1639,7 @@ const Svc = {
       <div class="f full"><label>Tên dịch vụ</label><input name="name" required value="${h(s.name||'')}"></div>
       <div class="f"><label>Nhóm dịch vụ</label><select name="group">
         ${NHOM_DV.map(g=>`<option${s.group===g?' selected':''}>${h(g)}</option>`).join('')}</select></div>
-      <div class="f"><label>Đơn giá (₫)</label><input type="number" name="price" min="0" value="${s.price||0}" required></div>
+      <div class="f"><label>Đơn giá (₫)</label>${Tien.o('price', s.price||0, 'required')}</div>
       <div class="form-actions full">
         ${id?`<button type="button" class="btn danger" onclick="Svc.del('${id}')">Xóa</button><span class="spacer"></span>`:''}
         <button type="button" class="btn" onclick="Svc.bang()">Quay lại</button><button class="btn primary">Lưu</button></div>
@@ -1643,8 +1731,8 @@ const Inv = {
       <div class="f full"><label>Nơi bán (nhà cung cấp)</label>
         ${Combo.html('cbSupplier','supplier', it.supplier||'', [...new Set(db.inventory.map(x=>x.supplier).filter(Boolean))],
           'Gõ tên nhà cung cấp', null, 'Nhà cung cấp mới thì cứ gõ tự do.')}</div>
-      <div class="f"><label>Giá nhập (₫)</label><input type="number" name="buy" value="${it.buy??''}"></div>
-      <div class="f"><label>Giá bán (₫, nếu bán lẻ)</label><input type="number" name="sell" value="${it.sell??''}"></div>
+      <div class="f"><label>Giá nhập (₫)</label>${Tien.o('buy', it.buy)}</div>
+      <div class="f"><label>Giá bán (₫, nếu bán lẻ)</label>${Tien.o('sell', it.sell)}</div>
       <div class="form-actions full">
         ${id?`<button type="button" class="btn danger" onclick="Inv.del('${id}')">Xóa</button><span class="spacer"></span>`:''}
         <button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu</button></div>
@@ -2675,8 +2763,8 @@ const HR = {
         <option value="1"${st.active!==false?' selected':''}>Đang làm việc</option>
         <option value="0"${st.active===false?' selected':''}>Đã nghỉ — khóa truy cập</option>
       </select></div>
-      <div class="f"><label>Lương cứng (₫)</label><input type="number" name="base" value="${st.base||0}"></div>
-      <div class="f"><label>Chỉ tiêu KPI doanh thu (₫)</label><input type="number" name="kpiTarget" value="${st.kpiTarget||0}"></div>
+      <div class="f"><label>Lương cứng (₫)</label>${Tien.o('base', st.base||0)}</div>
+      <div class="f"><label>Chỉ tiêu KPI doanh thu (₫)</label>${Tien.o('kpiTarget', st.kpiTarget||0)}</div>
       <div class="note-block full">Email phải trùng với tài khoản đã tạo trong Supabase → <b>Authentication → Users</b>
         thì nhân viên mới tự quét mã QR chấm công được.</div>
       <div class="form-actions full">
@@ -2706,7 +2794,7 @@ const HR = {
     <form class="form-grid" onsubmit="HR.bonusSave(event)">
       <div class="f full"><label>Nhân viên</label><select name="staffId">${db.staff.map(s=>`<option value="${s.id}">${h(s.name)}</option>`).join('')}</select></div>
       <div class="f"><label>Loại</label><select name="kind"><option value="1">Thưởng (+)</option><option value="-1">Phạt (−)</option></select></div>
-      <div class="f"><label>Số tiền (₫)</label><input type="number" name="amount" required></div>
+      <div class="f"><label>Số tiền (₫)</label>${Tien.o('amount', '', 'required')}</div>
       <div class="f full"><label>Lý do</label><input name="reason" required></div>
       <div class="form-actions full"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu</button></div>
     </form>`);
