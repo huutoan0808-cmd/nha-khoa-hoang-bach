@@ -803,12 +803,15 @@ const Cust = {
     }, 0);
   },
 
-  toothClick(n){
+  toothClick(n, lop){
+    lop = lop || 'teeth';
     const c = custById(App.state.custSel); if (!c) return;
-    const t = (c.teeth||{})[n] || {s:'ok', mat:[], note:''};
+    const t = (c[lop]||{})[n] || {s:'ok', mat:[], note:''};
     const mat = t.mat || [];
-    App.modal('Răng ' + n + (Tooth.hamTren(n)?' · hàm trên':' · hàm dưới') + (Tooth.benPhai(n)?' bên phải':' bên trái'), `
-    <form class="form-grid" onsubmit="Cust.toothSave(event,${n})">
+    App.modal('Răng ' + n + (Tooth.hamTren(n)?' · hàm trên':' · hàm dưới') + (Tooth.benPhai(n)?' bên phải':' bên trái')
+      + (lop === 'teethKH' ? ' — SƠ ĐỒ KẾ HOẠCH' : ''), `
+    ${lop === 'teethKH' ? '<div class="note-block mb">Bạn đang sửa <b>sơ đồ theo kế hoạch điều trị</b> — tình trạng răng <b>sau khi làm xong</b>. Sơ đồ hiện trạng không đổi.</div>' : ''}
+    <form class="form-grid" onsubmit="Cust.toothSave(event,${n},'${lop}')">
       <div class="f full"><label>Tình trạng</label>
         <select name="s" onchange="Cust.toothMatHien(this.value)">
           ${TOOTH_STATES.map(([k,l])=>`<option value="${k}"${t.s===k?' selected':''}>${l}</option>`).join('')}</select></div>
@@ -823,7 +826,7 @@ const Cust = {
       <div class="note-block full">Nội nha để riêng vì răng <b>đã nội nha rồi bọc sứ</b> là chuyện thường —
         chọn "Răng sứ" mà vẫn tick được nội nha, sơ đồ hiện cả hai.</div>
       <div class="form-actions full">
-        ${(c.teeth||{})[n]?`<button type="button" class="btn danger" onclick="Cust.toothXoa(${n})">Xóa đánh dấu</button><span class="spacer"></span>`:''}
+        ${(c[lop]||{})[n]?`<button type="button" class="btn danger" onclick="Cust.toothXoa(${n},'${lop}')">Xóa đánh dấu</button><span class="spacer"></span>`:''}
         <button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu</button></div>
     </form>`);
   },
@@ -831,7 +834,8 @@ const Cust = {
     const o = document.getElementById('oMat');
     if (o) o.style.display = (v === 'caries' || v === 'filled') ? '' : 'none';
   },
-  toothSave(ev, n){
+  toothSave(ev, n, lop){
+    lop = lop || 'teeth';
     ev.preventDefault();
     const f = ev.target;
     const d = Object.fromEntries(new FormData(f).entries());
@@ -839,22 +843,25 @@ const Cust = {
       ? [...f.querySelectorAll('[name="mat"]:checked')].map(x => x.value) : [];
     const nn = !!f.querySelector('[name="nn"]:checked');
     const c = custById(App.state.custSel);
-    if (!c.teeth) c.teeth = {};
-    if (d.s === 'ok' && !nn && !mat.length && !d.note) delete c.teeth[n];
-    else c.teeth[n] = {s:d.s, mat, nn, note:d.note};
-    save(); App.closeModal(); App.render(); App.toast('Đã lưu răng ' + n + ' ✓');
+    if (!c[lop]) c[lop] = {};
+    if (d.s === 'ok' && !nn && !mat.length && !d.note) delete c[lop][n];
+    else c[lop][n] = {s:d.s, mat, nn, note:d.note};
+    save(); App.closeModal(); App.render();
+    App.toast('Đã lưu răng ' + n + (lop === 'teethKH' ? ' (kế hoạch) ✓' : ' ✓'));
   },
-  toothXoa(n){
+  toothXoa(n, lop){
+    lop = lop || 'teeth';
     const c = custById(App.state.custSel);
-    if (c.teeth) delete c.teeth[n];
+    if (c[lop]) delete c[lop][n];
     save(); App.closeModal(); App.render(); App.toast('Đã xóa đánh dấu răng ' + n);
   },
   /* Hàm khung là chuyện của cả hàm, không gắn vào răng nào */
-  hamKhung(){
+  hamKhung(lop){
+    lop = lop === 'teethKH' ? 'hamKhungKH' : 'hamKhung';
     const c = custById(App.state.custSel); if (!c) return;
-    const k = c.hamKhung || {};
-    App.modal('Hàm khung tháo lắp', `
-    <form class="form-grid" onsubmit="Cust.hamKhungSave(event)">
+    const k = c[lop] || {};
+    App.modal('Hàm khung tháo lắp' + (lop === 'hamKhungKH' ? ' — theo kế hoạch' : ''), `
+    <form class="form-grid" onsubmit="Cust.hamKhungSave(event,'${lop}')">
       <div class="f full"><div class="check-row">
         <label><input type="checkbox" name="tren"${k.tren?' checked':''}> Hàm khung <b>hàm trên</b></label>
         <label><input type="checkbox" name="duoi"${k.duoi?' checked':''}> Hàm khung <b>hàm dưới</b></label>
@@ -864,14 +871,32 @@ const Cust = {
         <button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu</button></div>
     </form>`);
   },
-  hamKhungSave(ev){
+  hamKhungSave(ev, lop){
+    lop = lop || 'hamKhung';
     ev.preventDefault();
     const f = ev.target, c = custById(App.state.custSel);
     const tren = !!f.querySelector('[name="tren"]:checked'), duoi = !!f.querySelector('[name="duoi"]:checked');
     const note = (f.querySelector('[name="note"]')||{}).value || '';
-    if (!tren && !duoi && !note) delete c.hamKhung; else c.hamKhung = {tren, duoi, note};
+    if (!tren && !duoi && !note) delete c[lop]; else c[lop] = {tren, duoi, note};
     save(); App.closeModal(); App.render(); App.toast('Đã lưu hàm khung ✓');
   },
+
+  /* Chép hiện trạng sang sơ đồ kế hoạch để bác sĩ sửa từ đó, khỏi vẽ lại từ đầu */
+  chepSangKH(){
+    const c = custById(App.state.custSel); if (!c) return;
+    const daCo = Object.keys(c.teethKH || {}).length || c.hamKhungKH;
+    if (daCo && !confirm('Sơ đồ kế hoạch đang có dữ liệu. Chép đè hiện trạng lên, xóa hết những gì đã vạch?')) return;
+    c.teethKH = JSON.parse(JSON.stringify(c.teeth || {}));
+    if (c.hamKhung) c.hamKhungKH = JSON.parse(JSON.stringify(c.hamKhung)); else delete c.hamKhungKH;
+    save(); App.render(); App.toast('Đã chép hiện trạng sang sơ đồ kế hoạch — giờ sửa thành kết quả mong muốn');
+  },
+  xoaKH(){
+    const c = custById(App.state.custSel); if (!c) return;
+    if (!confirm('Xóa toàn bộ sơ đồ kế hoạch điều trị? Sơ đồ hiện trạng giữ nguyên.')) return;
+    delete c.teethKH; delete c.hamKhungKH;
+    save(); App.render(); App.toast('Đã xóa sơ đồ kế hoạch');
+  },
+  doiLopRang(k){ App.state.lopRang = k; App.render(); },
 
   recordForm(){
     const c = custById(App.state.custSel); const r = c.record || {};
@@ -980,12 +1005,19 @@ const Cust = {
     <p><b>II.1. Quá trình bệnh lý:</b> ${dot(r.benhLy)}</p>
     <p><b>II.2. Tiền sử bản thân:</b> ${dot(r.tienSuBanThan || c.allergy)}<br><b>Tiền sử gia đình:</b> ${dot(r.tienSuGiaDinh)}</p>
     <p><b>III.1. Toàn thân:</b> ${dot(r.toanThan)}<br><b>III.2. Khám chuyên khoa — Ngoài miệng:</b> ${dot(r.ngoaiMieng)}<br><b>Trong miệng:</b> ${dot(r.trongMieng)}</p>
-    <p><b>III.3. Sơ đồ răng:</b><br>${(() => {
-      const {dong, khung} = Tooth.tomTat(c);
+    <p><b>III.3. Sơ đồ răng trước điều trị:</b><br>${(() => {
+      const {dong, khung, note} = Tooth.tomTat(c, 'teeth');
       const a = dong.map(x => 'R' + x.n + ': ' + h(x.mo)).join('<br>');
-      const b = khung.length ? '<br>Hàm khung tháo lắp: ' + h(khung.join(' và ')) + ((c.hamKhung||{}).note ? ' — ' + h(c.hamKhung.note) : '') : '';
+      const b = khung.length ? '<br>Hàm khung tháo lắp: ' + h(khung.join(' và ')) + (note ? ' — ' + h(note) : '') : '';
       return (a || '<i>chưa ghi nhận</i>') + b;
     })()}</p>
+    ${(() => {
+      const {dong, khung, note} = Tooth.tomTat(c, 'teethKH');
+      if (!dong.length && !khung.length) return '';
+      const a = dong.map(x => 'R' + x.n + ': ' + h(x.mo)).join('<br>');
+      const b = khung.length ? '<br>Hàm khung tháo lắp: ' + h(khung.join(' và ')) + (note ? ' — ' + h(note) : '') : '';
+      return `<p><b>Sơ đồ răng theo kế hoạch điều trị:</b><br>${a}${b}</p>`;
+    })()}
     <p><b>III.4. Cận lâm sàng:</b> ${dot(r.canLamSang)}<br><b>III.5. Tóm tắt bệnh án:</b> ${dot(r.tomTat)}</p>
     <p><b>IV. CHẨN ĐOÁN</b><br>Bệnh chính: <b>${h(icdName(r.chanDoan))||'—'}</b><br>Bệnh kèm theo: ${h(icdName(r.chanDoanKem))||'—'}<br>Biến chứng: ${h(icdName(r.bienChung))||'—'}</p>
     <p><b>V. Kế hoạch điều trị:</b><br>${h(r.keHoach||'').replace(/\n/g,'<br>')||'—'}</p>
@@ -1041,14 +1073,6 @@ SCREENS.customers = () => {
   let detail = '';
   if (c) {
     const r = c.record || {};
-    const teethRow = list2 => list2.map(n => {
-      const t = (c.teeth||{})[n];
-      const co = t && (t.s !== 'ok' || t.nn || (t.mat||[]).length);
-      return `<button class="tooth ${co?'co-van-de':''}" onclick="Cust.toothClick(${n})" title="Răng ${n} — ${h(Tooth.moTa(n,t))}">
-        <span class="tooth-svg">${Tooth.svg(n,t)}${Tooth.deLen(n,t)}</span>
-        <span class="tooth-no num">${n}</span></button>`;
-    }).join('');
-    const tl = (r.dienBien||[]).slice().reverse().map(v => `<div class="tl-item"><span class="tl-date num">${fmtD(v.date)}</span><b>${h(v.db)}</b><p>${h(v.xt||'')}</p></div>`).join('') || '<span class="sub-line">Chưa có diễn biến điều trị.</span>';
     const tags = [];
     if (c.allergy) tags.push(`<span class="pill danger">⚕ ${h(c.allergy)}</span>`);
     const debt = custDebt(c); if (debt) tags.push(`<span class="pill warn">Công nợ ${money(debt)}</span>`);
@@ -1071,38 +1095,37 @@ SCREENS.customers = () => {
         <div class="check-row" style="margin-top:8px">${tags.join(' ')}</div>
       </div>
     </div>
-    <div class="card mb">
+    ${(() => {
+      const lop = App.state.lopRang || 'teeth';
+      const coKH = !!(Object.keys(c.teethKH||{}).length || c.hamKhungKH);
+      const keHoach = lop === 'teethKH';
+      return `<div class="card mb">
       <div class="card-h"><h2>Sơ đồ răng</h2><span class="hint">nhấn vào răng để cập nhật tình trạng</span><span class="spacer"></span>
-        <button class="btn small" onclick="Cust.hamKhung()">Hàm khung</button></div>
+        <button class="btn small" onclick="Cust.hamKhung('${lop}')">Hàm khung</button>
+        ${keHoach ? `<button class="btn small" onclick="Cust.chepSangKH()">Chép lại từ hiện trạng</button>
+          ${coKH?`<button class="btn small danger" onclick="Cust.xoaKH()">Xóa kế hoạch</button>`:''}` : ''}</div>
       <div class="card-b">
-        <div class="arch-lb"><span>Hàm trên · phải bệnh nhân</span><span>trái bệnh nhân</span></div>
-        <div class="arch" style="margin-bottom:10px">${teethRow(TEETH_UP.slice(0,8))}<span class="gap-mid"></span>${teethRow(TEETH_UP.slice(8))}</div>
-        <div class="arch">${teethRow(TEETH_DN.slice(0,8))}<span class="gap-mid"></span>${teethRow(TEETH_DN.slice(8))}</div>
-        <div class="arch-lb"><span>Hàm dưới · phải bệnh nhân</span><span>trái bệnh nhân</span></div>
-        ${(() => {
-          const {dong, khung} = Tooth.tomTat(c);
-          const km = khung.length
-            ? `<div class="pill warn" style="margin-top:10px">Hàm khung tháo lắp: ${h(khung.join(' và '))}${(c.hamKhung||{}).note?' — '+h(c.hamKhung.note):''}</div>` : '';
-          const ds = dong.length
-            ? `<div class="tooth-info"><b>Tóm tắt ${dong.length} răng có vấn đề:</b><br>${dong.map(x=>`R${x.n}: ${h(x.mo)}`).join(' · ')}</div>`
-            : `<div class="tooth-info">Chưa đánh dấu răng nào — nhấn vào răng để ghi tình trạng.</div>`;
-          return km + ds;
-        })()}
-        <div class="legend" style="margin-top:12px">
-          <span><i style="background:var(--danger)"></i>Sâu (tô mặt bị sâu)</span>
-          <span><i style="background:var(--info)"></i>Đã trám (tô mặt đã trám)</span>
-          <span><i class="lg-nn"></i>Đã nội nha</span>
-          <span><i class="lg-kl"></i>Răng sứ kim loại</span>
-          <span><i class="lg-ts"></i>Răng sứ toàn sứ</span>
-          <span><i class="lg-tl"></i>Răng tháo lắp</span>
-          <span><i class="lg-im"></i>Implant</span>
-          <span><i class="lg-mat"></i>Mất răng</span>
+        <div class="subtabs">
+          <button class="subtab ${!keHoach?'active':''}" onclick="Cust.doiLopRang('teeth')">Trước điều trị</button>
+          <button class="subtab ${keHoach?'active':''}" onclick="Cust.doiLopRang('teethKH')">Theo kế hoạch điều trị${coKH?' ✓':''}</button>
         </div>
-        <div class="combo-hint" style="margin-top:8px">Mỗi răng chia 5 vùng — <b>trên/dưới là mặt ngoài và mặt trong</b> (đổi chiều theo hàm trên hay hàm dưới),
-          <b>trái/phải là mặt gần và mặt xa</b> (mặt gần luôn quay về đường giữa), <b>ô giữa là mặt nhai</b>.
-          Vạch dưới cùng là <b>cổ răng</b>. Rê chuột vào từng vùng để xem tên mặt.</div>
+        ${keHoach ? `<div class="note-block mb">Đây là <b>tình trạng răng sau khi làm xong kế hoạch</b> — vẽ để bàn với khách.
+          Sơ đồ "Trước điều trị" không bị ảnh hưởng. ${coKH?'Răng nào <b>khác với hiện trạng</b> có viền nhấn.':'Bấm <b>Chép lại từ hiện trạng</b> để khỏi vẽ lại từ đầu, rồi sửa thành kết quả mong muốn.'}</div>` : ''}
+        ${Tooth.hamHTML(c, lop)}
+        ${Tooth.tomTatHTML(c, lop)}
+        ${keHoach && coKH ? (() => {
+          const a = Tooth.tomTat(c,'teeth').dong, b = Tooth.tomTat(c,'teethKH').dong;
+          const ma = {}; a.forEach(x=>ma[x.n]=x.mo);
+          const doi = b.filter(x => ma[x.n] !== x.mo);
+          const het = a.filter(x => !b.some(y=>y.n===x.n));
+          return `<div class="tooth-info" style="border-color:var(--accent)"><b>Kế hoạch làm gì:</b><br>
+            ${doi.map(x=>`R${x.n}: ${h(ma[x.n]||'bình thường')} → <b>${h(x.mo)}</b>`).join('<br>') || 'chưa khác gì hiện trạng'}
+            ${het.length?'<br>'+het.map(x=>`R${x.n}: ${h(x.mo)} → <b>xử lý xong</b>`).join('<br>'):''}</div>`;
+        })() : ''}
+        ${Tooth.chuThichHTML()}
       </div>
-    </div>
+    </div>`;
+    })()}
     ${Photo.cardHTML(c)}
     <div class="card mb">
       <div class="card-h"><h2>Bệnh án ngoại trú (BA-18)</h2><span class="spacer"></span>
@@ -1598,13 +1621,57 @@ const Tooth = {
     if (t.note) p.push(t.note);
     return p.join(' · ');
   },
-  /* Tổng kết cả hàm — dùng cho bệnh án và bản in */
-  tomTat(c){
-    const ds = Object.keys((c && c.teeth) || {}).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
-    const dong = ds.map(n => ({n, mo: this.moTa(n, c.teeth[n])})).filter(x => x.mo !== 'Bình thường');
-    const hk = (c && c.hamKhung) || {};
+  /* Tổng kết cả hàm — dùng cho bệnh án và bản in.
+     lop = 'teeth' (hiện trạng trước điều trị) hoặc 'teethKH' (theo kế hoạch). */
+  tomTat(c, lop){
+    const kho = (c && c[lop || 'teeth']) || {};
+    const ds = Object.keys(kho).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
+    const dong = ds.map(n => ({n, mo: this.moTa(n, kho[n])})).filter(x => x.mo !== 'Bình thường');
+    const hk = (c && (lop === 'teethKH' ? c.hamKhungKH : c.hamKhung)) || {};
     const khung = [hk.tren && 'hàm trên', hk.duoi && 'hàm dưới'].filter(Boolean);
-    return {dong, khung};
+    return {dong, khung, note: hk.note || ''};
+  },
+
+  /* Vẽ cả một hàm. lop quyết định đọc sơ đồ hiện trạng hay sơ đồ kế hoạch. */
+  hamHTML(c, lop){
+    const kho = c[lop] || {};
+    const hang = ds => ds.map(n => {
+      const t = kho[n];
+      const co = t && (t.s !== 'ok' || t.nn || (t.mat||[]).length);
+      const khac = lop === 'teethKH' && JSON.stringify(t||null) !== JSON.stringify((c.teeth||{})[n]||null);
+      return `<button class="tooth ${co?'co-van-de':''} ${khac?'doi-theo-kh':''}"
+        onclick="Cust.toothClick(${n},'${lop}')" title="Răng ${n} — ${h(this.moTa(n,t))}">
+        <span class="tooth-svg">${this.svg(n,t)}${this.deLen(n,t)}</span>
+        <span class="tooth-no num">${n}</span></button>`;
+    }).join('');
+    return `<div class="arch-lb"><span>Hàm trên · phải bệnh nhân</span><span>trái bệnh nhân</span></div>
+      <div class="arch" style="margin-bottom:10px">${hang(TEETH_UP.slice(0,8))}<span class="gap-mid"></span>${hang(TEETH_UP.slice(8))}</div>
+      <div class="arch">${hang(TEETH_DN.slice(0,8))}<span class="gap-mid"></span>${hang(TEETH_DN.slice(8))}</div>
+      <div class="arch-lb"><span>Hàm dưới · phải bệnh nhân</span><span>trái bệnh nhân</span></div>`;
+  },
+  tomTatHTML(c, lop){
+    const {dong, khung, note} = this.tomTat(c, lop);
+    const km = khung.length
+      ? `<div class="pill warn" style="margin-top:10px">Hàm khung tháo lắp: ${h(khung.join(' và '))}${note?' — '+h(note):''}</div>` : '';
+    const ds = dong.length
+      ? `<div class="tooth-info"><b>${dong.length} răng:</b> ${dong.map(x=>`R${x.n}: ${h(x.mo)}`).join(' · ')}</div>`
+      : `<div class="tooth-info">Chưa đánh dấu răng nào — nhấn vào răng để ghi.</div>`;
+    return km + ds;
+  },
+  chuThichHTML(){
+    return `<div class="legend" style="margin-top:12px">
+      <span><i style="background:var(--danger)"></i>Sâu (tô mặt bị sâu)</span>
+      <span><i style="background:var(--info)"></i>Đã trám (tô mặt đã trám)</span>
+      <span><i class="lg-nn"></i>Đã nội nha</span>
+      <span><i class="lg-kl"></i>Răng sứ kim loại</span>
+      <span><i class="lg-ts"></i>Răng sứ toàn sứ</span>
+      <span><i class="lg-tl"></i>Răng tháo lắp</span>
+      <span><i class="lg-im"></i>Implant</span>
+      <span><i class="lg-mat"></i>Mất răng</span>
+    </div>
+    <div class="combo-hint" style="margin-top:8px">Mỗi răng chia 5 vùng — <b>trên/dưới là mặt ngoài và mặt trong</b> (đổi chiều theo hàm trên hay hàm dưới),
+      <b>trái/phải là mặt gần và mặt xa</b> (mặt gần luôn quay về đường giữa), <b>ô giữa là mặt nhai</b>.
+      Vạch dưới cùng là <b>cổ răng</b>. Rê chuột vào từng vùng để xem tên mặt.</div>`;
   },
 };
 

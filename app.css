@@ -238,6 +238,9 @@ td.r,th.r{text-align:right}
   display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer}
 .tooth:hover{border-color:var(--accent);background:var(--surface2)}
 .tooth.co-van-de .tooth-no{color:var(--danger);font-weight:800}
+/* Trên sơ đồ kế hoạch: răng nào khác hiện trạng thì viền nhấn cho dễ so */
+.tooth.doi-theo-kh{border-color:var(--accent);border-style:dashed;background:var(--accent-soft)}
+.tooth.doi-theo-kh .tooth-no{color:var(--accent-ink)}
 .tooth-svg{position:relative;width:32px;height:40px;display:block}
 .tooth-svg svg{position:absolute;inset:0}
 .tooth-svg .tooth-ov{pointer-events:none}
