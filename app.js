@@ -1180,21 +1180,9 @@ SCREENS.customers = () => {
       </div>
     </div>`;
     })()}
+    ${Cal.cardKhachHTML(c)}
     ${HoSo.cardHTML(c)}
     ${Photo.cardHTML(c)}
-    <div class="card mb">
-      <div class="card-h"><h2>Bệnh án ngoại trú (BA-18)</h2><span class="spacer"></span>
-        <button class="btn small" onclick="Cust.recordForm()">Cập nhật bệnh án</button>
-        <button class="btn small" onclick="HoSo.in('ba18')">${IC.print} In bệnh án</button></div>
-      <div class="card-b">
-        <div class="form-grid" style="gap:8px 16px">
-          <div class="f full"><label>Lý do vào viện</label><b>${h(r.lyDo||'—')}</b></div>
-          <div class="f"><label>Chẩn đoán chính (ICD)</label><b>${h(icdName(r.chanDoan))||'—'}</b></div>
-          <div class="f"><label>Bệnh kèm theo</label><b>${h(icdName(r.chanDoanKem))||'—'}</b></div>
-          <div class="f full"><label>Kế hoạch điều trị</label><b style="white-space:pre-wrap">${h(r.keHoach||'—')}</b></div>
-        </div>
-      </div>
-    </div>
     <div class="card">
       <div class="card-h"><h2>Quá trình điều trị</h2><span class="hint">bấm vào một dòng để sửa</span><span class="spacer"></span>
         <button class="btn small" onclick="Cust.visitForm('','${c.id}')">${IC.plus} Thêm diễn biến</button></div>
@@ -1267,7 +1255,7 @@ const Cal = {
       <div class="f"><label>Thời lượng (phút)</label><input type="number" name="dur" value="${a.dur}" min="15" step="15"></div>
       <div class="f"><label>Ghế</label><select name="chair">${CHAIRS.map(g=>`<option${a.chair===g?' selected':''}>${g}</option>`).join('')}</select></div>
       <div class="f full"><label>Nội dung / dịch vụ</label>
-        ${Combo.html('cbApptSvc','service', a.service||'', Svc.goiY(1),
+        ${Combo.html('cbApptSvc','service', a.service||'', Svc.goiY(),
           'Gõ tên dịch vụ, vd: cao voi, implant', null,
           'Gợi ý lấy từ bảng giá phòng khám. Gõ tự do cũng được.')}</div>
       <div class="f"><label>Bác sĩ</label><select name="doctorId">${db.staff.filter(s=>s.role.includes('Bác sĩ')).map(s=>`<option value="${s.id}"${a.doctorId===s.id?' selected':''}>${h(s.name)}</option>`).join('')}</select></div>
@@ -1278,6 +1266,52 @@ const Cal = {
         <button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu lịch hẹn</button></div>
     </form>`);
   },
+  /* Lịch hẹn của riêng một khách, hiện ngay trong hồ sơ khách đó */
+  cuaKhach(cid){
+    return (db.appointments || []).filter(a => a.customerId === cid)
+      .sort((a, b) => (a.date + (a.time||'')) < (b.date + (b.time||'')) ? 1 : -1);
+  },
+  cardKhachHTML(c){
+    const ds = this.cuaKhach(c.id), T = todayISO();
+    const sap = ds.filter(a => a.date >= T && a.status !== 'Hủy' && a.status !== 'Hoàn tất');
+    const rows = ds.slice(0, 12).map(a => {
+      const st = a.status === 'Hoàn tất' ? 'ok' : a.status === 'Hủy' ? 'mutedp'
+               : a.date < T ? 'danger' : a.date === T ? 'info' : 'warn';
+      const bs = staffById(a.doctorId);
+      const lab = a.labOrderId ? db.labs.find(l => l.id === a.labOrderId) : null;
+      return `<tr class="clickable" onclick="Cal.moTuHoSo('${a.id}')">
+        <td class="num"><b>${h(a.time||'')}</b><br><span class="sub-line">${fmtD(a.date)}</span></td>
+        <td>${h(a.service||'—')}<br><span class="sub-line">${h(a.chair||'')}${bs?' · '+h(bs.name):''}${a.tuOnline?' · đặt online':''}</span></td>
+        <td><span class="pill ${st}">${h(a.status||'')}</span>
+          ${lab && !lab.received ? '<br><span class="pill danger">răng chưa về</span>' : ''}</td></tr>`;
+    }).join('') || '<tr><td colspan="3" class="sub-line">Khách này chưa có lịch hẹn nào.</td></tr>';
+    return `<div class="card mb"><div class="card-h"><h2>Lịch hẹn của khách</h2>
+      <span class="hint">${sap.length ? sap.length + ' lịch sắp tới' : 'không có lịch sắp tới'}${ds.length > 12 ? ' · hiện 12 lần gần nhất' : ''}</span>
+      <span class="spacer"></span>
+      <button class="btn small" onclick="Cal.datChoKhach('${c.id}')">${IC.plus} Đặt lịch</button></div>
+      <div class="tbl-wrap"><table style="min-width:420px">
+        <thead><tr><th>Giờ · ngày</th><th>Nội dung</th><th>Trạng thái</th></tr></thead>
+        <tbody>${rows}</tbody></table></div></div>`;
+  },
+  /* Đặt lịch ngay từ hồ sơ khách: điền sẵn khách này */
+  datChoKhach(cid){
+    const c = custById(cid); if (!c) return;
+    this.form();
+    setTimeout(() => {
+      const b = document.getElementById('modalBody'); if (!b) return;
+      const inp = b.querySelector('#cbApptCust .combo-input');
+      if (inp) inp.value = custLabel(c);
+      const hid = b.querySelector('[name="customerId"]');
+      if (hid) hid.value = c.id;
+    }, 0);
+  },
+  /* Bấm một lịch hẹn trong hồ sơ: mở luôn form sửa lịch đó */
+  moTuHoSo(id){
+    const a = (db.appointments || []).find(x => x.id === id);
+    if (a) App.state.calDate = a.date;
+    this.form(id);
+  },
+
   /* Hai lịch hẹn đè lên nhau khi khoảng [giờ, giờ+thời lượng) của chúng giao nhau */
   deNhau(a, b){
     const x = hm2m(a.time), y = hm2m(b.time);
@@ -1840,6 +1874,38 @@ const HoSo = {
     return ds;
   },
 
+  /* Vài dòng tóm tắt nội dung mỗi biểu mẫu đang có, để nhìn là biết đã đủ chưa */
+  tomTat(k, c, ep){
+    const d = this.dl(ep, k), r = c.record || {};
+    if (k === 'ba18') {
+      const dx = icdName(d.chanDoan || ep.chanDoan || r.chanDoan);
+      const ly = d.lyDo || ep.lyDo || r.lyDo;
+      return [ly && 'Lý do: ' + ly, dx && 'Chẩn đoán: ' + dx,
+        (d.keHoach || ep.keHoach || r.keHoach) && 'Có kế hoạch điều trị'].filter(Boolean).join(' · ');
+    }
+    if (k === 'theodoi') {
+      const n = ((r.dienBien) || []).length;
+      return n ? n + ' lần diễn biến sẽ được in ra' : 'Chưa có diễn biến nào — thêm ở mục Quá trình điều trị';
+    }
+    if (k === 'camket') {
+      const bs = staffById(d.bsId) || this.bacSi(c, ep);
+      return [bs && 'BS ' + bs.name, (d.ppTT || []).join(', '),
+        (d.nguyCo || []).length && (d.nguyCo.length + ' nguy cơ đã tick')].filter(Boolean).join(' · ');
+    }
+    if (k === 'phieuthu') {
+      const ds = this.mucCho(ep, 'phieuthu', t => t.status !== 'Báo giá');
+      const tong = ds.reduce((x, t) => x + (t.price || 0), 0);
+      return ds.length ? ds.length + ' dịch vụ · ' + money(tong) + ' · còn lại ' + money(custDebt(c))
+                       : 'Chưa có dịch vụ nào đã duyệt trong đợt này';
+    }
+    if (k === 'tuvan') {
+      const bg = this.mucCho(ep, 'tuvan');
+      const tong = bg.reduce((x, t) => x + (t.price || 0), 0);
+      return bg.length ? 'Báo giá ' + bg.length + ' hạng mục · ' + money(tong) : 'Chưa gắn hạng mục nào vào đợt';
+    }
+    return '';
+  },
+
   /* ---------- Thẻ trong hồ sơ khách ---------- */
   cardHTML(c){
     const ds = Dot.cua(c.id), ep = Dot.dangChon(c);
@@ -1867,20 +1933,29 @@ const HoSo = {
           <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
             <button class="btn small" onclick="Dot.form('${ep.id}')">Sửa đợt</button></div>
         </div>
-        <div class="ho-so-ds" style="margin-top:12px">
-          ${this.DS.map(d => {
+        <div style="margin-top:12px">
+          ${this.DS.map((d, i) => {
             const daDien = !!(ep.phieu && ep.phieu[d.k] && ep.phieu[d.k]._at);
-            return `<div class="ho-so-nut ${daDien?'da-dien':''}">
-              <span class="hs-ten">${h(d.ten)}</span>
-              ${d.ms?`<span class="hs-ms">${h(d.ms)}</span>`:''}
-              <span class="hs-mo">${daDien ? 'Đã điền ' + fmtD(ep.phieu[d.k]._at) : 'Chưa điền — sẽ lấy dữ liệu sẵn có'}</span>
-              <span class="hs-nut">
+            return `<div class="ho-so-file ${daDien?'da-dien':''}">
+              <div class="hsf-so">${i+1}</div>
+              <div class="hsf-than">
+                <div class="hsf-dau"><b>${h(d.ten)}</b>
+                  ${d.ms?`<span class="hs-ms">${h(d.ms)}</span>`:''}
+                  ${daDien ? `<span class="pill ok">Đã điền ${fmtD(ep.phieu[d.k]._at)}</span>`
+                           : `<span class="pill mutedp">Chưa điền</span>`}</div>
+                <div class="hsf-mo">${h(this.tomTat(d.k, c, ep)) || 'Sẽ lấy dữ liệu sẵn có của khách và của đợt điều trị'}</div>
+              </div>
+              <div class="hsf-nut">
                 <button class="btn small primary" onclick="HoSo.dien('${d.k}')">${daDien?'Sửa':'Điền'}</button>
-                <button class="btn small" onclick="HoSo.in('${d.k}')">${IC.print} In</button></span></div>`;
+                <button class="btn small" onclick="HoSo.in('${d.k}')">${IC.print} In</button>
+                ${d.k === 'ba18' ? `<button class="btn small" onclick="Cust.recordForm()" title="Bệnh án gốc dùng chung cho mọi đợt điều trị">Bệnh án gốc</button>` : ''}
+              </div></div>`;
           }).join('')}
         </div>
-        <div class="combo-hint" style="margin-top:10px">Bấm <b>Điền</b> để nhập đầy đủ trên máy — các ô trống đều có gợi ý để chọn.
-          Điền xong bấm <b>Lưu và in</b>, hoặc bấm <b>In</b> để in lại bất cứ lúc nào.</div>
+        <div class="combo-hint" style="margin-top:10px">Mỗi dòng là <b>một biểu mẫu riêng</b> — cần cái nào thì điền cái đó.
+          Bấm <b>Điền</b> để nhập trên máy (các ô trống đều có gợi ý), xong bấm <b>Lưu và in</b>;
+          hoặc bấm <b>In</b> để in lại bất cứ lúc nào.<br>
+          <b>Bệnh án gốc</b> là phần hành chính và tiền sử dùng chung cho mọi đợt điều trị của khách này.</div>
       </div></div>`;
   },
 

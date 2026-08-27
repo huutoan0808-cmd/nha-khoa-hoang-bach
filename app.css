@@ -347,6 +347,23 @@ td.r,th.r{text-align:right}
 /* Trên điện thoại kéo thả không chạy, ẩn tay cầm cho đỡ rối, chỉ để hai nút mũi tên */
 @media (max-width:767px){ .keo-tay{display:none} }
 
+/* Bệnh án điện tử: mỗi biểu mẫu một dòng riêng, như một tập hồ sơ */
+.ho-so-file{display:flex;gap:12px;align-items:flex-start;padding:11px 12px;border:1px solid var(--line);
+  border-radius:10px;background:var(--surface);margin-bottom:8px}
+.ho-so-file:hover{border-color:var(--accent)}
+.ho-so-file.da-dien{background:var(--accent-soft);border-color:var(--accent)}
+.hsf-so{width:26px;height:26px;border-radius:50%;background:var(--surface2);color:var(--ink2);
+  display:grid;place-items:center;font-weight:700;font-size:12.5px;flex:none}
+.ho-so-file.da-dien .hsf-so{background:var(--accent);color:var(--accent-contrast)}
+.hsf-than{flex:1;min-width:0}
+.hsf-dau{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13.5px}
+.hsf-mo{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.4}
+.hsf-nut{display:flex;gap:6px;flex-wrap:wrap;flex:none}
+@media (max-width:767px){
+  .ho-so-file{flex-wrap:wrap}
+  .hsf-nut{width:100%;padding-left:38px}
+}
+
 /* Bệnh án điện tử: mỗi biểu mẫu một ô bấm */
 .ho-so-ds{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
 .ho-so-nut{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;
