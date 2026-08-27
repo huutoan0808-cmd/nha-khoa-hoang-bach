@@ -2360,8 +2360,9 @@ const Tooth = {
 };
 
 /* ---------- Bảng giá dịch vụ ---------- */
-const NHOM_DV = ['Phục hình sứ','Phục hình tháo lắp','Trám răng','Nhổ răng','Điều trị tủy',
-                 'Implant','Chỉnh nha','Nha chu','Thẩm mỹ','Khác'];
+const NHOM_DV = ['Chẩn đoán hình ảnh','Nha chu','Trám răng','Nhổ răng','Điều trị tủy',
+                 'Phục hình sứ','Phục hình tháo lắp','Implant','Chỉnh nha','Thẩm mỹ',
+                 'Răng trẻ em','Khác'];
 const Svc = {
   bang(q){
     if (q != null) App.state.svcQ = q;
@@ -2371,15 +2372,18 @@ const Svc = {
     const theoNhom = NHOM_DV.map(g => ({g, ds: loc(db.services.filter(s => s.group === g))}))
       .concat([{g:'(chưa xếp nhóm)', ds: loc(db.services.filter(s => !NHOM_DV.includes(s.group)))}])
       .filter(x => x.ds.length);
-    const chuaGia = db.services.filter(s => !s.price).length;
+    const chuaGia = db.services.filter(s => !s.price && !s.mienPhi).length;
     const rows = theoNhom.map(({g, ds}) => `
       <tr><td colspan="${sua?3:2}" style="background:var(--surface2);font-weight:700">${h(g)} <span class="sub-line">· ${ds.length} dịch vụ</span></td></tr>
-      ${ds.map(s => `<tr${sua?` class="clickable" onclick="Svc.form('${s.id}')"`:''}><td>${h(s.name)}</td>
-        <td class="r num" style="font-weight:600">${s.price ? money(s.price) : '<span class="pill warn">chưa đặt giá</span>'}</td>
+      ${ds.map(s => `<tr${sua?` class="clickable" onclick="Svc.form('${s.id}')"`:''}><td>${h(s.name)}
+        ${(s.xuatXu||s.baoHanh||s.note)?`<br><span class="sub-line">${[s.xuatXu, s.baoHanh?'BH '+s.baoHanh:'', s.note].filter(Boolean).map(h).join(' · ')}</span>`:''}</td>
+        <td class="r num" style="font-weight:600">${s.price ? money(s.price) : (s.mienPhi ? '<span class="pill ok">Miễn phí</span>' : '<span class="pill warn">chưa đặt giá</span>')}
+          ${s.donVi?`<br><span class="sub-line">/ ${h(s.donVi)}</span>`:''}</td>
         ${sua?`<td style="white-space:nowrap"><button class="btn small" onclick="event.stopPropagation();Svc.form('${s.id}')">Sửa</button></td>`:''}</tr>`).join('')}`).join('');
     App.modal('Bảng giá dịch vụ', `
       ${sua ? `<div class="form-actions" style="justify-content:flex-start;margin-bottom:10px">
         <button class="btn primary" onclick="Svc.form()">${IC.plus} Thêm dịch vụ</button>
+        <button class="btn" onclick="Svc.napBangGia()">Nạp bảng giá phòng khám</button>
         ${chuaGia?`<span class="pill warn">${chuaGia} dịch vụ chưa đặt giá</span>`:''}</div>`
       : '<div class="note-block mb">Chỉ quản lý mới sửa được bảng giá. Bạn xem để báo giá cho khách.</div>'}
       <div class="searchbar" style="margin-bottom:10px">${IC.search}<input id="svcQ" placeholder="Tìm tên dịch vụ hoặc nhóm..."
@@ -2401,6 +2405,13 @@ const Svc = {
       <div class="f"><label>Nhóm dịch vụ</label><select name="group">
         ${NHOM_DV.map(g=>`<option${s.group===g?' selected':''}>${h(g)}</option>`).join('')}</select></div>
       <div class="f"><label>Đơn giá (₫)</label>${Tien.o('price', s.price||0, 'required')}</div>
+      <div class="f"><label>Đơn vị tính</label><input name="donVi" value="${h(s.donVi||'')}" list="dvList" placeholder="răng, hàm, ca...">
+        <datalist id="dvList">${['răng','2 hàm','hàm','cái','ca','lần','phim','lọ','màng','ống','bộ','chốt','thanh','xoang','gói'].map(x=>`<option value="${x}">`).join('')}</datalist></div>
+      <div class="f"><label>Xuất xứ</label><input name="xuatXu" value="${h(s.xuatXu||'')}" placeholder="Hàn Quốc, Đức..."></div>
+      <div class="f"><label>Bảo hành</label><input name="baoHanh" value="${h(s.baoHanh||'')}" placeholder="10 năm"></div>
+      <div class="f full"><label>Ghi chú</label><input name="note" value="${h(s.note||'')}" placeholder="Vd: 30 – 45 triệu tùy ca"></div>
+      <div class="f full"><div class="check-row"><label><input type="checkbox" name="mienPhi"${s.mienPhi?' checked':''}>
+        Dịch vụ miễn phí (giá 0 là cố ý, không phải quên điền)</label></div></div>
       <div class="form-actions full">
         ${id?`<button type="button" class="btn danger" onclick="Svc.del('${id}')">Xóa</button><span class="spacer"></span>`:''}
         <button type="button" class="btn" onclick="Svc.bang()">Quay lại</button><button class="btn primary">Lưu</button></div>
@@ -2410,6 +2421,8 @@ const Svc = {
     ev.preventDefault();
     const d = Object.fromEntries(new FormData(ev.target).entries());
     d.name = (d.name||'').trim(); d.price = num(d.price);
+    ['donVi','xuatXu','baoHanh','note'].forEach(k => d[k] = (d[k]||'').trim());
+    d.mienPhi = !!ev.target.querySelector('[name="mienPhi"]:checked');
     if (!d.name) { App.toast('Chưa nhập tên dịch vụ'); return; }
     const trung = db.services.find(x => x.id !== id && Combo.norm(x.name) === Combo.norm(d.name));
     if (trung) { App.toast('Đã có dịch vụ tên này trong nhóm ' + trung.group); return; }
@@ -2417,6 +2430,46 @@ const Svc = {
     else db.services.push(Object.assign({id:uid()}, d));
     save(); App.render(); this.bang(); App.toast('Đã lưu dịch vụ ✓');
   },
+  /* Nạp toàn bộ bảng giá chính thức của phòng khám (từ hai file PDF).
+     Không đụng tới hồ sơ điều trị: hạng mục đã lập giữ nguyên tên và giá lúc chốt. */
+  napBangGia(){
+    if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới nạp được bảng giá'); return; }
+    if (typeof BANG_GIA === 'undefined') { App.toast('Chưa nạp được dữ liệu bảng giá'); return; }
+    const co = new Map(db.services.map(x => [Combo.norm(x.name||''), x]));
+    const them = BANG_GIA.filter(x => !co.has(Combo.norm(x.n))).length;
+    const doiGia = BANG_GIA.filter(x => { const c = co.get(Combo.norm(x.n)); return c && c.price !== x.p; }).length;
+    const thua = db.services.filter(x => !BANG_GIA.some(y => Combo.norm(y.n) === Combo.norm(x.name||''))).length;
+    App.modal('Nạp bảng giá phòng khám', `
+      <div class="note-block mb">Bảng giá chính thức có <b>${BANG_GIA.length} dịch vụ</b>.
+        So với danh sách hiện tại: thêm mới <b>${them}</b>, cập nhật giá <b>${doiGia}</b>,
+        và có <b>${thua}</b> dịch vụ đang có mà không nằm trong bảng giá.</div>
+      <div class="note-block mb">Hạng mục điều trị đã lập <b>giữ nguyên tên và giá lúc chốt</b> —
+        việc này chỉ thay danh mục để chọn từ nay về sau.</div>
+      <div class="form-actions" style="justify-content:flex-start;flex-wrap:wrap">
+        <button class="btn primary" onclick="Svc.napChay(0)">Bổ sung & cập nhật giá</button>
+        <button class="btn danger" onclick="Svc.napChay(1)">Thay hẳn — xóa ${thua} dịch vụ ngoài bảng</button>
+        <button class="btn" onclick="Svc.bang()">Hủy</button></div>`);
+  },
+  napChay(thayHan){
+    const co = new Map(db.services.map(x => [Combo.norm(x.name||''), x]));
+    let them = 0, doi = 0;
+    BANG_GIA.forEach(x => {
+      const cu = co.get(Combo.norm(x.n));
+      const o = {group:x.g, name:x.n, price:x.p, donVi:x.d||'', xuatXu:x.x||'', baoHanh:x.bh||'', note:x.c||'', mienPhi:!!x.mp};
+      if (cu) { if (cu.price !== x.p) doi++; Object.assign(cu, o); }
+      else { db.services.push(Object.assign({id:uid()}, o)); them++; }
+    });
+    let xoa = 0;
+    if (thayHan) {
+      const giu = new Set(BANG_GIA.map(x => Combo.norm(x.n)));
+      const truoc = db.services.length;
+      db.services = db.services.filter(x => giu.has(Combo.norm(x.name||'')));
+      xoa = truoc - db.services.length;
+    }
+    save(); App.render(); this.bang();
+    App.toast('Đã nạp bảng giá ✓ thêm ' + them + ', cập nhật ' + doi + (xoa ? ', xóa ' + xoa : ''));
+  },
+
   del(id){
     const s = db.services.find(x=>x.id===id); if (!s) return;
     const dung = db.treatments.filter(t => t.serviceId === id).length;
