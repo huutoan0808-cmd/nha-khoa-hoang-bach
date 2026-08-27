@@ -1279,6 +1279,8 @@ const Cal = {
 };
 
 SCREENS.calendar = () => {
+  /* Hỏi máy chủ xem còn yêu cầu nào đang chờ, để hiện số lên nút */
+  setTimeout(() => DatHen.capNhatDem(), 0);
   const D = App.state.calDate, kieu = App.state.calView || 'ngay';
   const {tu, den, tieuDe} = Cal.khoang(D, kieu);
   const trong = db.appointments.filter(a => a.date >= tu && a.date <= den);
@@ -1343,9 +1345,8 @@ SCREENS.calendar = () => {
 
   return `
   <div class="page-head"><h1>Lịch hẹn</h1><span class="spacer"></span>
-    <button class="btn" onclick="DatHen.moDanhSach()">Đặt hẹn online${(() => {
-      const n = (db.datlich||[]).filter(x => (x.trangthai||x.trangThai) === 'Chờ xác nhận').length;
-      return n ? ` <span class="pill warn">${n}</span>` : ''; })()}</button>
+    <button class="btn" onclick="DatHen.moDanhSach()">Đặt hẹn online${
+      DatHen._cho ? ` <span class="pill warn">${DatHen._cho}</span>` : ''}</button>
     <button class="btn primary" onclick="Cal.form()">${IC.plus} Đặt lịch</button></div>
   <div class="subtabs">${[['ngay','Ngày'],['tuan','Tuần'],['thang','Tháng']].map(([k,l])=>
     `<button class="subtab ${kieu===k?'active':''}" onclick="Cal.doiKieu('${k}')">${l}</button>`).join('')}</div>
@@ -4026,6 +4027,27 @@ const DatHen = {
   },
 
   /* ---------- Phía phòng khám: duyệt yêu cầu ---------- */
+  /* SQL đặt mặc định là 'Cho xac nhan' (không dấu, cho chắc khi chạy trên máy chủ),
+     còn phần mềm ghi lại bằng chữ có dấu. Nên phải so sánh kiểu bỏ dấu, không thì
+     yêu cầu mới gửi lên sẽ không được coi là đang chờ và mất luôn nút duyệt. */
+  trangThai(x){
+    const t = Combo.norm((x && (x.trangthai || x.trangThai)) || '');
+    if (t.includes('da xac nhan')) return 'Đã xác nhận';
+    if (t.includes('tu choi'))     return 'Từ chối';
+    return 'Chờ xác nhận';
+  },
+  /* Đếm số yêu cầu đang chờ để hiện lên nút, chỉ vẽ lại khi con số đổi */
+  _cho: null, _dangDem: false,
+  async capNhatDem(){
+    if (this._dangDem || !Cloud.configured() || !Cloud.loggedIn()) return;
+    this._dangDem = true;
+    try {
+      const ds = await this.tai();
+      const n = ds.filter(x => this.trangThai(x) === 'Chờ xác nhận').length;
+      if (n !== this._cho) { this._cho = n; App.render(); }
+    } catch(e){} finally { this._dangDem = false; }
+  },
+
   async tai(){
     if (!Cloud.configured() || !Cloud.loggedIn()) return [];
     try { return await Cloud.auth('/rest/v1/datlich?select=*&order=created_at.desc') || []; }
@@ -4034,9 +4056,10 @@ const DatHen = {
   async moDanhSach(){
     App.modal('Yêu cầu đặt hẹn online', '<div class="sub-line">Đang tải…</div>');
     const ds = await this.tai();
-    const cho = ds.filter(x => (x.trangthai || x.trangThai) === 'Chờ xác nhận');
+    const cho = ds.filter(x => this.trangThai(x) === 'Chờ xác nhận');
+    this._cho = cho.length;
     const rows = ds.map(x => {
-      const tt = x.trangthai || x.trangThai || 'Chờ xác nhận';
+      const tt = this.trangThai(x);
       const k = tt === 'Đã xác nhận' ? 'ok' : tt === 'Từ chối' ? 'danger' : 'warn';
       return `<tr><td class="num">${fmtD(x.ngay)}<br><b>${h(x.gio)}</b></td>
         <td><b>${h(x.ten)}</b><br><span class="sub-line num">${h(x.sdt)}</span></td>
