@@ -2979,6 +2979,8 @@ const Svc = {
       ${sua ? `<div class="form-actions" style="justify-content:flex-start;margin-bottom:10px">
         <button class="btn primary" onclick="Svc.form()">${IC.plus} Thêm dịch vụ</button>
         <button class="btn" onclick="Svc.napBangGia()">Nạp bảng giá phòng khám</button>
+        ${(() => { const n = Svc.nhomTrung().length;
+          return `<button class="btn ${n?'danger':''}" onclick="Svc.donTrung()">Dọn trùng lặp${n?` (${n} nhóm)`:''}</button>`; })()}
         ${chuaGia?`<span class="pill warn">${chuaGia} dịch vụ chưa đặt giá</span>`:''}</div>`
       : '<div class="note-block mb">Chỉ quản lý mới sửa được bảng giá. Bạn xem để báo giá cho khách.</div>'}
       <div class="searchbar" style="margin-bottom:10px">${IC.search}<input id="svcQ" placeholder="Tìm tên dịch vụ hoặc nhóm..."
@@ -3025,6 +3027,95 @@ const Svc = {
     else db.services.push(Object.assign({id:uid()}, d));
     save(); App.render(); this.bang(); App.toast('Đã lưu dịch vụ ✓');
   },
+  /* ---------- Dọn dịch vụ trùng ----------
+     Khóa "lỏng": bỏ dấu, bỏ mọi dấu câu và khoảng trắng. Nhờ vậy "Trám răng cửa —
+     tiêu chuẩn" và "Tram rang cua - tieu chuan" gom về một nhóm. */
+  khoaLong(x){ return Combo.norm(String(x||'')).replace(/[^a-z0-9]/g, ''); },
+  nhomTrung(){
+    const m = new Map();
+    (db.services||[]).forEach(x => {
+      const k = this.khoaLong(x.name); if (!k) return;
+      (m.get(k) || m.set(k, []).get(k)).push(x);
+    });
+    return [...m.values()].filter(g => g.length > 1);
+  },
+  demDung(id){ return db.treatments.filter(t => t.serviceId === id).length; },
+
+  donTrung(){
+    if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới dọn được bảng giá'); return; }
+    const nhom = this.nhomTrung();
+    /* Bỏ qua những bản nằm trong nhóm trùng — phần dọn trùng đã lo rồi, đếm nữa là
+       cùng một dòng bị kể hai lần, nhìn ra số to hơn thực tế. */
+    const trongNhom = new Set(nhom.flat().map(x => x.id));
+    const thua = db.services.filter(x => !trongNhom.has(x.id) && !x.price && !x.mienPhi && !this.demDung(x.id));
+    if (!nhom.length && !thua.length) {
+      App.modal('Dọn trùng lặp', `<div class="note-block">Bảng giá sạch — không có dịch vụ nào trùng tên,
+        cũng không có món nào vừa chưa đặt giá vừa chưa dùng lần nào.</div>
+        <div class="form-actions"><button class="btn" onclick="Svc.bang()">Quay lại</button></div>`);
+      return;
+    }
+    const bang = nhom.map((g, i) => {
+      /* Bản giữ lại: ưu tiên món có giá, rồi món đã dùng nhiều nhất */
+      const sx = g.slice().sort((a,b) => (b.price?1:0)-(a.price?1:0) || this.demDung(b.id)-this.demDung(a.id));
+      return `<div class="rx mb"><div class="rx-head"><b>Nhóm ${i+1}</b>
+        <span class="sub-line">${g.length} bản trùng nhau</span></div>
+        <div class="card-b">${sx.map((x, j) => `<label class="don-dong">
+          <input type="radio" name="giu${i}" value="${x.id}"${j===0?' checked':''}>
+          <span><b>${h(x.name)}</b>
+            <span class="sub-line">${h(x.group||'')} · ${x.price?money(x.price):(x.mienPhi?'miễn phí':'chưa đặt giá')}
+              · đã dùng ${this.demDung(x.id)} lần</span></span>
+          ${j===0?'<span class="pill ok">giữ</span>':'<span class="pill danger">xóa</span>'}</label>`).join('')}</div></div>`;
+    }).join('');
+    App.modal('Dọn trùng lặp trong bảng giá', `
+      <div class="note-block mb">Tìm thấy <b>${nhom.length} nhóm trùng tên</b>
+        (tổng ${nhom.reduce((s,g)=>s+g.length,0)} dòng, sẽ còn ${nhom.length} dòng)${
+        thua.length?` và <b>${thua.length} dịch vụ</b> vừa chưa đặt giá vừa chưa dùng lần nào`:''}.</div>
+      <div class="note-block mb">Xóa dịch vụ <b>không ảnh hưởng hồ sơ điều trị đã lập</b> —
+        hạng mục cũ giữ nguyên tên và giá lúc chốt.</div>
+      <form onsubmit="Svc.donChay(event)">
+        ${nhom.length ? `<b style="font-size:13.5px">Chọn bản giữ lại trong mỗi nhóm</b>${bang}` : ''}
+        ${thua.length ? `<div class="rx mb"><div class="rx-head"><b>Chưa đặt giá &amp; chưa dùng lần nào</b></div>
+          <div class="card-b"><div class="check-row"><label><input type="checkbox" name="xoaThua" checked>
+            Xóa luôn ${thua.length} dịch vụ này</label></div>
+            <div class="sub-line" style="margin-top:6px">${thua.slice(0,20).map(x=>h(x.name)).join(' · ')}${thua.length>20?' …':''}</div>
+          </div></div>` : ''}
+        <div class="form-actions">
+          <button type="button" class="btn" onclick="Svc.bang()">Hủy</button>
+          <span class="spacer"></span>
+          <button class="btn primary">Dọn ngay</button></div>
+      </form>`);
+  },
+  donChay(ev){
+    ev.preventDefault();
+    const f = ev.target;
+    const nhom = this.nhomTrung();
+    const xoa = new Set();
+    nhom.forEach((g, i) => {
+      const giuId = (f.querySelector(`[name="giu${i}"]:checked`) || {}).value || g[0].id;
+      const giu = g.find(x => x.id === giuId) || g[0];
+      g.forEach(x => {
+        if (x.id === giu.id) return;
+        /* Bản giữ lại mà thiếu giá thì lấy giá của bản sắp xóa cho khỏi mất */
+        if (!giu.price && x.price) giu.price = x.price;
+        ['donVi','xuatXu','baoHanh','note'].forEach(k => { if (!giu[k] && x[k]) giu[k] = x[k]; });
+        /* Hạng mục đang trỏ vào bản bị xóa thì chuyển sang bản giữ lại */
+        db.treatments.forEach(t => { if (t.serviceId === x.id) t.serviceId = giu.id; });
+        xoa.add(x.id);
+      });
+    });
+    let nThua = 0;
+    if (f.querySelector('[name="xoaThua"]:checked')) {
+      const trongNhom = new Set(nhom.flat().map(x => x.id));
+      db.services.forEach(x => {
+        if (!xoa.has(x.id) && !trongNhom.has(x.id) && !x.price && !x.mienPhi && !this.demDung(x.id)) { xoa.add(x.id); nThua++; }
+      });
+    }
+    const truoc = db.services.length;
+    db.services = db.services.filter(x => !xoa.has(x.id));
+    save(); App.render(); this.bang();
+    App.toast('Đã dọn ' + (truoc - db.services.length) + ' dòng — còn ' + db.services.length + ' dịch vụ');
+  },
+
   /* Nạp toàn bộ bảng giá chính thức của phòng khám (từ hai file PDF).
      Không đụng tới hồ sơ điều trị: hạng mục đã lập giữ nguyên tên và giá lúc chốt. */
   napBangGia(){
