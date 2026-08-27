@@ -188,7 +188,15 @@ td.r,th.r{text-align:right}
 .check-row label{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--ink2)}
 
 /* Ô gõ-để-tìm (combobox) */
-.combo{position:relative}
+/* Ô này còn dùng ngoài khung .f (vd ô đổi khách ở đầu trang Điều trị), nên phải tự
+   có kiểu dáng và tự giãn hết bề ngang — không thì nó co lại bằng cỡ mặc định của
+   trình duyệt, tên khách dài là bị cắt mất. */
+.combo{position:relative;width:100%;min-width:0}
+.combo>.combo-input{
+  width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;
+  background:var(--surface);color:var(--ink);font:inherit;text-overflow:ellipsis;
+}
+.combo>.combo-input::placeholder{color:var(--muted)}
 .combo-list{
   position:absolute;left:0;right:0;top:100%;z-index:55;margin-top:3px;
   background:var(--surface);border:1px solid var(--line);border-radius:9px;
