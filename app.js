@@ -172,7 +172,7 @@ function seed() {
              treCho:5, wifiIp:''},
     seq: {cust: 1, receipt: 1},
     services, staff: [], customers: [], treatments: [], receipts: [], rx: [],
-    inventory: [], appointments: [], labs: [], attLog: [], bonuses: []};
+    inventory: [], appointments: [], labs: [], attLog: [], bonuses: [], datlich: []};
 }
 
 function load() {
@@ -360,6 +360,14 @@ const App = {
        Trước đây còn xét thêm !db.customers.length, nên máy nào đã có sẵn dữ liệu thì
        đăng xuất xong vẫn vào thẳng app — đó là lỗ hổng, nay bỏ hẳn điều kiện đó.
        Máy chưa nối (dùng riêng, không có đám mây) thì vẫn cho dùng như cũ. */
+    /* Trang đặt hẹn của khách: ai mở cũng vào được, không bắt đăng nhập */
+    if (location.hash.slice(0,5) === '#book') {
+      document.querySelector('.app').classList.add('solo');
+      document.querySelector('.sidebar').style.display = 'none';
+      document.querySelector('.bottom-nav').style.display = 'none';
+      $('#mainArea').innerHTML = DatHen.trangKhach();
+      return;
+    }
     const quaQR = location.hash.slice(0,3) === '#cc';
     const chuaSanSang = !quaQR && (Cloud.configured()
       ? !Cloud.loggedIn()
@@ -1335,6 +1343,9 @@ SCREENS.calendar = () => {
 
   return `
   <div class="page-head"><h1>Lịch hẹn</h1><span class="spacer"></span>
+    <button class="btn" onclick="DatHen.moDanhSach()">Đặt hẹn online${(() => {
+      const n = (db.datlich||[]).filter(x => (x.trangthai||x.trangThai) === 'Chờ xác nhận').length;
+      return n ? ` <span class="pill warn">${n}</span>` : ''; })()}</button>
     <button class="btn primary" onclick="Cal.form()">${IC.plus} Đặt lịch</button></div>
   <div class="subtabs">${[['ngay','Ngày'],['tuan','Tuần'],['thang','Tháng']].map(([k,l])=>
     `<button class="subtab ${kieu===k?'active':''}" onclick="Cal.doiKieu('${k}')">${l}</button>`).join('')}</div>
@@ -3867,6 +3878,266 @@ const QT = {
           <td class="r num">${Math.round(this.tyLeThu(x.t)*100)}%</td>
           <td class="r num" style="font-weight:600">${money(x.tien)}</td></tr>`;
       }).join('')}</tbody></table></div>`;
+  },
+};
+
+/* ================= Đặt hẹn online =================
+   Khách tự đặt hẹn qua một trang riêng, không cần đăng nhập. Trang đó chỉ hỏi máy chủ
+   "ngày này giờ nào đã kín" (không lấy tên ai), rồi chỉ cho chọn khung giờ còn trống
+   trong giờ làm việc. Đặt xong rơi vào danh sách chờ, lễ tân duyệt thì mới thành lịch
+   hẹn chính thức. */
+const DatHen = {
+  BUOC: 30,                       /* mỗi khung 30 phút */
+  key: 'nkhb_dathen_da_xem',
+
+  /* ---------- Khung giờ ---------- */
+  /* Các mốc giờ trong ca làm việc, bỏ giờ nghỉ trưa */
+  khungGio(){
+    const ca = Att.ca(), ra = [];
+    ca.forEach(c => { for (let t = c.s; t + this.BUOC <= c.e; t += this.BUOC) ra.push(t); });
+    return ra;
+  },
+  /* Khung nào đã kín: đủ số ghế thì thôi, chưa đủ thì vẫn nhận thêm */
+  ban(ngay, lich){
+    const dem = {};
+    (lich || []).forEach(a => {
+      const b = hm2m(a.gio || a.time); if (b == null) return;
+      const dur = +(a.dur || 30);
+      for (let t = b; t < b + dur; t += this.BUOC) dem[t] = (dem[t] || 0) + 1;
+    });
+    return dem;
+  },
+  soGhe(){ return (typeof CHAIRS !== 'undefined' ? CHAIRS.length : 2); },
+
+  /* Khung còn nhận được khách, kèm số chỗ còn lại */
+  slotTrong(ngay, lich, batDauTu){
+    const dem = this.ban(ngay, lich), ghe = this.soGhe();
+    const homNay = ngay === todayISO();
+    const bayGio = hm2m(nowHM());
+    return this.khungGio().map(t => ({
+      t, hm: m2hm(t),
+      con: Math.max(0, ghe - (dem[t] || 0)),
+      quaGio: homNay && t <= bayGio + (batDauTu || 0),
+    }));
+  },
+
+  /* ---------- Trang đặt hẹn của khách (#book) ---------- */
+  trangKhach(){
+    const ngay = App.state.bkNgay || todayISO();
+    const st = App.state.bkStatus || {};
+    const cl = db.clinic || {};
+    return `<div style="max-width:520px;margin:0 auto">
+      <div class="page-head"><h1>Đặt lịch hẹn</h1>
+        <div class="sub">${h(cl.name || '')}${cl.addr ? ' · ' + h(cl.addr) : ''}${cl.phone ? ' · ' + h(cl.phone) : ''}</div></div>
+      ${st.xong ? `<div class="card"><div class="card-b" style="text-align:center">
+          <div style="font-size:40px;line-height:1">✓</div>
+          <h2 style="margin:8px 0">Đã gửi yêu cầu đặt hẹn</h2>
+          <p>Hẹn <b>${h(st.gio)}</b> ngày <b>${fmtD(st.ngay)}</b> cho <b>${h(st.ten)}</b>.</p>
+          <p class="sub-line">Phòng khám sẽ gọi lại xác nhận. Nếu cần đổi, gọi ${h(cl.phone || 'phòng khám')}.</p>
+          <div class="form-actions" style="justify-content:center;margin-top:12px">
+            <button class="btn" onclick="App.state.bkStatus={};App.render()">Đặt thêm lịch khác</button></div>
+        </div></div>`
+      : `<form class="card" onsubmit="DatHen.gui(event)"><div class="card-b">
+        <div class="form-grid">
+          <div class="f full"><label>Họ và tên</label><input name="ten" required placeholder="Nguyễn Văn A"></div>
+          <div class="f"><label>Số điện thoại</label><input name="sdt" required inputmode="tel" placeholder="09xx xxx xxx"></div>
+          <div class="f"><label>Ngày hẹn</label><input type="date" name="ngay" required value="${h(ngay)}"
+            min="${todayISO()}" max="${isoAdd(todayISO(), 60)}" onchange="DatHen.doiNgay(this.value)"></div>
+          <div class="f full"><label>Dịch vụ muốn làm</label>
+            <select name="dichvu">
+              <option value="">— chưa rõ, nhờ bác sĩ tư vấn —</option>
+              ${[...new Set((db.services||[]).map(s => s.group))].map(g => `<option>${h(g)}</option>`).join('')}
+            </select></div>
+          <div class="f full"><label>Chọn giờ còn trống</label>
+            <div id="bkSlot">${this.slotHTML(ngay)}</div>
+            <input type="hidden" name="gio" id="bkGio" value="">
+          </div>
+          <div class="f full"><label>Ghi chú (không bắt buộc)</label>
+            <input name="ghichu" placeholder="Vd: đau răng hàm dưới bên phải"></div>
+        </div>
+        <div class="note-block" style="margin-top:10px">Giờ làm việc: <b>${h(Att.moTaCa())}</b>.
+          Đây mới là <b>yêu cầu đặt hẹn</b> — phòng khám sẽ gọi lại xác nhận.</div>
+        <div class="form-actions" style="margin-top:12px">
+          <button class="btn primary" style="width:100%;justify-content:center;padding:13px">Gửi yêu cầu đặt hẹn</button></div>
+      </div></form>`}
+    </div>`;
+  },
+  slotHTML(ngay){
+    const lich = (db.appointments || []).filter(a => a.date === ngay && a.status !== 'Hủy')
+      .concat((db.datlich || []).filter(x => x.ngay === ngay && x.trangThai !== 'Từ chối'));
+    const ds = this.slotTrong(ngay, lich, 30);
+    if (!ds.length) return '<div class="sub-line">Chưa đặt giờ làm việc cho phòng khám.</div>';
+    const con = ds.filter(s => s.con > 0 && !s.quaGio);
+    if (!con.length) return '<div class="note-block">Ngày này đã kín lịch. Xin chọn ngày khác.</div>';
+    return `<div class="slot-ds">${ds.map(s => {
+      const duoc = s.con > 0 && !s.quaGio;
+      return `<button type="button" class="slot ${duoc ? '' : 'het'}" ${duoc ? '' : 'disabled'}
+        onclick="DatHen.chonGio('${s.hm}',this)" title="${s.quaGio ? 'Đã qua giờ' : s.con ? 'Còn ' + s.con + ' chỗ' : 'Đã kín'}">
+        ${s.hm}</button>`;
+    }).join('')}</div>`;
+  },
+  doiNgay(v){
+    App.state.bkNgay = v;
+    const o = document.getElementById('bkSlot');
+    if (o) o.innerHTML = this.slotHTML(v);
+    const g = document.getElementById('bkGio'); if (g) g.value = '';
+  },
+  chonGio(hm, nut){
+    document.querySelectorAll('#bkSlot .slot').forEach(x => x.classList.remove('chon'));
+    nut.classList.add('chon');
+    document.getElementById('bkGio').value = hm;
+  },
+  async gui(ev){
+    ev.preventDefault();
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    if (!d.gio) { App.toast('Hãy chọn một khung giờ còn trống'); return; }
+    const sdt = (d.sdt || '').replace(/\D/g, '');
+    if (sdt.length < 9) { App.toast('Số điện thoại chưa đúng'); return; }
+    /* Kiểm lại lần cuối phòng khi có người khác vừa đặt trùng giờ */
+    await this.taiLich(d.ngay);
+    const lich = (db.appointments || []).filter(a => a.date === d.ngay && a.status !== 'Hủy')
+      .concat((db.datlich || []).filter(x => x.ngay === d.ngay && x.trangThai !== 'Từ chối'));
+    const s = this.slotTrong(d.ngay, lich, 30).find(x => x.hm === d.gio);
+    if (!s || !s.con || s.quaGio) {
+      App.toast('Vừa có người đặt mất khung giờ này, xin chọn giờ khác');
+      this.doiNgay(d.ngay); return;
+    }
+    App.toast('Đang gửi…');
+    const o = {ten: (d.ten||'').trim(), sdt: (d.sdt||'').trim(), ngay: d.ngay, gio: d.gio,
+               dichvu: d.dichvu || '', ghichu: (d.ghichu||'').trim()};
+    try {
+      await Cloud.req('/rest/v1/datlich', {method:'POST',
+        headers:{Authorization:'Bearer ' + Cloud.cfg.key, Prefer:'return=minimal'}, body:[o]});
+      App.state.bkStatus = {xong:1, ten:o.ten, ngay:o.ngay, gio:o.gio};
+      App.render();
+    } catch(e){
+      App.toast('Chưa gửi được: ' + e.message + ' — xin gọi thẳng phòng khám');
+    }
+  },
+  /* Lấy các giờ đã kín trong ngày (chỉ giờ, không có tên ai) */
+  async taiLich(ngay){
+    if (!Cloud.configured()) return;
+    try {
+      const r = await Cloud.req('/rest/v1/rpc/gio_ban', {method:'POST',
+        headers:{Authorization:'Bearer ' + Cloud.cfg.key}, body:{ngay}});
+      db.appointments = (r || []).map((x,i) => ({id:'busy'+i, date:ngay, time:x.gio, dur:x.dur||30, status:'Đã xác nhận'}));
+      db.datlich = [];
+    } catch(e){ /* không lấy được thì cứ để khách chọn, lễ tân duyệt sau */ }
+  },
+
+  /* ---------- Phía phòng khám: duyệt yêu cầu ---------- */
+  async tai(){
+    if (!Cloud.configured() || !Cloud.loggedIn()) return [];
+    try { return await Cloud.auth('/rest/v1/datlich?select=*&order=created_at.desc') || []; }
+    catch(e){ return []; }
+  },
+  async moDanhSach(){
+    App.modal('Yêu cầu đặt hẹn online', '<div class="sub-line">Đang tải…</div>');
+    const ds = await this.tai();
+    const cho = ds.filter(x => (x.trangthai || x.trangThai) === 'Chờ xác nhận');
+    const rows = ds.map(x => {
+      const tt = x.trangthai || x.trangThai || 'Chờ xác nhận';
+      const k = tt === 'Đã xác nhận' ? 'ok' : tt === 'Từ chối' ? 'danger' : 'warn';
+      return `<tr><td class="num">${fmtD(x.ngay)}<br><b>${h(x.gio)}</b></td>
+        <td><b>${h(x.ten)}</b><br><span class="sub-line num">${h(x.sdt)}</span></td>
+        <td>${h(x.dichvu || '—')}<br><span class="sub-line">${h(x.ghichu || '')}</span></td>
+        <td><span class="pill ${k}">${h(tt)}</span></td>
+        <td style="white-space:nowrap">${tt === 'Chờ xác nhận'
+          ? `<button class="btn small primary" onclick="DatHen.duyet('${x.id}')">Nhận lịch</button>
+             <button class="btn small danger" onclick="DatHen.tuChoi('${x.id}')">Từ chối</button>` : ''}</td></tr>`;
+    }).join('') || '<tr><td colspan="5" class="sub-line">Chưa có yêu cầu nào.</td></tr>';
+    App.modal('Yêu cầu đặt hẹn online', `
+      <div class="note-block mb">${cho.length ? '<b>' + cho.length + ' yêu cầu</b> đang chờ xác nhận.' : 'Không có yêu cầu nào đang chờ.'}
+        Bấm <b>Nhận lịch</b> để đưa vào lịch hẹn chính thức — nếu khách chưa có hồ sơ thì phần mềm tạo hồ sơ mới.</div>
+      <div class="tbl-wrap"><table style="min-width:600px">
+        <thead><tr><th>Ngày · giờ</th><th>Khách</th><th>Dịch vụ · ghi chú</th><th>Trạng thái</th><th></th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+      <div class="form-actions" style="margin-top:10px">
+        <button class="btn" onclick="DatHen.moLienKet()">Lấy liên kết & mã QR cho khách</button></div>`);
+  },
+  async duyet(id){
+    const ds = await this.tai();
+    const x = ds.find(y => String(y.id) === String(id)); if (!x) return;
+    const sdt = (x.sdt || '').replace(/\D/g, '');
+    let c = db.customers.find(y => (y.phone || '').replace(/\D/g, '') === sdt && sdt);
+    if (!c) {
+      c = {id: uid(), code: 'KH-' + (db.seq.cust++), name: (x.ten || '').toUpperCase().trim(),
+           phone: x.sdt, createdAt: todayISO(), teeth: {}, record: {dienBien: []}, source: 'Đặt hẹn online'};
+      db.customers.unshift(c);
+    }
+    db.appointments.push({id: uid(), customerId: c.id, date: x.ngay, time: x.gio, dur: 30,
+      service: x.dichvu || 'Khám và tư vấn', chair: CHAIRS[0], doctorId: '',
+      status: 'Đã xác nhận', note: x.ghichu || '', tuOnline: true});
+    save();
+    try { await Cloud.auth('/rest/v1/datlich?id=eq.' + encodeURIComponent(id),
+      {method:'PATCH', headers:{Prefer:'return=minimal'}, body:{trangthai:'Đã xác nhận'}}); } catch(e){}
+    App.render(); App.toast('Đã nhận lịch cho ' + c.name + ' ✓');
+    this.moDanhSach();
+  },
+  async tuChoi(id){
+    if (!confirm('Từ chối yêu cầu này? Nhớ gọi báo khách.')) return;
+    try { await Cloud.auth('/rest/v1/datlich?id=eq.' + encodeURIComponent(id),
+      {method:'PATCH', headers:{Prefer:'return=minimal'}, body:{trangthai:'Từ chối'}}); } catch(e){}
+    App.toast('Đã từ chối'); this.moDanhSach();
+  },
+  lienKet(){ return location.origin + location.pathname + '#book'; },
+  SQL: `-- Bang nhan yeu cau dat hen tu khach. Khach CHI duoc them, khong doc duoc gi.
+create table if not exists datlich (
+  id uuid primary key default gen_random_uuid(),
+  ten text not null, sdt text not null,
+  ngay date not null, gio text not null,
+  dichvu text, ghichu text,
+  trangthai text default 'Cho xac nhan',
+  created_at timestamptz default now());
+
+alter table datlich enable row level security;
+drop policy if exists p_datlich_them on datlich;
+drop policy if exists p_datlich_ql   on datlich;
+-- khach vang lai: chi INSERT
+create policy p_datlich_them on datlich for insert to anon with check (true);
+-- nhan vien da dang nhap: toan quyen
+create policy p_datlich_ql on datlich for all to authenticated using (true) with check (true);
+
+-- Ham tra ve CAC GIO DA KIN trong mot ngay. Chi tra gio va thoi luong,
+-- KHONG tra ten hay so dien thoai cua benh nhan nao.
+create or replace function gio_ban(ngay date)
+returns table(gio text, dur int)
+language sql security definer set search_path = public as $$
+  select data->>'time', coalesce(nullif(data->>'dur','')::int, 30)
+  from records
+  where tbl = 'appointments' and not deleted
+    and data->>'date' = ngay::text
+    and coalesce(data->>'status','') <> 'Huy'
+  union all
+  select gio, 30 from datlich
+  where ngay = gio_ban.ngay and trangthai <> 'Tu choi'
+$$;
+revoke all on function gio_ban(date) from public;
+grant execute on function gio_ban(date) to anon, authenticated;`,
+
+  moSQL(){
+    App.modal('SQL cho trang đặt hẹn online', `
+      <div class="note-block mb">Chạy một lần trong Supabase → <b>SQL Editor</b> → dán vào → <b>Run</b>.
+        Sau đó trang đặt hẹn mới nhận được yêu cầu của khách.</div>
+      <div class="note-block mb">Khách <b>chỉ gửi được yêu cầu</b>, không đọc được bất kỳ dữ liệu nào.
+        Hàm tra giờ trống chỉ trả về <b>giờ và thời lượng</b> — không có tên hay số điện thoại của ai.</div>
+      <textarea readonly rows="16" style="font:12px/1.5 ui-monospace,Consolas,monospace" onclick="this.select()">${h(this.SQL)}</textarea>
+      <div class="form-actions" style="margin-top:10px">
+        <button class="btn" onclick="navigator.clipboard.writeText(DatHen.SQL).then(()=>App.toast('Đã chép SQL ✓'))">Chép SQL</button>
+        <span class="spacer"></span><button class="btn" onclick="DatHen.moLienKet()">Quay lại</button></div>`);
+  },
+
+  moLienKet(){
+    const u = this.lienKet();
+    App.modal('Liên kết đặt hẹn cho khách', `
+      <div class="note-block mb">Gửi liên kết này cho khách (Zalo, Facebook, website), hoặc in mã QR dán ở quầy.
+        Khách <b>không cần đăng nhập</b>, chỉ thấy khung giờ còn trống, không thấy thông tin bệnh nhân nào.</div>
+      <div class="f full"><label>Liên kết</label><input value="${h(u)}" readonly onclick="this.select()"></div>
+      <div style="text-align:center;margin:14px 0">
+        <div style="display:inline-block;padding:10px;background:#fff;border-radius:12px;border:1px solid var(--line)">${QR.svg(u, 220)}</div></div>
+      <div class="form-actions"><button class="btn" onclick="navigator.clipboard.writeText('${h(u)}').then(()=>App.toast('Đã chép liên kết ✓'))">Chép liên kết</button>
+        ${Perm.only('caidat', `<button class="btn" onclick="DatHen.moSQL()">SQL cài đặt (chạy một lần)</button>`)}
+        <span class="spacer"></span><button class="btn" onclick="App.closeModal()">Đóng</button></div>`);
   },
 };
 
