@@ -359,6 +359,15 @@ input,textarea,[contenteditable]{-webkit-spell-check:none}
 /* Trên điện thoại kéo thả không chạy, ẩn tay cầm cho đỡ rối, chỉ để hai nút mũi tên */
 @media (max-width:767px){ .keo-tay{display:none} }
 
+/* Bệnh án ngoại trú: tiêu đề mục và lưới thông tin hành chính mục A */
+.ba-muc{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:13px;
+  padding-bottom:6px;border-bottom:1px solid var(--line)}
+.ba-a{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:7px 14px;margin-top:9px}
+.ba-o{display:flex;gap:8px;font-size:13px;line-height:1.4}
+.ba-k{color:var(--muted);flex:none;min-width:96px}
+.ba-v{font-weight:600;min-width:0;word-break:break-word}
+.ba-o.trong .ba-v{color:var(--warn);font-weight:500;font-style:italic}
+
 /* Bệnh án điện tử: mỗi biểu mẫu một dòng riêng, như một tập hồ sơ */
 .ho-so-file{display:flex;gap:12px;align-items:flex-start;padding:11px 12px;border:1px solid var(--line);
   border-radius:10px;background:var(--surface);margin-bottom:8px}

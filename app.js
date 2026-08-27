@@ -1488,7 +1488,6 @@ SCREENS.customers = () => {
     </div>`;
     })()}
     ${Cal.cardKhachHTML(c)}
-    ${HoSo.cardBA18(c)}
     ${HoSo.cardHTML(c)}
     ${Photo.cardHTML(c)}
     <div class="card">
@@ -2170,14 +2169,15 @@ const Dot = {
 
 /* ---------- Bệnh án điện tử ---------- */
 const HoSo = {
+  /* Thứ tự đúng như phòng khám đánh số trên bộ giấy tờ */
   DS: [
+    {k:'ba18',    ten:'Bệnh án ngoại trú RHM',              ms:'MS: BA-18'},
+    {k:'tuvan',   ten:'Phiếu tư vấn + báo giá',             ms:''},
     {k:'theodoi', ten:'Phiếu theo dõi điều trị',            ms:'MS: 36/BV2'},
     {k:'camket',  ten:'Giấy cam kết phẫu thuật, thủ thuật', ms:'MS: 01/BV2'},
     {k:'phieuthu',ten:'Phiếu thu (bảng chi tiết)',          ms:''},
-    {k:'tuvan',   ten:'Phiếu tư vấn + báo giá',             ms:''},
   ],
-  ten(k){ return k === 'ba18' ? 'Bệnh án ngoại trú RHM'
-                              : ((this.DS.find(x=>x.k===k)||{}).ten || k); },
+  ten(k){ return (this.DS.find(x=>x.k===k)||{}).ten || k; },
 
   cham(n){ return '.'.repeat(n || 60); },
   gach(v, n){ return v ? h(v) : this.cham(n || 60); },
@@ -2233,6 +2233,7 @@ const HoSo = {
 
   /* Vài dòng tóm tắt nội dung mỗi biểu mẫu đang có, để nhìn là biết đã đủ chưa */
   tomTat(k, c, ep){
+    ep = ep || {};
     const d = this.dl(ep, k, c), r = c.record || {};
     if (k === 'ba18') {
       const dx = icdName(d.chanDoan || ep.chanDoan || r.chanDoan);
@@ -2264,85 +2265,98 @@ const HoSo = {
   },
 
   /* ---------- Bệnh án ngoại trú: MỘT bản cho mỗi khách, dùng suốt mọi đợt ---------- */
-  cardBA18(c){
+  /* ---------- MỘT khung duy nhất: Bệnh án ngoại trú ----------
+     Gồm 5 loại giấy tờ theo đúng thứ tự phòng khám đánh số. Tờ số 1 là bệnh án của
+     KHÁCH (một bản dùng suốt mọi đợt), bốn tờ sau theo TỪNG ĐỢT điều trị. */
+  cardHTML(c){
     const r = c.record || {};
-    const daDien = !!(r.lyDo || r.chanDoan || (r.vanDe||[]).length);
-    const n = ((r.dienBien)||[]).length;
-    return `<div class="card mb"><div class="card-h"><h2>Bệnh án ngoại trú (BA-18)</h2>
-      <span class="hint">một bản duy nhất cho khách này, dùng suốt mọi đợt điều trị</span>
-      <span class="spacer"></span>
-      ${daDien?'<span class="pill ok">Đã lập</span>':'<span class="pill warn">Chưa lập</span>'}</div>
-      <div class="card-b">
-        <div class="form-grid" style="gap:8px 16px">
-          <div class="f full"><label>Lý do vào viện</label><b>${h(r.lyDo||'—')}</b></div>
-          <div class="f full"><label>Kế hoạch điều trị</label><b style="white-space:pre-wrap">${h(r.keHoach||'—')}</b></div>
+    const ds = Dot.cua(c.id), ep = Dot.dangChon(c);
+    const muc = ep ? Dot.mucCua(ep) : [];
+    const tong = muc.reduce((s, t) => s + (t.price || 0), 0);
+    const daLapBA = !!(r.lyDo || r.chanDoan || (r.vanDe||[]).length);
+
+    /* Thông tin hành chính mục A — điền tự động từ hồ sơ khách */
+    const A = [
+      ['Họ và tên', (c.name||'').toUpperCase()],
+      ['Ngày sinh', c.dob ? fmtD(c.dob) + (this.tuoi(c) ? ' · ' + this.tuoi(c) + ' tuổi' : '') : ''],
+      ['Giới tính', c.gender],
+      ['Điện thoại', c.phone],
+      ['Nghề nghiệp', r.job || c.job],
+      ['Dân tộc', r.danToc || c.danToc],
+      ['Địa chỉ', fullAddr(c)],
+      ['Đối tượng', c.doiTuong],
+      ['Số thẻ BHYT', c.bhyt],
+      ['Số căn cước', c.cccd],
+      ['Thân nhân báo tin', c.kinName ? c.kinName + (c.kinPhone ? ' · ' + c.kinPhone : '') : ''],
+    ];
+    const thieu = A.filter(x => !x[1]).length;
+
+    const dongFile = (d, i) => {
+      const laKhach = this.cuaKhach(d.k);
+      const daDien = laKhach ? daLapBA : !!(ep && ep.phieu && ep.phieu[d.k] && ep.phieu[d.k]._at);
+      const ngay = (!laKhach && ep && ep.phieu && ep.phieu[d.k]) ? ep.phieu[d.k]._at : '';
+      const khoa = !laKhach && !ep;
+      return `<div class="ho-so-file ${daDien?'da-dien':''}">
+        <div class="hsf-so">${i + 1}</div>
+        <div class="hsf-than">
+          <div class="hsf-dau"><b>${h(d.ten)}</b>
+            ${d.ms ? `<span class="hs-ms">${h(d.ms)}</span>` : ''}
+            <span class="pill ${laKhach?'info':'mutedp'}">${laKhach ? 'của khách' : 'theo đợt'}</span>
+            ${daDien ? `<span class="pill ok">Đã lập${ngay?' '+fmtD(ngay):''}</span>` : `<span class="pill warn">Chưa lập</span>`}</div>
+          <div class="hsf-mo">${khoa ? 'Cần mở một đợt điều trị trước'
+            : (h(this.tomTat(d.k, c, ep)) || 'Sẽ lấy dữ liệu sẵn có của khách và của đợt điều trị')}</div>
         </div>
-        <div style="margin-top:12px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
-          <b style="font-size:13.5px">Các vấn đề của khách</b>
+        <div class="hsf-nut">
+          <button class="btn small primary" ${khoa?'disabled':''} onclick="HoSo.dien('${d.k}')">${daDien?'Sửa':'Điền'}</button>
+          <button class="btn small" ${khoa?'disabled':''} onclick="HoSo.in('${d.k}')">${IC.print} In</button>
+          ${d.k === 'ba18' ? `<button class="btn small" onclick="Cust.recordForm()" title="Khám bệnh, tiền sử, cận lâm sàng">Khám &amp; tiền sử</button>` : ''}
+        </div></div>`;
+    };
+
+    return `<div class="card mb"><div class="card-h"><h2>Bệnh án ngoại trú</h2>
+      <span class="hint">5 loại giấy tờ · điền trên máy rồi in khổ A4</span><span class="spacer"></span>
+      ${daLapBA?'<span class="pill ok">Đã lập bệnh án</span>':'<span class="pill warn">Chưa lập bệnh án</span>'}</div>
+      <div class="card-b">
+
+        <div class="ba-muc"><b>A. THÔNG TIN CHUNG</b>
+          <span class="sub-line">tự điền từ hồ sơ khách hàng${thieu?` · còn ${thieu} mục trống`:' · đã đủ'}</span>
+          <span class="spacer"></span>
+          <button class="btn small" onclick="Cust.form('${c.id}')">Sửa hồ sơ khách</button></div>
+        <div class="ba-a">${A.map(([k, v]) => `<div class="ba-o ${v?'':'trong'}">
+          <span class="ba-k">${h(k)}</span><span class="ba-v">${v ? h(v) : '— chưa có —'}</span></div>`).join('')}</div>
+
+        <div class="ba-muc" style="margin-top:14px"><b>IV. CHẨN ĐOÁN — các vấn đề của khách</b>
           <span class="sub-line">nhiều vấn đề cùng lúc đều nằm trên một bệnh án</span>
           <span class="spacer"></span>
           <button class="btn small" onclick="Cust.vanDeForm()">${IC.plus} Thêm vấn đề</button></div>
         <div style="margin-top:6px">${Cust.vanDeHTML(c)}</div>
-        <div class="note-block" style="margin-top:12px">Mục <b>VI. Quá trình điều trị</b> trên bản in cộng dồn
-          <b>${n} lần diễn biến</b> của mọi đợt, sắp theo ngày và ghi rõ thuộc đợt nào.
-          Hết chỗ thì in tiếp <b>Phiếu theo dõi điều trị</b>.</div>
-        <div class="form-actions" style="justify-content:flex-start;margin-top:12px">
-          <button class="btn primary" onclick="HoSo.dien('ba18')">Điền bệnh án</button>
-          <button class="btn" onclick="HoSo.in('ba18')">${IC.print} In bệnh án A4</button>
-          <button class="btn" onclick="Cust.recordForm()">Sửa chi tiết (khám, tiền sử)</button></div>
-      </div></div>`;
-  },
 
-  /* ---------- Thẻ trong hồ sơ khách ---------- */
-  cardHTML(c){
-    const ds = Dot.cua(c.id), ep = Dot.dangChon(c);
-    if (!ds.length) return `<div class="card mb"><div class="card-h"><h2>Giấy tờ theo đợt điều trị</h2>
-      <span class="hint">in khổ A4</span></div>
-      <div class="card-b"><div class="note-block">Chưa có đợt điều trị nào. <b>Bệnh án ngoại trú ở trên</b> là của khách,
-        dùng suốt mọi đợt. Còn <b>đợt điều trị</b> gom các dịch vụ làm cùng thời gian, và giữ
-        giấy cam kết, phiếu tư vấn, báo giá, phiếu thu của lần can thiệp đó.</div>
-      <div class="form-actions" style="justify-content:flex-start;margin-top:10px">
-        <button class="btn primary" onclick="Dot.form()">${IC.plus} Mở đợt điều trị</button></div></div></div>`;
-    const muc = Dot.mucCua(ep);
-    const tong = muc.reduce((s,t)=>s+(t.price||0),0);
-    return `<div class="card mb"><div class="card-h"><h2>Giấy tờ theo đợt điều trị</h2>
-      <span class="hint">điền trên máy rồi in khổ A4</span><span class="spacer"></span>
-      <button class="btn small" onclick="Dot.form()">${IC.plus} Đợt mới</button></div>
-      <div class="card-b">
-        <div class="f" style="max-width:520px"><label>Đợt điều trị</label>
-          <select onchange="Dot.chon(this.value)">${ds.map(e=>`<option value="${e.id}"${e.id===ep.id?' selected':''}>
-            ${h(e.ten||'(chưa đặt tên)')} — ${fmtD(e.tuNgay)}${e.denNgay?' → '+fmtD(e.denNgay):''} · ${h(e.status||'')}</option>`).join('')}</select></div>
-        <div class="tooth-info" style="margin-top:8px">
-          <b>${h(ep.ten||'(chưa đặt tên)')}</b> · ${h((staffById(ep.doctorId)||{}).name || 'chưa phân bác sĩ')}
-          · ${muc.length} dịch vụ · ${money(tong)}
-          ${ep.chanDoan?'<br>Chẩn đoán: <b>'+h(icdName(ep.chanDoan))+'</b>':''}
-          ${muc.length?'<br><span class="sub-line">'+muc.map(t=>h(t.name)+(t.tooth?' (R'+h(t.tooth)+')':'')).join(' · ')+'</span>':'<br><span class="sub-line" style="color:var(--danger)">Chưa gắn dịch vụ nào vào đợt — bấm Sửa đợt để chọn.</span>'}
-          <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
-            <button class="btn small" onclick="Dot.form('${ep.id}')">Sửa đợt</button></div>
-        </div>
-        <div style="margin-top:12px">
-          ${this.DS.map((d, i) => {
-            const daDien = !!(ep.phieu && ep.phieu[d.k] && ep.phieu[d.k]._at);
-            return `<div class="ho-so-file ${daDien?'da-dien':''}">
-              <div class="hsf-so">${i+1}</div>
-              <div class="hsf-than">
-                <div class="hsf-dau"><b>${h(d.ten)}</b>
-                  ${d.ms?`<span class="hs-ms">${h(d.ms)}</span>`:''}
-                  ${daDien ? `<span class="pill ok">Đã điền ${fmtD(ep.phieu[d.k]._at)}</span>`
-                           : `<span class="pill mutedp">Chưa điền</span>`}</div>
-                <div class="hsf-mo">${h(this.tomTat(d.k, c, ep)) || 'Sẽ lấy dữ liệu sẵn có của khách và của đợt điều trị'}</div>
-              </div>
-              <div class="hsf-nut">
-                <button class="btn small primary" onclick="HoSo.dien('${d.k}')">${daDien?'Sửa':'Điền'}</button>
-                <button class="btn small" onclick="HoSo.in('${d.k}')">${IC.print} In</button>
-                ${d.k === 'ba18' ? `<button class="btn small" onclick="Cust.recordForm()" title="Bệnh án gốc dùng chung cho mọi đợt điều trị">Bệnh án gốc</button>` : ''}
-              </div></div>`;
-          }).join('')}
-        </div>
-        <div class="combo-hint" style="margin-top:10px">Mỗi dòng là <b>một biểu mẫu riêng</b> — cần cái nào thì điền cái đó.
+        <div class="ba-muc" style="margin-top:14px"><b>ĐỢT ĐIỀU TRỊ</b>
+          <span class="sub-line">giấy tờ số 2 đến 5 lập theo từng đợt</span>
+          <span class="spacer"></span>
+          <button class="btn small" onclick="Dot.form()">${IC.plus} Đợt mới</button></div>
+        ${ds.length ? `
+          <div class="f" style="max-width:520px;margin-top:6px"><select onchange="Dot.chon(this.value)">
+            ${ds.map(e => `<option value="${e.id}"${e.id===ep.id?' selected':''}>
+              ${h(e.ten||'(chưa đặt tên)')} — ${fmtD(e.tuNgay)}${e.denNgay?' → '+fmtD(e.denNgay):''} · ${h(e.status||'')}</option>`).join('')}</select></div>
+          <div class="tooth-info" style="margin-top:8px">
+            <b>${h(ep.ten||'(chưa đặt tên)')}</b> · ${h((staffById(ep.doctorId)||{}).name || 'chưa phân bác sĩ')}
+            · ${muc.length} dịch vụ · ${money(tong)}
+            ${muc.length?'<br><span class="sub-line">'+muc.map(t=>h(t.name)+(t.tooth?' (R'+h(t.tooth)+')':'')).join(' · ')+'</span>'
+                        :'<br><span class="sub-line" style="color:var(--danger)">Chưa gắn dịch vụ nào vào đợt — bấm Sửa đợt để chọn.</span>'}
+            <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
+              <button class="btn small" onclick="Dot.form('${ep.id}')">Sửa đợt</button></div></div>`
+        : `<div class="note-block" style="margin-top:6px">Chưa có đợt điều trị nào. Bệnh án ngoại trú (tờ số 1) vẫn lập được ngay;
+            bốn tờ còn lại cần mở đợt trước.</div>`}
+
+        <div class="ba-muc" style="margin-top:16px"><b>GIẤY TỜ TRONG BỆNH ÁN</b></div>
+        <div style="margin-top:6px">${this.DS.map(dongFile).join('')}</div>
+
+        <div class="combo-hint" style="margin-top:10px">Tờ số <b>1</b> là bệnh án của khách — <b>một bản duy nhất</b>,
+          dùng suốt mọi đợt điều trị, mục VI cộng dồn diễn biến của tất cả các đợt.
+          Bốn tờ còn lại lập <b>theo từng đợt</b>, vì mỗi lần can thiệp cần một cam kết và một phiếu thu riêng.<br>
           Bấm <b>Điền</b> để nhập trên máy (các ô trống đều có gợi ý), xong bấm <b>Lưu và in</b>;
-          hoặc bấm <b>In</b> để in lại bất cứ lúc nào.<br>
-          <b>Bệnh án gốc</b> là phần hành chính và tiền sử dùng chung cho mọi đợt điều trị của khách này.</div>
+          hoặc bấm <b>In</b> để in lại bất cứ lúc nào.</div>
       </div></div>`;
   },
 
@@ -2350,14 +2364,18 @@ const HoSo = {
   dien(k){
     const c = custById(App.state.custSel); if (!c) { App.toast('Chưa chọn khách hàng'); return; }
     const ep = Dot.dangChon(c);
-    if (!ep) { App.toast('Mở một đợt điều trị trước đã'); Dot.form(); return; }
+    /* Bệnh án ngoại trú là của khách nên lập được ngay, chưa cần đợt nào */
+    if (!ep && !this.cuaKhach(k)) { App.toast('Mở một đợt điều trị trước đã'); Dot.form(); return; }
+    const E = ep || {};
     const than = this['f_' + k];
     if (!than) { App.toast('Chưa có mẫu này'); return; }
     App.modal('Điền ' + this.ten(k) + ' — ' + c.name, `
-      <div class="note-block mb">Đợt: <b>${h(ep.ten||'')}</b> · ${fmtD(ep.tuNgay)} · ${Dot.mucCua(ep).length} dịch vụ.
+      <div class="note-block mb">${ep
+        ? `Đợt: <b>${h(E.ten||'')}</b> · ${fmtD(E.tuNgay)} · ${Dot.mucCua(E).length} dịch vụ.`
+        : 'Bệnh án của khách, dùng chung cho mọi đợt điều trị.'}
         Ô nào bỏ trống thì trên bản in để dòng chấm cho viết tay.</div>
       <form class="form-grid" onsubmit="HoSo.luu(event,'${k}',0)">
-        ${than.call(this, c, ep)}
+        ${than.call(this, c, E)}
         <div class="form-actions full">
           <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
           <button class="btn">Lưu</button>
@@ -2373,6 +2391,7 @@ const HoSo = {
     ev.preventDefault();
     const f = ev.target;
     const c = custById(App.state.custSel), ep = Dot.dangChon(c);
+    if (!ep && !this.cuaKhach(k)) { App.toast('Chưa có đợt điều trị'); return; }
     const d = Object.fromEntries(new FormData(f).entries());
     /* Gom MỌI nhóm ô tick thành mảng. Trước đây liệt kê tay từng tên nên sót một cái
        là chỗ đó thành chuỗi, lúc in gọi .map lên chuỗi là văng lỗi. */
@@ -2400,10 +2419,10 @@ const HoSo = {
   in(k){
     const c = custById(App.state.custSel); if (!c) { App.toast('Chưa chọn khách hàng'); return; }
     const ep = Dot.dangChon(c);
-    if (!ep) { App.toast('Mở một đợt điều trị trước đã'); Dot.form(); return; }
+    if (!ep && !this.cuaKhach(k)) { App.toast('Mở một đợt điều trị trước đã'); Dot.form(); return; }
     const fn = this['p_' + k];
     if (!fn) { App.toast('Chưa có mẫu này'); return; }
-    App.print(fn.call(this, c, ep));
+    App.print(fn.call(this, c, ep || {}));
   },
 
   /* Ô nhập kèm gợi ý */
