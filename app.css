@@ -333,6 +333,9 @@ td.r,th.r{text-align:right}
 
 /* ===== In ấn ===== */
 #printArea{display:none}
+/* Chắc chắn không còn gạch đỏ / gạch xanh dưới chữ khi gõ tiếng Việt */
+input,textarea,[contenteditable]{-webkit-spell-check:none}
+
 /* Ô nhập tiền: canh phải, chữ số đều nhau cho dễ soát */
 .o-tien{text-align:right;font-variant-numeric:tabular-nums;letter-spacing:.02em}
 
