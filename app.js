@@ -167,7 +167,9 @@ function seed() {
 
   return {ver: 1,
     clinic: {name:'Nha Khoa Hoàng Bách - Gò Quao', legal:'Công ty TNHH Nha Khoa Hoàng Bách – Gò Quao',
-             authority:'Sở Y tế An Giang', addr:'Số 33 đường 3/2, Xã Gò Quao, An Giang', phone:'', taxCode:'', maCSKCB:'',
+             authority:'Sở Y tế An Giang', addr:'Số 33 đường 3/2, Xã Gò Quao, An Giang',
+             phone:'0776 262 242', taxCode:'', maCSKCB:'',
+             phone2:'0707 262 242',
              caSangVao:'07:00', caSangRa:'12:00', caChieuVao:'13:00', caChieuRa:'17:00',
              treCho:5, wifiIp:''},
     seq: {cust: 1, receipt: 1},
@@ -204,6 +206,9 @@ function migrate() {
     cl.addr = 'Số 33 đường 3/2, Xã Gò Quao, An Giang';
     cl.tenGQ = 1;
   }
+  /* Số điện thoại phòng khám — điền một lần cho máy nào chưa có */
+  if (!cl.phone) cl.phone = '0776 262 242';
+  if (!cl.phone2) cl.phone2 = '0707 262 242';
   delete cl.shiftStart;
   /* Sơ đồ răng cũ chỉ có một trạng thái mỗi răng: 'rct' (điều trị tủy) và 'crown'
      (bọc sứ chung). Nay nội nha là ô tick riêng, còn răng sứ tách kim loại / toàn sứ.
@@ -852,6 +857,13 @@ const Cust = {
     const f = (label, name, val, ph, type) => `<div class="f"><label>${label}</label><input name="${name}" value="${h(val||'')}" placeholder="${ph||''}" type="${type||'text'}"></div>`;
     App.modal(id ? 'Sửa hồ sơ khách hàng' : 'Thêm khách hàng (theo mẫu BA-18)', `
     <form id="custForm" class="form-grid" onsubmit="Cust.save(event,'${id||''}')">
+      <div class="f"><label>Mã khách hàng</label>
+        <input name="code" value="${h(c.code || Cust.maTiepTheo())}" placeholder="KH-1"
+          style="text-transform:uppercase" autocomplete="off">
+        <div class="combo-hint">${id ? 'Đổi mã thì mọi hồ sơ của khách này vẫn giữ nguyên.'
+          : 'Đã điền sẵn mã kế tiếp — sửa được nếu phòng khám đánh số theo cách riêng.'}</div></div>
+      <div class="f"><label>Ngày lập hồ sơ</label>
+        <input type="date" name="createdAt" value="${h(c.createdAt || todayISO())}"></div>
       <div class="f full"><label>1. Họ và tên (IN HOA)</label><input name="name" required value="${h(c.name||'')}" style="text-transform:uppercase"></div>
       ${f('2. Ngày sinh','dob',c.dob,'','date')}
       <div class="f"><label>3. Giới tính</label><select name="gender"><option${c.gender==='Nam'?' selected':''}>Nam</option><option${c.gender==='Nữ'?' selected':''}>Nữ</option></select></div>
@@ -875,17 +887,41 @@ const Cust = {
       <div class="form-actions full"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">${id?'Lưu thay đổi':'Thêm khách hàng'}</button></div>
     </form>`);
   },
+  /* Bấm tiêu đề cột: lần đầu sắp tăng dần, bấm lại thì đảo chiều */
+  sapXep(k){
+    const sx = App.state.custSort || {k:'code', d:1};
+    App.state.custSort = (sx.k === k) ? {k, d: -sx.d} : {k, d: 1};
+    App.render();
+  },
+
+  /* Mã kế tiếp theo bộ đếm, nhưng nhảy qua mã nào đã có người dùng */
+  maTiepTheo(){
+    const co = new Set(db.customers.map(x => Combo.norm(x.code || '')));
+    let n = (db.seq && db.seq.cust) || 1, ma;
+    do { ma = 'KH-' + n; n++; } while (co.has(Combo.norm(ma)) && n < 1e6);
+    return ma;
+  },
+
   save(ev, id){
     ev.preventDefault();
     const d = Object.fromEntries(new FormData(ev.target).entries());
     d.name = (d.name||'').toUpperCase().trim();
+    d.code = (d.code || '').toUpperCase().trim();
+    /* Mã khách phải là duy nhất — trùng mã thì tra cứu, phiếu thu, bệnh án lẫn hết */
+    if (d.code) {
+      const trung = db.customers.find(x => x.id !== id && Combo.norm(x.code||'') === Combo.norm(d.code));
+      if (trung) { App.toast('Mã ' + d.code + ' đã dùng cho khách ' + trung.name + ' — chọn mã khác'); return; }
+    }
     d.province = (d.province || '').trim();
     d.ward = (d.ward || '').trim();
     d.street = (d.street || '').trim();
     if (d.oldAddr !== undefined) d.oldAddr = (d.oldAddr || '').trim();
     if (id) { Object.assign(custById(id), d); App.toast('Đã cập nhật hồ sơ ✓'); }
     else {
-      const c = Object.assign({id:uid(), code:'KH-'+(db.seq.cust++), createdAt:todayISO(), teeth:{}, record:{dienBien:[]}}, d);
+      /* Bộ đếm vẫn chạy để lần sau gợi ý đúng, kể cả khi lễ tân tự đặt mã */
+      db.seq.cust++;
+      const c = Object.assign({id:uid(), code: d.code || ('KH-'+db.seq.cust), createdAt: d.createdAt || todayISO(),
+        teeth:{}, record:{dienBien:[], vanDe:[]}}, d);
       db.customers.unshift(c); App.state.custSel = c.id; App.toast('Đã thêm khách hàng ✓');
     }
     save(); App.closeModal(); App.render();
@@ -1353,9 +1389,26 @@ SCREENS.customers = () => {
     Combo.norm(c.name).includes(q)
     || (c.phone||'').replace(/\D/g,'').includes(q.replace(/\D/g,'')) && /\d/.test(q)
     || Combo.norm(c.code||'').includes(q));
-  /* Danh sách sắp theo mã KH tăng dần */
+  /* Sắp xếp theo cột đang chọn, bấm lại tiêu đề cột thì đảo chiều */
+  const sx = App.state.custSort || {k:'code', d:1};
   const codeNum = c => { const m = String(c.code||'').match(/(\d+)/); return m ? +m[1] : Infinity; };
-  const list = filtered.sort((a,b) => codeNum(a) - codeNum(b) || String(a.code).localeCompare(String(b.code)));
+  const khoa = {
+    code: c => [codeNum(c), String(c.code||'')],
+    name: c => [Combo.norm(c.name||'')],
+    kham: c => [custLastVisit(c) || ''],
+    no:   c => [custDebt(c)],
+  };
+  const lay = khoa[sx.k] || khoa.code;
+  const list = filtered.sort((a,b) => {
+    const x = lay(a), y = lay(b);
+    for (let i = 0; i < x.length; i++) {
+      if (x[i] < y[i]) return -sx.d;
+      if (x[i] > y[i]) return sx.d;
+    }
+    return 0;
+  });
+  const th = (k, nhan, phai) => `<th class="${phai?'r ':''}sap ${sx.k===k?'dang':''}" onclick="Cust.sapXep('${k}')"
+    title="Bấm để sắp xếp">${nhan}<span class="sap-mui">${sx.k===k?(sx.d>0?'▲':'▼'):'⇅'}</span></th>`;
   const rows = list.map(c => {
     const debt = custDebt(c);
     const lastV = custLastVisit(c);
@@ -1454,7 +1507,7 @@ SCREENS.customers = () => {
   <div class="searchbar">${IC.search}<input placeholder="Tìm theo tên, số điện thoại, mã KH..." value="${h(App.state.custQ)}"
     oninput="App.state.custQ=this.value;App.render();const i=document.querySelector('.searchbar input');i.focus();i.setSelectionRange(i.value.length,i.value.length)"></div>
   <div class="card mb"><div class="tbl-wrap"><table>
-    <thead><tr><th>Khách hàng</th><th>Mã</th><th>Khám gần nhất</th>${Perm.can('thu')?'<th class="r">Công nợ</th>':''}</tr></thead>
+    <thead><tr>${th('name','Khách hàng')}${th('code','Mã')}${th('kham','Khám gần nhất')}${Perm.can('thu')?th('no','Công nợ',1):''}</tr></thead>
     <tbody id="custRows">${rows}</tbody></table></div></div>
   ${detail}`;
 };
@@ -4025,6 +4078,8 @@ create policy p_rec   on records    for all to authenticated using (true) with c
       <div class="note-block full">Khoảng <b>giữa hai ca là giờ nghỉ trưa, không tính công</b>. Nhờ vậy người ở lại buổi trưa
         và người về rồi quay lại đều ra cùng số giờ — không ai phải chấm công bốn lần một ngày.
         Ai về trưa rồi nghỉ luôn thì phần mềm chỉ tính công buổi sáng.</div>
+      <div class="f"><label>Điện thoại phòng khám</label><input name="phone" value="${h(db.clinic.phone||'')}" placeholder="0776 262 242"></div>
+      <div class="f"><label>Điện thoại thứ hai</label><input name="phone2" value="${h(db.clinic.phone2||'')}" placeholder="0707 262 242"></div>
       <div class="f full"><label>Địa chỉ mạng phòng khám</label><input name="wifiIp" value="${h(db.clinic.wifiIp||'')}" placeholder="chưa đặt"></div>
       <div class="note-block full">Trình duyệt không đọc được tên wifi, nên phần mềm đối chiếu <b>địa chỉ mạng (IP)</b> của phòng khám thay thế: đứng ở phòng khám dùng wifi phòng khám thì IP trùng, chấm công ở nhà thì bị đánh dấu <b>ngoài mạng phòng khám</b>.
         Bấm nút bên dưới khi đang ngồi tại phòng khám và <b>đã nối wifi phòng khám</b> để ghi nhận.</div>
@@ -4043,6 +4098,8 @@ create policy p_rec   on records    for all to authenticated using (true) with c
     if (g[1] <= g[0] || g[3] <= g[2] || g[2] < g[1]) { App.toast('Giờ ca chưa hợp lý — ca chiều phải bắt đầu sau khi ca sáng kết thúc'); return; }
     ['caSangVao','caSangRa','caChieuVao','caChieuRa'].forEach(k => db.clinic[k] = d[k]);
     db.clinic.treCho = Math.max(0, +d.treCho || 0);
+    db.clinic.phone = (d.phone||'').trim();
+    db.clinic.phone2 = (d.phone2||'').trim();
     db.clinic.wifiIp = (d.wifiIp||'').trim();
     save(); App.closeModal(); App.render(); App.toast('Đã lưu cài đặt ✓');
   },
@@ -4440,12 +4497,13 @@ const DatHen = {
     const cl = db.clinic || {};
     return `<div style="max-width:520px;margin:0 auto">
       <div class="page-head"><h1>Đặt lịch hẹn</h1>
-        <div class="sub">${h(cl.name || '')}${cl.addr ? ' · ' + h(cl.addr) : ''}${cl.phone ? ' · ' + h(cl.phone) : ''}</div></div>
+        <div class="sub"><b>${h(cl.name || '')}</b>${cl.addr ? '<br>' + h(cl.addr) : ''}
+          ${cl.phone ? '<br>Điện thoại: <b>' + h(cl.phone) + '</b>' + (cl.phone2 ? ' — ' + h(cl.phone2) : '') : ''}</div></div>
       ${st.xong ? `<div class="card"><div class="card-b" style="text-align:center">
           <div style="font-size:40px;line-height:1">✓</div>
           <h2 style="margin:8px 0">Đã gửi yêu cầu đặt hẹn</h2>
           <p>Hẹn <b>${h(st.gio)}</b> ngày <b>${fmtD(st.ngay)}</b> cho <b>${h(st.ten)}</b>.</p>
-          <p class="sub-line">Phòng khám sẽ gọi lại xác nhận. Nếu cần đổi, gọi ${h(cl.phone || 'phòng khám')}.</p>
+          <p class="sub-line">Phòng khám sẽ gọi lại xác nhận. Nếu cần đổi, gọi <b>${h(cl.phone || 'phòng khám')}</b>${cl.phone2?' hoặc <b>'+h(cl.phone2)+'</b>':''}.</p>
           <div class="form-actions" style="justify-content:center;margin-top:12px">
             <button class="btn" onclick="App.state.bkStatus={};App.render()">Đặt thêm lịch khác</button></div>
         </div></div>`
@@ -4468,7 +4526,8 @@ const DatHen = {
             <input name="ghichu" placeholder="Vd: đau răng hàm dưới bên phải"></div>
         </div>
         <div class="note-block" style="margin-top:10px">Giờ làm việc: <b>${h(Att.moTaCa())}</b>.
-          Đây mới là <b>yêu cầu đặt hẹn</b> — phòng khám sẽ gọi lại xác nhận.</div>
+          Đây mới là <b>yêu cầu đặt hẹn</b> — phòng khám sẽ gọi lại xác nhận.
+          ${cl.phone?`<br>Cần gấp xin gọi thẳng <b>${h(cl.phone)}</b>${cl.phone2?' hoặc <b>'+h(cl.phone2)+'</b>':''}.`:''}</div>
         <div class="form-actions" style="margin-top:12px">
           <button class="btn primary" style="width:100%;justify-content:center;padding:13px">Gửi yêu cầu đặt hẹn</button></div>
       </div></form>`}

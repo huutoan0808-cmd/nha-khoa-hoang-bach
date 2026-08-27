@@ -123,6 +123,12 @@ tr:last-child td{border-bottom:none}
 tbody tr.clickable{cursor:pointer}
 tbody tr.clickable:hover{background:var(--surface2)}
 tbody tr.sel-row{background:var(--accent-soft)}
+/* Tiêu đề cột bấm được để sắp xếp */
+th.sap{cursor:pointer;user-select:none;white-space:nowrap}
+th.sap:hover{color:var(--ink2)}
+th.sap.dang{color:var(--accent-ink)}
+.sap-mui{margin-left:5px;opacity:.45;font-size:10px}
+th.sap.dang .sap-mui{opacity:1}
 /* Thanh trên cùng dính 56px, nên khi nhảy tới hồ sơ phải chừa đúng bấy nhiêu —
    không thì thẻ hồ sơ chui xuống dưới thanh đó, trông như bị lố. */
 #custDetail{scroll-margin-top:66px}
