@@ -922,23 +922,27 @@ const Cust = {
   toothClick(n, lop){
     lop = lop || 'teeth';
     const c = custById(App.state.custSel); if (!c) return;
-    const t = (c[lop]||{})[n] || {s:'ok', mat:[], note:''};
-    const mat = t.mat || [];
     const kh = lop === 'teethKH';
     const hienTai = (c.teeth||{})[n];
+    /* Trên sơ đồ kế hoạch, răng chưa có kế hoạch thì lấy sẵn tình trạng bên sơ đồ
+       trước điều trị — ô ghi "Tình trạng hiện tại" thì phải đúng là hiện tại. */
+    const t = (c[lop]||{})[n]
+      || (kh && hienTai ? Object.assign({}, hienTai, {dichVu: ''})
+                        : {s:'ok', mat:[], note:''});
+    const mat = t.mat || [];
     App.modal('Răng ' + n + (Tooth.hamTren(n)?' · hàm trên':' · hàm dưới') + (Tooth.benPhai(n)?' bên phải':' bên trái')
       + (lop === 'teethKH' ? ' — SƠ ĐỒ KẾ HOẠCH' : ''), `
-    ${kh ? `<div class="note-block mb">Đang lập <b>kế hoạch điều trị</b> cho răng ${n} —
-        ghi <b>kết quả sau khi làm xong</b> và chọn dịch vụ sẽ làm. Sơ đồ trước điều trị không đổi.
-        ${hienTai ? `<br>Hiện trạng răng này: <b>${h(Tooth.moTa(n, hienTai))}</b>` : ''}</div>` : ''}
+    ${kh ? `<div class="note-block mb">Đang lập <b>kế hoạch điều trị</b> cho răng ${n}:
+        ghi <b>tình trạng hiện tại</b> của răng, rồi chọn <b>dịch vụ sẽ làm</b> cho răng đó.
+        ${hienTai ? `<br>Sơ đồ trước điều trị đang ghi: <b>${h(Tooth.moTa(n, hienTai))}</b>` : ''}</div>` : ''}
     <form class="form-grid" onsubmit="Cust.toothSave(event,${n},'${lop}')">
-      <div class="f full"><label>${kh ? 'Kế hoạch — răng sẽ thành' : 'Tình trạng'}</label>
+      <div class="f full"><label>Tình trạng hiện tại</label>
         <select name="s" onchange="Cust.toothMatHien(this.value)">
           ${TOOTH_STATES.map(([k,l])=>`<option value="${k}"${t.s===k?' selected':''}>${l}</option>`).join('')}</select></div>
-      ${kh ? `<div class="f full"><label>Dịch vụ sẽ làm cho răng này</label>
+      ${kh ? `<div class="f full"><label>Kế hoạch điều trị</label>
         ${Combo.html('cbRangDV','dichVu', t.dichVu||'', Svc.goiY(1), 'Gõ tên dịch vụ, vd: boc su, noi nha',
           null, 'Gợi ý lấy từ bảng giá phòng khám. Lưu xong bấm "Đưa vào điều trị" để tạo hạng mục.')}</div>
-      <div class="f full"><label>Dịch vụ gợi ý cho tình trạng này</label>
+      <div class="f full"><label>Dịch vụ gợi ý cho tình trạng trên</label>
         <div class="check-row" id="dvGoiY" data-rang="${n}">${Cust.dvHopVoi(t.s, hienTai).map(x =>
           `<button type="button" class="btn small" onclick="Combo.pick('cbRangDV',this.dataset.v)" data-v="${h(x)}">${h(x)}</button>`).join('')
           || '<span class="sub-line">Chọn kế hoạch ở ô trên để thấy gợi ý.</span>'}</div></div>` : ''}
@@ -962,28 +966,31 @@ const Cust = {
         <button class="btn primary">Lưu</button></div>
     </form>`);
   },
-  /* Dịch vụ hay dùng cho từng kết quả mong muốn — chỉ là gợi ý, gõ tự do vẫn được */
+  /* Răng đang ở tình trạng này thì thường làm những dịch vụ nào — chỉ là gợi ý,
+     gõ tự do vẫn được. Khớp theo TÌNH TRẠNG HIỆN TẠI của răng. */
   DV_THEO_KH: {
-    filled:  ['Trám sâu răng phía trong — tiêu chuẩn','Trám răng cửa — tiêu chuẩn','Đóng khe thưa Bioclear — mức độ 1'],
-    crownKL: ['Răng sứ kim loại thường','Răng sứ Chrome - Coban','Răng sứ Titan'],
-    crownTS: ['Răng toàn sứ Zirconia','Răng toàn sứ Cercon','Răng toàn sứ Lava','Mặt dán sứ Veneer Emax Press','Endocrown'],
-    implant: ['Trụ Implant Hàn Quốc','Trụ Implant Pháp','Trụ Implant Mỹ','Trụ Implant Thụy Sĩ'],
-    thaolap: ['Răng tháo lắp nhựa — Nhật','Răng tháo lắp nhựa — Mỹ','Hàm khung hợp kim Titan'],
-    missing: ['Nhổ răng vĩnh viễn — 1 chân','Nhổ răng vĩnh viễn — 2 chân','Nhổ răng vĩnh viễn — 3 chân',
-              'Nhổ răng khôn mọc lệch — mức độ 1','Nhổ răng sữa — tê tiêm'],
-    caries:  ['Trám sâu răng phía trong — tiêu chuẩn'],
-    ok:      ['Cạo vôi răng — mức độ 1','Khám và tư vấn'],
+    caries:  ['Trám sâu răng phía trong — tiêu chuẩn','Trám răng cửa — tiêu chuẩn',
+              'Nội nha răng cối lớn — gói cơ bản','Răng toàn sứ Zirconia','Nhổ răng vĩnh viễn — 2 chân'],
+    filled:  ['Trám sâu răng phía trong — nâng cao','Răng toàn sứ Zirconia','Endocrown','Inlay / Onlay Emax'],
+    crownKL: ['Gắn lại răng sứ kim loại','Răng toàn sứ Zirconia','Răng toàn sứ Cercon'],
+    crownTS: ['Gắn lại răng toàn sứ','Răng toàn sứ Cercon','Răng toàn sứ Lava'],
+    missing: ['Trụ Implant Hàn Quốc','Trụ Implant Pháp','Răng tháo lắp nhựa — Nhật',
+              'Hàm khung hợp kim Titan','Răng toàn sứ Zirconia'],
+    thaolap: ['Răng tháo lắp nhựa — Nhật','Hàm khung hợp kim Titan','Đệm hàm','Thêm móc','Vá hàm nứt, vỡ'],
+    implant: ['Răng toàn sứ Zirconia','Hàm tạm trên Implant','Thanh bar liên kết'],
+    ok:      ['Cạo vôi răng — mức độ 1','Khám và tư vấn','Trám sâu răng phía trong — tiêu chuẩn'],
   },
-  /* Răng đang sâu mà kế hoạch bọc sứ thì thường phải nội nha trước — gợi thêm */
-  dvHopVoi(kh, hienTai){
-    const ds = (this.DV_THEO_KH[kh] || []).slice();
-    const sauNang = hienTai && (hienTai.s === 'caries' || hienTai.nn || hienTai.loDo || hienTai.sung);
-    if (sauNang && (kh === 'crownTS' || kh === 'crownKL' || kh === 'filled')) {
-      ds.unshift('Nội nha răng cối lớn — gói cơ bản', 'Nội nha răng cửa — gói cơ bản');
+  /* Răng sâu mà có lỗ dò / sưng / đã nội nha thì thường phải nội nha (hoặc nội nha lại)
+     trước khi phục hình — đưa lên đầu danh sách gợi ý. */
+  dvHopVoi(tt, rangHT){
+    const ds = (this.DV_THEO_KH[tt] || []).slice();
+    const t = rangHT || {};
+    if ((tt === 'caries' || tt === 'filled') && (t.loDo || t.sung || t.nn)) {
+      ds.unshift('Điều trị tủy lại', 'Nội nha răng cối lớn — gói cơ bản');
     }
     /* Chỉ giữ những dịch vụ thật sự có trong bảng giá */
     const co = new Set((db.services||[]).map(x => Combo.norm(x.name||'')));
-    return ds.filter(x => co.has(Combo.norm(x))).slice(0, 6);
+    return [...new Set(ds)].filter(x => co.has(Combo.norm(x))).slice(0, 6);
   },
   /* Lưu răng rồi tạo luôn hạng mục điều trị từ dịch vụ đã chọn */
   rangSangDieuTri(n){
@@ -1335,20 +1342,24 @@ SCREENS.customers = () => {
       <div class="card-b">
         <div class="subtabs">
           <button class="subtab ${!keHoach?'active':''}" onclick="Cust.doiLopRang('teeth')">Trước điều trị</button>
-          <button class="subtab ${keHoach?'active':''}" onclick="Cust.doiLopRang('teethKH')">Theo kế hoạch điều trị${coKH?' ✓':''}</button>
+          <button class="subtab ${keHoach?'active':''}" onclick="Cust.doiLopRang('teethKH')">Kế hoạch điều trị${coKH?' ✓':''}</button>
         </div>
-        ${keHoach ? `<div class="note-block mb">Đây là <b>tình trạng răng sau khi làm xong kế hoạch</b> — vẽ để bàn với khách.
-          Sơ đồ "Trước điều trị" không bị ảnh hưởng. ${coKH?'Răng nào <b>khác với hiện trạng</b> có viền nhấn.':'Bấm <b>Chép lại từ hiện trạng</b> để khỏi vẽ lại từ đầu, rồi sửa thành kết quả mong muốn.'}</div>` : ''}
+        ${keHoach ? `<div class="note-block mb">Bấm vào răng cần làm: ô <b>Tình trạng hiện tại</b> đã lấy sẵn từ sơ đồ trước điều trị,
+          bạn chỉ cần chọn <b>dịch vụ sẽ làm</b>. Răng nào đã có kế hoạch thì <b>viền nhấn</b>.
+          Sơ đồ "Trước điều trị" không bị ảnh hưởng.</div>` : ''}
         ${Tooth.hamHTML(c, lop)}
         ${Tooth.tomTatHTML(c, lop)}
-        ${keHoach && coKH ? (() => {
-          const a = Tooth.tomTat(c,'teeth').dong, b = Tooth.tomTat(c,'teethKH').dong;
-          const ma = {}; a.forEach(x=>ma[x.n]=x.mo);
-          const doi = b.filter(x => ma[x.n] !== x.mo);
-          const het = a.filter(x => !b.some(y=>y.n===x.n));
-          return `<div class="tooth-info" style="border-color:var(--accent)"><b>Kế hoạch làm gì:</b><br>
-            ${doi.map(x=>`R${x.n}: ${h(ma[x.n]||'bình thường')} → <b>${h(x.mo)}</b>`).join('<br>') || 'chưa khác gì hiện trạng'}
-            ${het.length?'<br>'+het.map(x=>`R${x.n}: ${h(x.mo)} → <b>xử lý xong</b>`).join('<br>'):''}</div>`;
+        ${keHoach ? (() => {
+          const kho = c.teethKH || {};
+          const ds = Object.keys(kho).map(Number).filter(n => !isNaN(n) && kho[n] && kho[n].dichVu).sort((a,b)=>a-b);
+          const tong = ds.reduce((s, n) => {
+            const dv = (db.services||[]).find(x => Combo.norm(x.name||'') === Combo.norm(kho[n].dichVu));
+            return s + (dv ? (dv.price||0) : 0);
+          }, 0);
+          return `<div class="tooth-info" style="border-color:var(--accent)"><b>Kế hoạch điều trị:</b><br>
+            ${ds.length ? ds.map(n => `R${n}: ${h(Tooth.moTa(n, kho[n]))} → <b>${h(kho[n].dichVu)}</b>`).join('<br>')
+                        : 'Chưa răng nào có kế hoạch — bấm vào răng rồi chọn dịch vụ sẽ làm.'}
+            ${tong ? `<br><br>Tạm tính <b>${money(tong)}</b> cho ${ds.length} răng` : ''}</div>`;
         })() : ''}
         ${Tooth.chuThichHTML()}
       </div>
@@ -2335,7 +2346,16 @@ Object.assign(HoSo, {
       &nbsp;&nbsp;Trong miệng: ${this.o(ok(g('trongMieng')),'Bình thường')} &nbsp; ${this.o(!ok(g('trongMieng')),'Bất thường:')} ${this.gach(ok(g('trongMieng'))?'':g('trongMieng'),42)}<br>
       3. Các xét nghiệm, cận lâm sàng cần làm: ${this.o(ok(g('canLamSang')),'Không')} &nbsp; ${this.o(!ok(g('canLamSang')),'Có, ghi rõ:')} ${this.gach(ok(g('canLamSang'))?'':g('canLamSang'),38)}<br>
       4. Tóm tắt bệnh án: ${this.gach(g('tomTat'),62)}</p>
-    <p><b>SƠ ĐỒ RĂNG</b><br>Trước điều trị: ${ht || this.cham(70)}${kh ? '<br>Theo kế hoạch điều trị: ' + kh : ''}</p>
+    <p><b>SƠ ĐỒ RĂNG</b><br>Trước điều trị: ${ht || this.cham(70)}
+      ${(() => {
+        const kho = c.teethKH || {};
+        const ds = Object.keys(kho).map(Number).filter(n => !isNaN(n) && kho[n] && kho[n].dichVu).sort((a,b)=>a-b);
+        const {khung, note} = Tooth.tomTat(c, 'teethKH');
+        if (!ds.length && !khung.length) return '';
+        const a = ds.map(n => 'R' + n + ': ' + h(Tooth.moTa(n, kho[n])) + ' → <b>' + h(kho[n].dichVu) + '</b>').join('<br>');
+        const b = khung.length ? '<br>Hàm khung tháo lắp: ' + h(khung.join(' và ')) + (note ? ' — ' + h(note) : '') : '';
+        return '<br><b>Kế hoạch điều trị theo răng:</b><br>' + a + b;
+      })()}</p>
     <p><b>IV. CHẨN ĐOÁN</b> (tên bệnh kèm mã ICD)<br>
       Bệnh chính: <b>${this.gach(icdName(g('chanDoan', ep.chanDoan || r.chanDoan)),54)}</b><br>
       Bệnh kèm theo: ${this.gach(icdName(g('chanDoanKem', ep.chanDoanKem || r.chanDoanKem)),54)}<br>
@@ -2691,7 +2711,8 @@ const Tooth = {
     const hang = ds => ds.map(n => {
       const t = kho[n];
       const co = t && (t.s !== 'ok' || t.nn || t.loDo || t.sung || (t.mat||[]).length);
-      const khac = lop === 'teethKH' && JSON.stringify(t||null) !== JSON.stringify((c.teeth||{})[n]||null);
+      /* Trên sơ đồ kế hoạch: nhấn răng nào ĐÃ CÓ kế hoạch điều trị */
+      const khac = lop === 'teethKH' && !!(t && t.dichVu);
       return `<button class="tooth ${co?'co-van-de':''} ${khac?'doi-theo-kh':''}"
         onclick="Cust.toothClick(${n},'${lop}')" title="Răng ${n} — ${h(this.moTa(n,t))}">
         <span class="tooth-svg">${this.svg(n,t)}${this.deLen(n,t)}</span>
