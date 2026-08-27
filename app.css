@@ -244,6 +244,9 @@ td.r,th.r{text-align:right}
 /* Trên sơ đồ kế hoạch: răng nào khác hiện trạng thì viền nhấn cho dễ so */
 .tooth.doi-theo-kh{border-color:var(--accent);border-style:dashed;background:var(--accent-soft)}
 .tooth.doi-theo-kh .tooth-no{color:var(--accent-ink)}
+/* Đang chọn nhiều răng cùng lúc */
+.tooth.dang-chon{border-color:var(--accent);border-width:2.5px;background:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.tooth.dang-chon .tooth-no{color:var(--accent-contrast);font-weight:800}
 .tooth-svg{position:relative;width:32px;height:40px;display:block}
 .tooth-svg svg{position:absolute;inset:0}
 .tooth-svg .tooth-ov{pointer-events:none}

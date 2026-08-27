@@ -921,6 +921,7 @@ const Cust = {
 
   toothClick(n, lop){
     lop = lop || 'teeth';
+    if (App.state.rangChon) { this.chonRang(n); return; }
     const c = custById(App.state.custSel); if (!c) return;
     const kh = lop === 'teethKH';
     const hienTai = (c.teeth||{})[n];
@@ -946,19 +947,19 @@ const Cust = {
         <div class="check-row" id="dvGoiY" data-rang="${n}">${Cust.dvHopVoi(t.s, hienTai).map(x =>
           `<button type="button" class="btn small" onclick="Combo.pick('cbRangDV',this.dataset.v)" data-v="${h(x)}">${h(x)}</button>`).join('')
           || '<span class="sub-line">Chọn kế hoạch ở ô trên để thấy gợi ý.</span>'}</div></div>` : ''}
-      <div class="f full" id="oMat" style="display:${t.s==='caries'||t.s==='filled'?'':'none'}">
+      <div class="f full" id="oMat" style="display:${!kh && (t.s==='caries'||t.s==='filled')?'':'none'}">
         <label>Mặt răng (chọn được nhiều mặt)</label>
         <div class="check-row">${TOOTH_SURF.map(([k,l])=>
           `<label><input type="checkbox" name="mat" value="${k}"${mat.includes(k)?' checked':''}> ${h(l)}</label>`).join('')}</div>
       </div>
-      <div class="f full" id="oNoiNha" style="display:${TT_CO_NOI_NHA.includes(t.s)?'':'none'}"><div class="check-row">
+      <div class="f full" id="oNoiNha" style="display:${!kh && TT_CO_NOI_NHA.includes(t.s)?'':'none'}"><div class="check-row">
         <label><input type="checkbox" name="nn"${t.nn?' checked':''}> Răng đã nội nha (điều trị tủy)</label></div></div>
-      <div class="f full"><label>Dấu hiệu quanh chóp</label><div class="check-row">
+      <div class="f full" style="display:${kh?'none':''}"><label>Dấu hiệu quanh chóp</label><div class="check-row">
         <label><input type="checkbox" name="loDo"${t.loDo?' checked':''}> Lỗ dò</label>
         <label><input type="checkbox" name="sung"${t.sung?' checked':''}> Sưng đáy hành lang</label></div></div>
-      <div class="f full"><label>Ghi chú</label><input name="note" value="${h(t.note||'')}" placeholder="Vd: sâu ngà sâu, còn ê buốt…"></div>
-      <div class="note-block full">Nội nha để riêng vì răng <b>đã nội nha rồi bọc sứ</b> là chuyện thường —
-        chọn "Răng sứ" mà vẫn tick được nội nha, sơ đồ hiện cả hai.</div>
+      <div class="f full" style="display:${kh?'none':''}"><label>Ghi chú</label><input name="note" value="${h(t.note||'')}" placeholder="Vd: sâu ngà sâu, còn ê buốt…"></div>
+      ${kh ? '' : `<div class="note-block full">Nội nha để riêng vì răng <b>đã nội nha rồi bọc sứ</b> là chuyện thường —
+        chọn "Răng sứ" mà vẫn tick được nội nha, sơ đồ hiện cả hai.</div>`}
       <div class="form-actions full">
         ${(c[lop]||{})[n]?`<button type="button" class="btn danger" onclick="Cust.toothXoa(${n},'${lop}')">Xóa đánh dấu</button><span class="spacer"></span>`:''}
         <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
@@ -1014,8 +1015,9 @@ const Cust = {
   },
 
   toothMatHien(v){
+    const keHoach = (App.state.lopRang === 'teethKH');
     const o = document.getElementById('oMat');
-    if (o) o.style.display = (v === 'caries' || v === 'filled') ? '' : 'none';
+    if (o && !keHoach) o.style.display = (v === 'caries' || v === 'filled') ? '' : 'none';
     /* Trên sơ đồ kế hoạch: đổi kết quả mong muốn thì đổi luôn danh sách dịch vụ gợi ý */
     const gy = document.getElementById('dvGoiY');
     if (gy) {
@@ -1028,7 +1030,7 @@ const Cust = {
     /* Mất răng, implant, tháo lắp thì không có tủy để nội nha — giấu luôn ô tick,
        và bỏ dấu đã tick kẻo lưu lại một thông tin vô lý. */
     const nn = document.getElementById('oNoiNha');
-    if (nn) {
+    if (nn && !keHoach) {
       const duoc = TT_CO_NOI_NHA.includes(v);
       nn.style.display = duoc ? '' : 'none';
       if (!duoc) { const cb = nn.querySelector('[name="nn"]'); if (cb) cb.checked = false; }
@@ -1098,7 +1100,66 @@ const Cust = {
     delete c.teethKH; delete c.hamKhungKH;
     save(); App.render(); App.toast('Đã xóa sơ đồ kế hoạch');
   },
-  doiLopRang(k){ App.state.lopRang = k; App.render(); },
+  doiLopRang(k){ App.state.lopRang = k; App.state.rangChon = null; App.render(); },
+
+  /* ---------- Chọn nhiều răng cùng lúc để lập chung một kế hoạch ---------- */
+  batChonNhieu(){ App.state.rangChon = App.state.rangChon ? null : []; App.render(); },
+  chonRang(n){
+    const ds = App.state.rangChon || [];
+    const i = ds.indexOf(n);
+    if (i < 0) ds.push(n); else ds.splice(i, 1);
+    App.state.rangChon = ds; App.render();
+  },
+  /* Lập một hạng mục điều trị chung cho tất cả răng đang chọn */
+  keHoachNhieu(){
+    const c = custById(App.state.custSel);
+    const ds = (App.state.rangChon || []).slice().sort((a,b)=>a-b);
+    if (!ds.length) { App.toast('Chưa chọn răng nào'); return; }
+    App.modal('Kế hoạch cho ' + ds.length + ' răng', `
+    <form class="form-grid" onsubmit="Cust.keHoachNhieuLuu(event)">
+      <div class="note-block full">Sẽ lập <b>một hạng mục điều trị</b> chung cho các răng:
+        <b>${ds.map(n=>'R'+n).join(', ')}</b> — số lượng <b>${ds.length}</b>.</div>
+      <div class="f full"><label>Kế hoạch điều trị (dịch vụ)</label>
+        ${Combo.html('cbNhieuDV','dichVu', '', Svc.goiY(1), 'Gõ tên dịch vụ, vd: boc su, tram',
+          null, 'Gợi ý lấy từ bảng giá phòng khám.')}</div>
+      <div class="f"><label>Giảm giá (%)</label><input type="number" name="giamPct" min="0" max="100" step="0.5" placeholder="0"></div>
+      <div class="f"><label>Giảm thêm (₫)</label>${Tien.o('giamTien','')}</div>
+      <div class="f full"><div class="check-row">
+        <label><input type="checkbox" name="veSoDo" checked> Ghi luôn kế hoạch này lên sơ đồ răng</label></div></div>
+      <div class="form-actions full">
+        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+        <button class="btn primary">Lập hạng mục</button></div>
+    </form>`);
+  },
+  keHoachNhieuLuu(ev){
+    ev.preventDefault();
+    const c = custById(App.state.custSel);
+    const ds = (App.state.rangChon || []).slice().sort((a,b)=>a-b);
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    const ten = (d.dichVu || '').trim();
+    if (!ten) { App.toast('Chưa chọn dịch vụ'); return; }
+    const dv = (db.services||[]).find(x => Combo.norm(x.name||'') === Combo.norm(ten));
+    const ep = Dot.dangChon(c);
+    const donGia = dv ? (dv.price || 0) : 0;
+    const pct = Math.min(100, Math.max(0, +d.giamPct || 0)), giam = num(d.giamTien);
+    db.treatments.push({id: uid(), customerId: c.id, episodeId: ep ? ep.id : '',
+      name: dv ? dv.name : ten, group: dv ? dv.group : 'Khác', serviceId: dv ? dv.id : '',
+      donGia, sl: ds.length, giamPct: pct, giamTien: giam,
+      price: Treat.thanhTien(donGia, ds.length, pct, giam),
+      tooth: ds.join(', '), status: 'Báo giá',
+      doctorId: (ep && ep.doctorId) || '', assistantId: '', date: todayISO(), cd: []});
+    if (d.veSoDo) {
+      if (!c.teethKH) c.teethKH = {};
+      ds.forEach(n => {
+        const ht = (c.teeth||{})[n];
+        c.teethKH[n] = Object.assign({s:'ok', mat:[], note:''}, ht || {}, {dichVu: dv ? dv.name : ten});
+      });
+      c._up = Date.now();
+    }
+    App.state.rangChon = null;
+    save(); App.closeModal(); App.render();
+    App.toast('Đã lập kế hoạch cho ' + ds.length + ' răng ✓');
+  },
 
   recordForm(){
     const c = custById(App.state.custSel); const r = c.record || {};
@@ -1337,7 +1398,9 @@ SCREENS.customers = () => {
       return `<div class="card mb">
       <div class="card-h"><h2>Sơ đồ răng</h2><span class="hint">nhấn vào răng để cập nhật tình trạng</span><span class="spacer"></span>
         <button class="btn small" onclick="Cust.hamKhung('${lop}')">Hàm khung</button>
-        ${keHoach ? `<button class="btn small" onclick="Cust.chepSangKH()">Chép lại từ hiện trạng</button>
+        ${keHoach ? `<button class="btn small ${App.state.rangChon?'primary':''}" onclick="Cust.batChonNhieu()">
+            ${App.state.rangChon ? 'Xong chọn nhiều răng' : 'Chọn nhiều răng'}</button>
+          <button class="btn small" onclick="Cust.chepSangKH()">Chép lại từ hiện trạng</button>
           ${coKH?`<button class="btn small danger" onclick="Cust.xoaKH()">Xóa kế hoạch</button>`:''}` : ''}</div>
       <div class="card-b">
         <div class="subtabs">
@@ -1347,6 +1410,12 @@ SCREENS.customers = () => {
         ${keHoach ? `<div class="note-block mb">Bấm vào răng cần làm: ô <b>Tình trạng hiện tại</b> đã lấy sẵn từ sơ đồ trước điều trị,
           bạn chỉ cần chọn <b>dịch vụ sẽ làm</b>. Răng nào đã có kế hoạch thì <b>viền nhấn</b>.
           Sơ đồ "Trước điều trị" không bị ảnh hưởng.</div>` : ''}
+        ${App.state.rangChon ? `<div class="note-block mb" style="border-color:var(--accent)">
+          Đang <b>chọn nhiều răng</b> — bấm vào từng răng để chọn hoặc bỏ chọn.
+          Đã chọn <b>${App.state.rangChon.length} răng</b>${App.state.rangChon.length?': '+App.state.rangChon.slice().sort((a,b)=>a-b).map(n=>'R'+n).join(', '):''}.
+          <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
+            <button class="btn small primary" onclick="Cust.keHoachNhieu()">Lập kế hoạch cho ${App.state.rangChon.length} răng</button>
+            <button class="btn small" onclick="Cust.batChonNhieu()">Thoát chọn nhiều</button></div></div>` : ''}
         ${Tooth.hamHTML(c, lop)}
         ${Tooth.tomTatHTML(c, lop)}
         ${keHoach ? (() => {
@@ -1664,8 +1733,14 @@ const Treat = {
         <div class="combo-hint">Sửa tên, loại hoặc giá dịch vụ ở
           <button type="button" class="link-btn" onclick="Svc.bang()">Bảng giá dịch vụ</button>.</div></div>
       <input type="hidden" name="group" value="${h(t.group||'')}">
-      <div class="f"><label>Răng / vị trí</label><input name="tooth" value="${h(t.tooth||'')}" placeholder="R36, 2 hàm..."></div>
-      <div class="f"><label>Đơn giá (₫)</label>${Tien.o('price', t.price, 'required')}</div>
+      <div class="f full"><label>Răng / vị trí</label>
+        <input name="tooth" value="${h(t.tooth||'')}" placeholder="Vd: 36, 37, 46 — cách nhau bằng dấu phẩy" oninput="Treat.tinhLai()">
+        <div class="combo-hint">Ghi nhiều răng thì <b>số lượng tự đếm theo số răng</b>. Ghi kiểu "2 hàm" thì số lượng để 1.</div></div>
+      <div class="f"><label>Đơn giá / răng (₫)</label>${Tien.o('donGia', t.donGia != null ? t.donGia : t.price, 'required oninput="Treat.tinhLai()"')}</div>
+      <div class="f"><label>Số lượng</label><input type="number" name="sl" min="1" step="1" value="${t.sl||1}" oninput="Treat.tinhLai()"></div>
+      <div class="f"><label>Giảm giá (%)</label><input type="number" name="giamPct" min="0" max="100" step="0.5" value="${t.giamPct||''}" placeholder="0" oninput="Treat.tinhLai()"></div>
+      <div class="f"><label>Giảm thêm (₫)</label>${Tien.o('giamTien', t.giamTien, 'oninput="Treat.tinhLai()"')}</div>
+      <div class="f full"><div class="note-block" id="thanhTien"></div></div>
       <div class="f"><label>Bác sĩ</label><select name="doctorId">
         <option value="">— chưa phân —</option>
         ${db.staff.filter(s=>s.active!==false && (Perm.roleOf(s)==='bacsi' || /bác sĩ/i.test(s.role||'')))
@@ -1678,23 +1753,58 @@ const Treat = {
       <div class="form-actions full">
         ${id?`<button type="button" class="btn danger" onclick="Treat.itemDel('${id}')">Xóa</button>
         <button type="button" class="btn" onclick="QT.ghi('${id}')">Công đoạn & hoa hồng</button><span class="spacer"></span>`:''}
+        <span id="moTinh" style="display:none"></span>
         <button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu</button></div>
     </form>`);
   },
   onServicePick(v, inp){
     const s = db.services.find(x => x.name === v); if (!s) return;
     const f = inp.form;
-    const price = f.querySelector('[name=price]'), grp = f.querySelector('[name=group]');
-    if (price && !num(price.value)) price.value = s.price;
+    const dg = f.querySelector('[name=donGia]'), grp = f.querySelector('[name=group]');
+    if (dg && !num(dg.value)) dg.value = Tien.dinh(String(s.price || 0));
     if (grp) grp.value = s.group;
+    Treat.tinhLai();
   },
+  /* Đếm số răng từ ô "Răng": "36, 37, 46" -> 3. Ghi kiểu "2 hàm" thì coi như 1. */
+  demRang(v){
+    const ds = String(v||'').split(/[,;/]+/).map(x => x.trim()).filter(Boolean)
+      .filter(x => /^R?\d{1,2}$/i.test(x));
+    return ds.length;
+  },
+  /* Thành tiền = đơn giá × số lượng − giảm %, − giảm tiền */
+  thanhTien(donGia, sl, pct, tien){
+    const goc = (+donGia || 0) * (+sl || 1);
+    const sauPct = goc - goc * (Math.min(100, Math.max(0, +pct || 0)) / 100);
+    return Math.max(0, Math.round(sauPct - (+tien || 0)));
+  },
+  tinhLai(){
+    const f = document.querySelector('#modalBody form'); if (!f) return;
+    const g = n => (f.querySelector('[name="' + n + '"]') || {}).value;
+    const oSl = f.querySelector('[name="sl"]');
+    const demR = this.demRang(g('tooth'));
+    if (demR && oSl && +oSl.value !== demR) oSl.value = demR;   /* số lượng đi theo số răng */
+    const donGia = num(g('donGia')), sl = +(oSl ? oSl.value : 1) || 1;
+    const pct = +g('giamPct') || 0, tien = num(g('giamTien'));
+    const goc = donGia * sl, tt = this.thanhTien(donGia, sl, pct, tien);
+    const o = document.getElementById('thanhTien');
+    if (o) o.innerHTML = `Thành tiền: <b style="font-size:15px">${money(tt)}</b>`
+      + (goc !== tt ? ` <span class="sub-line">(${money(donGia)} × ${sl} = ${money(goc)}, giảm ${money(goc - tt)})</span>`
+                    : (sl > 1 ? ` <span class="sub-line">(${money(donGia)} × ${sl} răng)</span>` : ''));
+  },
+
   itemSave(ev, id){
     ev.preventDefault();
     const d = Object.fromEntries(new FormData(ev.target).entries());
     d.name = (d.name || '').trim();
     const s = db.services.find(x => x.name === d.name);
     d.serviceId = s ? s.id : '';
-    d.price = num(d.price); d.name = d.name || 'Dịch vụ'; d.group = s ? s.group : (d.group || 'Khác');
+    d.donGia = num(d.donGia);
+    d.sl = Math.max(1, +d.sl || this.demRang(d.tooth) || 1);
+    d.giamPct = Math.min(100, Math.max(0, +d.giamPct || 0));
+    d.giamTien = num(d.giamTien);
+    /* price là THÀNH TIỀN — mọi chỗ khác (công nợ, hoa hồng, phiếu thu) đều đọc ô này */
+    d.price = this.thanhTien(d.donGia, d.sl, d.giamPct, d.giamTien);
+    d.name = d.name || 'Dịch vụ'; d.group = s ? s.group : (d.group || 'Khác');
     if (id) Object.assign(db.treatments.find(x=>x.id===id), d);
     else db.treatments.push(Object.assign({id:uid(), customerId:App.state.treatCust, date:todayISO()}, d));
     save(); App.closeModal(); App.render(); App.toast('Đã lưu hạng mục ✓');
@@ -1829,7 +1939,8 @@ SCREENS.treatment = () => {
     return `<tr class="clickable" onclick="Treat.itemForm('${t.id}')"><td><b>${h(t.name)}</b><br><span class="sub-line">${h(t.group)}</span></td>
     <td class="num">${h(t.tooth||'—')}</td>
     <td>${h((staffById(t.doctorId)||{}).name||'—')}${phu?`<br><span class="sub-line">phụ: ${h(phu.name)}</span>`:''}</td>
-    <td><span class="pill ${st}">${t.status}</span></td><td class="r num">${money(t.price)}</td>
+    <td><span class="pill ${st}">${t.status}</span></td>
+    <td class="r num">${money(t.price)}${(t.sl>1||t.giamPct||t.giamTien)?`<br><span class="sub-line">${money(t.donGia!=null?t.donGia:t.price)}${t.sl>1?' × '+t.sl:''}${(t.giamPct||t.giamTien)?' · giảm'+(t.giamPct?' '+t.giamPct+'%':'')+(t.giamTien?' '+money(t.giamTien):''):''}</span>`:''}</td>
     <td onclick="event.stopPropagation()">${q
       ? `<button class="btn small" onclick="QT.ghi('${t.id}')">Công đoạn ${xong}/${q.buoc.length}</button>`
       : '<span class="sub-line">—</span>'}</td></tr>`;
@@ -2491,13 +2602,17 @@ Object.assign(HoSo, {
 
   /* ---------- Bảng hạng mục ---------- */
   bangMuc(ds, ghi){
-    const rows = ds.map(t => `<tr><td>${h(t.name)}${t.tooth?' — R'+h(t.tooth):''}</td>
-      <td class="r" style="width:60px">${t.sl||1}</td>
-      <td class="r" style="width:100px">${money(t.price)}</td>
-      <td class="r" style="width:110px">${money((t.price||0)*(t.sl||1))}</td>
-      <td style="width:100px">${h((ghi&&ghi[t.id])||t.status||'')}</td></tr>`).join('')
-      || '<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>'.repeat(4);
-    const tong = ds.reduce((s,t)=>s+(t.price||0)*(t.sl||1), 0);
+    /* t.price LÀ THÀNH TIỀN đã trừ giảm giá — không nhân thêm số lượng nữa */
+    const rows = ds.map(t => {
+      const sl = t.sl || 1, dg = t.donGia != null ? t.donGia : (t.price || 0);
+      const giam = (t.giamPct ? t.giamPct + '%' : '') + (t.giamTien ? (t.giamPct ? ' + ' : '') + money(t.giamTien) : '');
+      return `<tr><td>${h(t.name)}${t.tooth?' — R'+h(t.tooth):''}${giam?'<br><i>giảm '+giam+'</i>':''}</td>
+      <td class="r" style="width:60px">${sl}</td>
+      <td class="r" style="width:100px">${money(dg)}</td>
+      <td class="r" style="width:110px">${money(t.price||0)}</td>
+      <td style="width:100px">${h((ghi&&ghi[t.id])||t.status||'')}</td></tr>`;
+    }).join('') || '<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>'.repeat(4);
+    const tong = ds.reduce((s,t)=>s+(t.price||0), 0);
     return `<table>
       <tr><th>Nội dung điều trị</th><th class="r">Số lượng</th><th class="r">Đơn giá</th><th class="r">Thành tiền</th><th>Ghi chú</th></tr>
       ${rows}
@@ -2713,7 +2828,8 @@ const Tooth = {
       const co = t && (t.s !== 'ok' || t.nn || t.loDo || t.sung || (t.mat||[]).length);
       /* Trên sơ đồ kế hoạch: nhấn răng nào ĐÃ CÓ kế hoạch điều trị */
       const khac = lop === 'teethKH' && !!(t && t.dichVu);
-      return `<button class="tooth ${co?'co-van-de':''} ${khac?'doi-theo-kh':''}"
+      const dangChon = (App.state.rangChon || []).includes(n);
+      return `<button class="tooth ${co?'co-van-de':''} ${khac?'doi-theo-kh':''} ${dangChon?'dang-chon':''}"
         onclick="Cust.toothClick(${n},'${lop}')" title="Răng ${n} — ${h(this.moTa(n,t))}">
         <span class="tooth-svg">${this.svg(n,t)}${this.deLen(n,t)}</span>
         <span class="tooth-no num">${n}</span></button>`;
