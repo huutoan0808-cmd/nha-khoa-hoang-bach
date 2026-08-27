@@ -229,13 +229,27 @@ function migrate() {
   QT.MAU.forEach(m => {
     if (!db.quyTrinh.some(q => q.id === m.id)) db.quyTrinh.push(JSON.parse(JSON.stringify(m)));
   });
-  /* Bổ sung dịch vụ cơ bản còn thiếu, giá 0 để quản lý điền. Món đã có thì bỏ qua,
-     không đụng tới giá đang dùng. */
+  /* Danh sách 15 dịch vụ cơ bản trước đây được TỰ THÊM LẠI mỗi lần mở app nếu thiếu.
+     Nay đã có bảng giá chính thức 140 món thay thế, nên bỏ hẳn việc tự thêm — không thì
+     mỗi lần mở app nó lại dựng lại 15 món giá 0 trùng tên với bảng giá, làm ô gợi ý
+     đầy dòng na ná nhau. Món nào đã lỡ thêm thì gom lại một lần ở dưới. */
+  if (Array.isArray(db.services) && !db.donDV) {
+    const chinh = (typeof BANG_GIA !== 'undefined') ? new Set(BANG_GIA.map(x => Combo.norm(x.n))) : null;
+    if (chinh) {
+      /* Bỏ những món giá 0 do bản cũ tự thêm, khi bảng giá chính thức đã có món tương ứng */
+      db.services = db.services.filter(x => x.price || x.mienPhi || !DV_CO_BAN.some(([, t]) => Combo.norm(t) === Combo.norm(x.name || '')));
+      db.donDV = 1;
+    }
+  }
+  /* Gộp dịch vụ trùng tên (bỏ dấu), giữ bản có giá */
   if (Array.isArray(db.services)) {
-    const co = new Set(db.services.map(x => Combo.norm(x.name || '')));
-    DV_CO_BAN.forEach(([nhom, ten]) => {
-      if (!co.has(Combo.norm(ten))) { db.services.push({id: uid(), group: nhom, name: ten, price: 0}); co.add(Combo.norm(ten)); }
+    const giu = new Map();
+    db.services.forEach(x => {
+      const k = Combo.norm(x.name || ''); if (!k) return;
+      const cu = giu.get(k);
+      if (!cu || (!cu.price && x.price)) giu.set(k, x);
     });
+    if (giu.size !== db.services.length) db.services = [...giu.values()];
   }
   /* Diễn biến điều trị cũ (kể cả bản nhập từ sổ Google Sheet) chưa có mã riêng,
      nên không sửa từng dòng được. Gắn mã cho chúng. */
@@ -1246,8 +1260,9 @@ const Cal = {
       <div class="f"><label>Thời lượng (phút)</label><input type="number" name="dur" value="${a.dur}" min="15" step="15"></div>
       <div class="f"><label>Ghế</label><select name="chair">${CHAIRS.map(g=>`<option${a.chair===g?' selected':''}>${g}</option>`).join('')}</select></div>
       <div class="f full"><label>Nội dung / dịch vụ</label>
-        ${Combo.html('cbApptSvc','service', a.service||'', db.services.map(s=>({t:s.name, s:s.group})),
-          'Gõ tên dịch vụ, vd: cao voi, implant', null, 'Gõ tự do cũng được.')}</div>
+        ${Combo.html('cbApptSvc','service', a.service||'', Svc.goiY(1),
+          'Gõ tên dịch vụ, vd: cao voi, implant', null,
+          'Gợi ý lấy từ bảng giá phòng khám. Gõ tự do cũng được.')}</div>
       <div class="f"><label>Bác sĩ</label><select name="doctorId">${db.staff.filter(s=>s.role.includes('Bác sĩ')).map(s=>`<option value="${s.id}"${a.doctorId===s.id?' selected':''}>${h(s.name)}</option>`).join('')}</select></div>
       <div class="f"><label>Trạng thái</label><select name="status">${APPT_STATUS.map(s=>`<option${a.status===s?' selected':''}>${s}</option>`).join('')}</select></div>
       <div class="f full"><label>Chờ hàng lab (nếu có)</label><select name="labOrderId"><option value="">— không —</option>${labOpts}</select></div>
@@ -1416,7 +1431,7 @@ const Treat = {
     <form class="form-grid" onsubmit="Treat.itemSave(event,'${id||''}')">
       <div class="f full"><label>Dịch vụ</label>
         ${Combo.html('cbService','name', (db.services.find(s=>s.id===t.serviceId)||{}).name || t.name || '',
-          db.services.map(s=>({t:s.name, s:s.group+' · '+money(s.price)})),
+          Svc.goiY(1),
           'Gõ tên dịch vụ, vd: implant, tram, cao voi', Treat.onServicePick,
           'Gõ không dấu cũng ra. Dịch vụ mới thì cứ gõ rồi tự điền giá.')}
         <div class="combo-hint">Sửa tên, loại hoặc giá dịch vụ ở
@@ -2417,6 +2432,21 @@ const NHOM_DV = ['Chẩn đoán hình ảnh','Nha chu','Trám răng','Nhổ răn
                  'Phục hình sứ','Phục hình tháo lắp','Implant','Chỉnh nha','Thẩm mỹ',
                  'Răng trẻ em','Khác'];
 const Svc = {
+  /* Gợi ý dịch vụ dùng chung cho ô đặt lịch và ô lập hạng mục: bỏ trùng tên,
+     xếp theo nhóm rồi theo tên, ghi kèm nhóm và giá ở bên phải. */
+  goiY(coGia){
+    const m = new Map();
+    (db.services || []).forEach(x => {
+      const k = Combo.norm(x.name || ''); if (!k) return;
+      const cu = m.get(k);
+      if (!cu || (!cu.price && x.price)) m.set(k, x);
+    });
+    const thu = g => { const i = NHOM_DV.indexOf(g); return i < 0 ? 99 : i; };
+    return [...m.values()]
+      .sort((a, b) => thu(a.group) - thu(b.group) || String(a.name).localeCompare(String(b.name), 'vi'))
+      .map(x => ({t: x.name, s: (x.group || '') + (coGia && x.price ? ' · ' + money(x.price) : '')}));
+  },
+
   bang(q){
     if (q != null) App.state.svcQ = q;
     const tim = Combo.norm(App.state.svcQ || '');
