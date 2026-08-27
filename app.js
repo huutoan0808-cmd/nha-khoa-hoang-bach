@@ -238,6 +238,8 @@ function migrate() {
   /* Quy trình công đoạn: lần đầu thì nạp bảng gốc của phòng khám. Đã có rồi thì chỉ
      bổ sung quy trình mới, KHÔNG đè lên tỷ lệ quản lý đã chỉnh. */
   if (!db.quyTrinh) db.quyTrinh = [];
+  /* Bảng giá gia công lab: lần đầu nạp bảng mặc định, sau đó để quản lý tự sửa */
+  if (!db.giaLab) db.giaLab = GiaLab.MAC_DINH.map(x => Object.assign({id: uid()}, x));
   QT.MAU.forEach(m => {
     if (!db.quyTrinh.some(q => q.id === m.id)) db.quyTrinh.push(JSON.parse(JSON.stringify(m)));
   });
@@ -385,6 +387,7 @@ const IC = {
   more:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   search:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  cog:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.6v2.6M12 18.8v2.6M21.4 12h-2.6M5.2 12H2.6M18.6 5.4l-1.8 1.8M7.2 16.8l-1.8 1.8M18.6 18.6l-1.8-1.8M7.2 7.2 5.4 5.4"/></svg>',
   print:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg>',
 };
 const NAV = [
@@ -396,6 +399,7 @@ const NAV = [
   {id:'hr', label:'Nhân sự', icon:IC.hr},
   {id:'lab', label:'Lab', icon:IC.lab},
   {id:'reports', label:'Báo cáo', icon:IC.rep},
+  {id:'settings', label:'Cài đặt', icon:IC.cog},
 ];
 
 const App = {
@@ -612,7 +616,7 @@ const ROLES = {
   letan:  {label:'Lễ tân',   can:['thu']},
 };
 const ROLE_TABS = {
-  quanly: ['dashboard','customers','calendar','treatment','inventory','hr','lab','reports'],
+  quanly: ['dashboard','customers','calendar','treatment','inventory','hr','lab','reports','settings'],
   bacsi:  ['dashboard','customers','calendar','treatment','inventory','hr','lab'],
   trothu: ['dashboard','customers','calendar','treatment','inventory','hr','lab'],
   letan:  ['dashboard','customers','calendar','treatment','inventory','hr','lab'],
@@ -976,8 +980,11 @@ const Cust = {
       <div class="f full"><label>Tình trạng hiện tại</label>
         <select name="s" onchange="Cust.toothMatHien(this.value)">
           ${TOOTH_STATES.map(([k,l])=>`<option value="${k}"${t.s===k?' selected':''}>${l}</option>`).join('')}</select></div>
-      ${kh ? `<div class="f full"><label>Kế hoạch điều trị</label>
-        ${Combo.html('cbRangDV','dichVu', t.dichVu||'', Svc.goiY(1), 'Gõ tên dịch vụ, vd: boc su, noi nha',
+      ${kh ? `<div class="f full"><label>Chẩn đoán</label>
+        ${Combo.html('cbRangDX','chanDoan', icdName(t.chanDoan||'')||'', Cust.icdHopVoi(t.s, hienTai),
+          'Gõ tên bệnh hoặc mã ICD', null, 'Mã hợp với tình trạng răng được xếp lên đầu; gõ để tra cả bảng ICD.')}</div>
+      <div class="f full"><label>Kế hoạch điều trị</label>
+        ${Combo.html('cbRangDV','dichVu', t.dichVu||'', Svc.goiYTen(), 'Gõ tên dịch vụ, vd: boc su, noi nha',
           null, 'Gợi ý lấy từ bảng giá phòng khám. Lưu xong bấm "Đưa vào điều trị" để tạo hạng mục.')}</div>
       <div class="f full"><label>Dịch vụ gợi ý cho tình trạng trên</label>
         <div class="check-row" id="dvGoiY" data-rang="${n}">${Cust.dvHopVoi(t.s, hienTai).map(x =>
@@ -1016,6 +1023,32 @@ const Cust = {
     thaolap: ['Răng tháo lắp nhựa — Nhật','Hàm khung hợp kim Titan','Đệm hàm','Thêm móc','Vá hàm nứt, vỡ'],
     implant: ['Răng toàn sứ Zirconia','Hàm tạm trên Implant','Thanh bar liên kết'],
     ok:      ['Cạo vôi răng — mức độ 1','Khám và tư vấn','Trám sâu răng phía trong — tiêu chuẩn'],
+  },
+  /* Mã ICD hay dùng cho từng tình trạng răng — xếp lên đầu ô chẩn đoán của răng đó */
+  ICD_THEO_TT: {
+    caries:  ['K02.1','K02.0','K02.5','K02.9','K02.8'],
+    filled:  ['K02.8','K02.1','K02.9'],
+    crownKL: ['K08.1','K02.5','K03.7'],
+    crownTS: ['K08.1','K02.5','K03.7'],
+    missing: ['K08.1','K08.2','K08.3'],
+    thaolap: ['Z97.2','Z46.3','K08.1'],
+    implant: ['K08.1','K08.2'],
+    ok:      ['Z01.2','K03.6','K05.1'],
+  },
+  icdHopVoi(tt, rangHT){
+    const uu = (this.ICD_THEO_TT[tt] || []).slice();
+    const t = rangHT || {};
+    if (t.loDo) uu.unshift('K04.6');
+    if (t.sung) uu.unshift('K04.7');
+    if (t.nn)   uu.unshift('K04.5');
+    if (tt === 'caries' && (t.loDo || t.sung)) uu.unshift('K04.1');
+    const het = icdOptions();
+    const daCo = [];
+    const dau = uu.filter(m => { if (daCo.indexOf(m) >= 0) return false; daCo.push(m); return true; })
+      .map(ma => het.find(x => x.s === ma)).filter(Boolean)
+      .map(x => Object.assign({}, x, {s: x.s + ' · hay gặp'}));
+    const bo = new Set(daCo);
+    return dau.concat(het.filter(x => !bo.has(x.s)));
   },
   /* Răng sâu mà có lỗ dò / sưng / đã nội nha thì thường phải nội nha (hoặc nội nha lại)
      trước khi phục hình — đưa lên đầu danh sách gợi ý. */
@@ -1084,8 +1117,10 @@ const Cust = {
     const sung = !!f.querySelector('[name="sung"]:checked');
     const c = custById(App.state.custSel);
     if (!c[lop]) c[lop] = {};
-    if (d.s === 'ok' && !nn && !loDo && !sung && !mat.length && !d.note && !(d.dichVu||'').trim()) delete c[lop][n];
-    else c[lop][n] = {s:d.s, mat, nn, loDo, sung, note:d.note, dichVu:(d.dichVu||'').trim()};
+    if (d.s === 'ok' && !nn && !loDo && !sung && !mat.length && !d.note
+        && !(d.dichVu||'').trim() && !(d.chanDoan||'').trim()) delete c[lop][n];
+    else c[lop][n] = {s:d.s, mat, nn, loDo, sung, note:d.note, dichVu:(d.dichVu||'').trim(),
+      chanDoan: icdCode((d.chanDoan||'').trim())};
     save(); App.closeModal(); App.render();
     App.toast('Đã lưu răng ' + n + (lop === 'teethKH' ? ' (kế hoạch) ✓' : ' ✓'));
   },
@@ -1155,8 +1190,11 @@ const Cust = {
     <form class="form-grid" onsubmit="Cust.keHoachNhieuLuu(event)">
       <div class="note-block full">Sẽ lập <b>một hạng mục điều trị</b> chung cho các răng:
         <b>${ds.map(n=>'R'+n).join(', ')}</b> — số lượng <b>${ds.length}</b>.</div>
+      <div class="f full"><label>Chẩn đoán</label>
+        ${Combo.html('cbNhieuDX','chanDoan', '', icdOptions(), 'Gõ tên bệnh hoặc mã ICD',
+          null, 'Ghi chung cho các răng vừa chọn.')}</div>
       <div class="f full"><label>Kế hoạch điều trị (dịch vụ)</label>
-        ${Combo.html('cbNhieuDV','dichVu', '', Svc.goiY(1), 'Gõ tên dịch vụ, vd: boc su, tram',
+        ${Combo.html('cbNhieuDV','dichVu', '', Svc.goiYTen(), 'Gõ tên dịch vụ, vd: boc su, tram',
           null, 'Gợi ý lấy từ bảng giá phòng khám.')}</div>
       <div class="f"><label>Giảm giá (%)</label><input type="number" name="giamPct" min="0" max="100" step="0.5" placeholder="0"></div>
       <div class="f"><label>Giảm thêm (₫)</label>${Tien.o('giamTien','')}</div>
@@ -1188,7 +1226,8 @@ const Cust = {
       if (!c.teethKH) c.teethKH = {};
       ds.forEach(n => {
         const ht = (c.teeth||{})[n];
-        c.teethKH[n] = Object.assign({s:'ok', mat:[], note:''}, ht || {}, {dichVu: dv ? dv.name : ten});
+        c.teethKH[n] = Object.assign({s:'ok', mat:[], note:''}, ht || {},
+          {dichVu: dv ? dv.name : ten, chanDoan: icdCode((d.chanDoan||'').trim())});
       });
       c._up = Date.now();
     }
@@ -1338,17 +1377,38 @@ const Cust = {
       <div class="f"><label>Ngày</label><input type="date" name="date" value="${h((v&&v.date)||todayISO())}" required></div>
       <div class="f"><label>Bác sĩ thực hiện</label><select name="doctorId">
         <option value="">— chưa ghi —</option>
-        ${db.staff.filter(s=>s.active!==false).map(s=>`<option value="${s.id}"${v&&v.doctorId===s.id?' selected':''}>${h(s.name)}</option>`).join('')}</select></div>
+        ${db.staff.filter(s=>s.active!==false).map(s=>`<option value="${s.id}"${v&&v.doctorId===s.id?' selected':''}>${h(s.name)}${s.role?' · '+h(s.role):''}</option>`).join('')}</select></div>
+      <div class="f"><label>Người phụ (trợ thủ)</label><select name="assistantId">
+        <option value="">— không có —</option>
+        ${db.staff.filter(s=>s.active!==false).map(s=>`<option value="${s.id}"${v&&v.assistantId===s.id?' selected':''}>${h(s.name)}${s.role?' · '+h(s.role):''}</option>`).join('')}</select></div>
+      <div class="f full"><label>Điền nhanh theo mẫu phòng khám</label>
+        <select onchange="Cust.mauBuoi(this)">
+          <option value="">— chọn buổi điều trị theo mẫu —</option>
+          ${GY.buoiCho(HoSo.lyDoDang(c)).map((b, i) =>
+            `<option value="${i}">${h(b.ten)}${b.l ? ' · ' + h(b.l) : ''}</option>`).join('')
+            || '<option value="" disabled>Điền lý do vào viện trong Bệnh án điện tử trước</option>'}</select>
+        <div class="combo-hint">Câu chữ lấy đúng từ mẫu "Phiếu theo dõi điều trị" của phòng khám — chọn xong sửa lại tùy ý.</div></div>
       <div class="f full"><label>Thuộc đợt điều trị</label><select name="episodeId">
         <option value="">— không gắn đợt nào —</option>
         ${Dot.cua(c.id).map(e=>`<option value="${e.id}"${(v?v.episodeId:(Dot.dangChon(c)||{}).id)===e.id?' selected':''}>${h(e.ten||'(chưa đặt tên)')} — ${fmtD(e.tuNgay)}</option>`).join('')}</select></div>
-      <div class="f full"><label>Diễn biến bệnh</label><textarea name="db" required>${h((v&&v.db)||'')}</textarea></div>
-      <div class="f full"><label>Xử trí</label><textarea name="xt">${h((v&&v.xt)||'')}</textarea></div>
+      <div class="f full"><label>Diễn biến bệnh</label><textarea name="db" rows="3" required>${h((v&&v.db)||'')}</textarea></div>
+      <div class="f full"><label>Chỉ định — xử trí</label><textarea name="xt" rows="3">${h((v&&v.xt)||'')}</textarea></div>
+      <div class="f full"><label>Dặn dò sau điều trị</label><textarea name="dan" rows="2">${h((v&&v.dan)||'')}</textarea></div>
       <div class="form-actions full">
         ${vid?`<button type="button" class="btn danger" onclick="Cust.visitDel('${vid}','${c.id}')">Xóa</button><span class="spacer"></span>`:''}
         <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
         <button class="btn primary">${v?'Lưu':'Thêm'}</button></div>
     </form>`);
+  },
+  /* Chọn một buổi trong mẫu -> đổ thẳng vào ba ô diễn biến / chỉ định / dặn dò */
+  mauBuoi(sel){
+    const c = this.aiDangXem(); if (!c || sel.value === '') return;
+    const b = GY.buoiCho(HoSo.lyDoDang(c))[+sel.value]; if (!b) return;
+    const f = sel.closest('form'); if (!f) return;
+    const dat = (n, v) => { const o = f.querySelector(`[name="${n}"]`); if (o && v) o.value = v; };
+    dat('db', b.db); dat('xt', b.cd); dat('dan', b.dan);
+    sel.value = '';
+    App.toast('Đã điền theo mẫu — sửa lại tùy ý');
   },
   visitSave(ev, vid, cid){
     ev.preventDefault();
@@ -1375,7 +1435,8 @@ const Cust = {
       const bs = staffById(v.doctorId);
       return `<div class="tl-item clickable" onclick="Cust.visitForm('${v.id||''}','${c.id}')" title="Bấm để sửa">
         <span class="tl-date num">${fmtD(v.date)}</span>
-        <b>${h(v.db)}</b><p>${h(v.xt||'')}${bs?` <span class="sub-line">· ${h(bs.name)}</span>`:''}${
+        <b>${h(v.db)}</b><p>${h(v.xt||'')}${bs?` <span class="sub-line">· BS ${h(bs.name)}</span>`:''}${
+          (() => { const pt = staffById(v.assistantId); return pt ? ` <span class="sub-line">· phụ: ${h(pt.name)}</span>` : ''; })()}${
           (() => { const e=(db.episodes||[]).find(x=>x.id===v.episodeId); return e?` <span class="pill mutedp">${h(e.ten||'đợt')}</span>`:''; })()}</p></div>`;
     }).join('');
   },
@@ -1492,7 +1553,8 @@ SCREENS.customers = () => {
             return s + (dv ? (dv.price||0) : 0);
           }, 0);
           return `<div class="tooth-info" style="border-color:var(--accent)"><b>Kế hoạch điều trị:</b><br>
-            ${ds.length ? ds.map(n => `R${n}: ${h(Tooth.moTa(n, kho[n]))} → <b>${h(kho[n].dichVu)}</b>`).join('<br>')
+            ${ds.length ? ds.map(n => `R${n}: ${h(Tooth.moTa(n, kho[n]))}${
+              kho[n].chanDoan ? ' · <i>' + h(icdName(kho[n].chanDoan)) + '</i>' : ''} → <b>${h(kho[n].dichVu)}</b>`).join('<br>')
                         : 'Chưa răng nào có kế hoạch — bấm vào răng rồi chọn dịch vụ sẽ làm.'}
             ${tong ? `<br><br>Tạm tính <b>${money(tong)}</b> cho ${ds.length} răng` : ''}</div>`;
         })() : ''}
@@ -2068,136 +2130,320 @@ SCREENS.treatment = () => {
 
 /* Gợi ý cho các ô trống — gõ chọn cho nhanh, vẫn gõ tự do được */
 const GY = {
-  /* Lý do vào viện gắn với dịch vụ phòng khám làm, để lễ tân chọn một phát ra luôn */
-  lyDo: [
-    'Cao răng nhiều, muốn cạo vôi răng',
-    'Chảy máu nướu, hôi miệng — muốn cạo vôi răng',
-    'Khám định kỳ, cạo vôi răng',
-    'Sâu răng, muốn trám răng',
-    'Răng thưa, muốn trám thẩm mỹ',
-    'Đau nhức tự phát, cần điều trị tủy',
-    'Sâu răng đến tủy, cần điều trị tủy',
-    'Răng đã chữa tủy đau lại, cần điều trị tủy lại',
-    'Răng lung lay nhiều, muốn nhổ răng',
-    'Chân răng hư, muốn nhổ răng',
-    'Răng khôn mọc lệch, cần nhổ tiểu phẫu',
-    'Răng ngầm, cần nhổ tiểu phẫu',
-    'Mất răng, muốn phục hình răng sứ',
-    'Răng vỡ lớn, muốn bọc răng sứ',
-    'Răng xấu màu, muốn làm răng sứ thẩm mỹ',
-    'Mất nhiều răng, muốn phục hình tháo lắp',
-    'Hàm tháo lắp cũ lỏng, muốn làm lại',
-    'Răng hô, muốn niềng răng mắc cài kim loại',
-    'Răng móm, muốn niềng răng mắc cài kim loại',
-    'Răng lệch lạc, chen chúc — muốn niềng răng',
-    'Mất răng, muốn cấy ghép Implant',
-    'Răng ố vàng, muốn tẩy trắng',
-    'Sưng đau vùng hàm mặt',
-    'Ê buốt khi ăn nóng lạnh',
-  ],
-  /* Quá trình bệnh lý — bám theo dịch vụ đã chọn ở ô "Lý do vào viện" */
-  quaTrinh: ['Đau âm ỉ vài ngày nay, tăng về đêm','Ê buốt khi ăn nóng lạnh, chưa đau tự phát',
-    'Phát hiện tình cờ khi khám định kỳ','Sưng đau 2–3 ngày, có sốt nhẹ'],
-  QT_DV: {
-    caovoi: ['Cao răng bám nhiều, chưa lấy vôi hơn 1 năm nay',
-      'Chảy máu nướu khi chải răng vài tháng nay',
-      'Hôi miệng kéo dài, nướu sưng đỏ',
-      'Khám định kỳ, chưa có triệu chứng đau'],
-    tram: ['Phát hiện lỗ sâu, giắt thức ăn khi ăn',
-      'Ê buốt khi ăn nóng lạnh, hết ê sau vài giây',
-      'Sâu răng phát hiện tình cờ khi khám định kỳ',
-      'Miếng trám cũ bong, ê buốt trở lại',
-      'Răng thưa, ảnh hưởng thẩm mỹ khi cười'],
-    tuy: ['Đau nhức tự phát, tăng về đêm, uống thuốc giảm đau không đỡ',
-      'Đau lan lên thái dương, không xác định rõ răng đau',
-      'Sâu răng lâu ngày, nay đau dữ dội từng cơn',
-      'Răng đổi màu sẫm, gõ dọc đau',
-      'Răng đã chữa tủy nay đau lại, có lỗ dò vùng chóp'],
-    nho: ['Răng lung lay tăng dần vài tháng nay, ăn nhai đau',
-      'Chân răng vỡ lớn không phục hồi được',
-      'Răng viêm nha chu nặng, tiêu xương nhiều',
-      'Răng sữa lung lay, răng vĩnh viễn đã mọc'],
-    tieuphau: ['Răng khôn mọc lệch, sưng đau tái đi tái lại',
-      'Viêm lợi trùm răng khôn, há miệng hạn chế',
-      'Răng khôn ngầm phát hiện trên phim toàn cảnh',
-      'Răng khôn tì vào răng số 7 gây sâu kẽ'],
-    su: ['Răng vỡ lớn sau chữa tủy, cần bọc bảo vệ',
-      'Mất răng, muốn phục hồi ăn nhai và thẩm mỹ',
-      'Răng nhiễm màu nặng, tẩy trắng không cải thiện',
-      'Răng sứ cũ hở cổ, đen viền nướu'],
-    thaolap: ['Mất nhiều răng, ăn nhai khó, sụt cân',
-      'Hàm tháo lắp cũ lỏng, rơi khi ăn',
-      'Mất răng toàn hàm, chưa phục hình lần nào',
-      'Hàm cũ gây đau, loét niêm mạc'],
-    nieng: ['Răng hô, môi khó khép kín',
-      'Răng móm, khớp cắn ngược',
-      'Răng chen chúc, khó vệ sinh, hay sâu kẽ',
-      'Răng thưa nhiều kẽ, ảnh hưởng thẩm mỹ'],
-    implant: ['Mất răng lâu năm, tiêu xương vùng mất răng',
-      'Mất răng đơn lẻ, không muốn mài răng kế cận',
-      'Vừa nhổ răng, muốn cấy ghép sớm'],
-    tay: ['Răng ố vàng do cà phê, thuốc lá',
-      'Răng xỉn màu theo tuổi, muốn sáng hơn'],
+  /* ================= Nội dung theo MẪU của phòng khám =================
+     Mọi câu gợi ý dưới đây chép đúng từ hai file mẫu phòng khám đưa:
+     "Mẫu bệnh án đầy đủ 9 dịch vụ" và "Phiếu theo dõi điều trị - mẫu".
+     Mỗi dịch vụ có đủ: lý do vào viện · quá trình bệnh lý · khám trong miệng ·
+     cận lâm sàng · tóm tắt · chẩn đoán · kế hoạch · dặn dò · các buổi điều trị. */
+  MAU: {
+    thaolaptoan: {
+      ten: 'Phục hình tháo lắp toàn hàm',
+      lyDo: 'Mất răng toàn hàm, ăn nhai khó khăn (phục hình tháo lắp toàn hàm).',
+      qt: ['Bệnh nhân mất toàn bộ răng hàm trên/hàm dưới/hai hàm, ăn nhai khó khăn, mong muốn làm hàm giả tháo lắp.'],
+      tm: ['Mất răng toàn hàm trên/hàm dưới/hai hàm. Vùng nhổ răng đã lành thương, không ghi nhận chân răng còn sót trên lâm sàng',
+        'Sống hàm trên cao trung bình',
+        'Niêm mạc phủ sống hàm hồng, săn chắc, không viêm loét, không đau khi sờ'],
+      cls: ['Chụp phim X-quang'],
+      tt: 'Bệnh nhân …… đến khám vì mất răng toàn hàm, ăn nhai khó khăn. Khám trong miệng ghi nhận mất toàn bộ răng hàm trên/hàm dưới/hai hàm, sống hàm và niêm mạc …….',
+      dx: ['Mất răng toàn bộ hàm trên/hàm dưới/hai hàm (phục hình tháo lắp toàn hàm).'],
+      kh: ['Phục hình tháo lắp toàn hàm hai hàm/ hàm trên/ hàm dưới'],
+      dan: 'Hướng dẫn cách mang và tháo hàm, vệ sinh hàm và niêm mạc. Tái khám nếu đau, loét niêm mạc hoặc hàm lỏng.',
+      db: 'Bệnh nhân mất toàn bộ răng hàm trên/hàm dưới/hai hàm, ăn nhai khó khăn.',
+      buoi: [
+        {l: 'LẦN 1', cd: 'Khám và lấy dấu sơ khởi.'},
+        {l: 'LẦN 2', cd: 'Thử khay cá nhân, lấy dấu lần 2. Ghi tương quan hai hàm; xác định đường giữa, đường cười; chọn màu/hình dạng răng.'},
+        {l: 'LẦN 3', cd: 'Thử răng sáp; kiểm tra thẩm mỹ, phát âm, nâng đỡ môi má và khớp cắn.'},
+        {l: 'LẦN 4', cd: 'Giao hàm; kiểm tra lưu giữ, khớp cắn và chỉnh điểm cấn. Phục hình tháo lắp toàn hàm trên/hàm dưới/hai hàm.'},
+      ],
+      icd: ['K08.1', 'K08.2', 'Z97.2', 'Z46.3'],
+    },
+    thaolapban: {
+      ten: 'Phục hình tháo lắp bán hàm',
+      lyDo: 'Mất nhiều răng ……, ăn nhai khó khăn (phục hình tháo lắp bán hàm).',
+      qt: ['Bệnh nhân mất các răng ……, ăn nhai khó khăn, mong muốn phục hồi các răng mất bằng hàm giả tháo lắp.'],
+      tm: ['Mất các răng …….', 'Vùng mất răng đã lành thương', 'Các răng còn lại và mô nha chu bình thường'],
+      cls: ['Chụp phim X-quang'],
+      tt: 'Bệnh nhân …… đến khám vì mất nhiều răng, ăn nhai khó khăn. Khám ghi nhận mất các răng ……, các răng còn lại và mô nha chu …….',
+      dx: ['Mất răng …… (phục hình tháo lắp bán hàm).'],
+      kh: ['Phục hình tháo lắp bán hàm các răng...'],
+      dan: 'Hướng dẫn tháo lắp đúng cách, vệ sinh hàm và răng trụ, tái khám kiểm tra răng trụ và chỉnh hàm khi cần.',
+      db: 'Bệnh nhân mất các răng ……, ăn nhai khó khăn. Khám các răng còn lại, mô nha chu, răng trụ, sống hàm và khớp cắn.',
+      buoi: [
+        {l: 'LẦN 1', cd: 'Khám, điều chỉnh sơ khởi, lấy dấu, ghi tương quan hai hàm.'},
+        {l: 'LẦN 2', cd: 'Thử răng sáp; kiểm tra thẩm mỹ, phát âm và khớp cắn.'},
+        {l: 'LẦN 3', cd: 'Giao hàm; kiểm tra độ lưu giữ, ổn định, móc và khớp cắn; chỉnh điểm cấn. Phục hình tháo lắp bán hàm thay thế các răng …….'},
+      ],
+      icd: ['K08.1', 'K08.2', 'Z97.2', 'Z46.3'],
+    },
+    su: {
+      ten: 'Phục hình răng sứ',
+      lyDo: 'Răng …… sâu lớn/vỡ lớn/đổi màu/đã điều trị tủy, ảnh hưởng ăn nhai (phục hình răng sứ).',
+      qt: ['Răng …… sâu lớn/vỡ lớn/đổi màu/đã điều trị tủy, bệnh nhân mong muốn phục hồi chức năng ăn nhai.'],
+      tm: ['Răng …… mất mô răng do sâu/vỡ/đổi màu/đã điều trị tủy',
+        'Mô răng còn lại ít, mô nha chu lành mạnh, khớp cắn ổn'],
+      cls: ['Chụp phim X-quang'],
+      tt: 'Bệnh nhân …… đến khám vì răng …… sâu lớn/vỡ lớn/đổi màu/đã điều trị tủy. Khám ghi nhận răng …… mất mô răng nhiều, chỉ định phục hình răng sứ.',
+      dx: ['Răng …… sâu lớn/vỡ lớn/đổi màu/đã điều trị tủy hoặc mất răng ... (phục hình răng sứ).'],
+      kh: ['Phục hình sứ răng ....'],
+      dan: 'Hướng dẫn vệ sinh răng miệng, làm sạch kẽ, hạn chế thức ăn quá cứng; tái khám nếu đau kéo dài, cộm khớp cắn, phục hình lung lay/nứt/vỡ.',
+      db: 'Răng …… sâu lớn/vỡ lớn/đổi màu/đã điều trị tủy, có chỉ định phục hình sứ.',
+      buoi: [
+        {l: 'LẦN 1', cd: 'Khám răng, mô nha chu và khớp cắn; sửa soạn răng, lấy dấu/scan, ghi khớp, chọn màu; làm và gắn răng tạm khi cần.'},
+        {l: 'LẦN 2', cd: 'Thử phục hình sứ; kiểm tra độ khít sát, điểm tiếp xúc, hình thể, màu sắc, thẩm mỹ và khớp cắn. Gắn phục hình bằng vật liệu phù hợp; làm sạch vật liệu gắn dư. Phục hình răng sứ răng …….'},
+      ],
+      icd: ['K08.1', 'S02.5', 'K02.5', 'K00.3', 'K03.7'],
+    },
+    chetuygt: {
+      ten: 'Che tủy gián tiếp',
+      lyDo: 'Răng …… sâu sát tủy, ê buốt khi ăn uống, không đau tự phát (che tủy gián tiếp).',
+      qt: ['Răng …… sâu, ê buốt khi có kích thích nóng/lạnh/ngọt, hết ê sau khi loại bỏ kích thích, không đau tự phát, không đau về đêm.'],
+      tm: ['Răng …… sâu ngà sâu sát tủy, chưa lộ tủy',
+        'Tủy còn đáp ứng, không ghi nhận dấu hiệu viêm tủy không hồi phục; quanh chóp không ghi nhận bất thường.'],
+      cls: ['Chụp phim X-quang'],
+      tt: 'Bệnh nhân …… đến khám vì răng …… sâu, ê buốt. Khám ghi nhận sâu ngà sâu sát tủy, chưa lộ tủy, tủy còn khả năng hồi phục.',
+      dx: ['Sâu ngà sâu răng …… / tình trạng tủy phù hợp bảo tồn (che tủy gián tiếp).'],
+      kh: ['Che tủy gián tiếp răng...'],
+      dan: 'Theo dõi đau/ê và đáp ứng tủy. Tái khám theo hẹn; tái khám sớm nếu đau tự phát, đau kéo dài, đau về đêm hoặc sưng.',
+      db: 'Răng …… sâu ngà sâu sát tủy, chưa lộ tủy. Tủy còn sống, chưa ghi nhận dấu hiệu viêm tủy không hồi phục.',
+      buoi: [
+        {l: '', cd: 'Cách ly, làm sạch mô sâu, sát khuẩn, che tủy gián tiếp bằng vật liệu BIO C REPAIR và trám kín phục hồi. Kiểm tra khớp cắn, đánh bóng. Che tủy gián tiếp và trám phục hồi răng …….'},
+      ],
+      icd: ['K02.1', 'K02.5', 'K04.0'],
+    },
+    chetuytt: {
+      ten: 'Che tủy trực tiếp',
+      lyDo: 'Răng …… sâu sát tủy/lộ tủy điểm nhỏ, tủy còn khả năng hồi phục (che tủy trực tiếp).',
+      qt: ['Răng …… sâu sâu, ê buốt khi kích thích, không đau tự phát hoặc đau kéo dài. Trong quá trình loại bỏ mô sâu ghi nhận lộ tủy điểm nhỏ.'],
+      tm: ['Răng …… sâu ngà sâu, lộ tủy điểm nhỏ',
+        'Tủy còn sống, chảy máu tủy kiểm soát được, chưa ghi nhận dấu hiệu viêm tủy không hồi phục.'],
+      cls: ['Chụp phim X-quang'],
+      tt: 'Bệnh nhân …… đến khám vì răng …… sâu sâu/ê buốt. Khám và trong quá trình làm sạch mô sâu ghi nhận lộ tủy điểm nhỏ, tủy còn sống và có khả năng hồi phục.',
+      dx: ['Răng …… lộ tủy điểm nhỏ, tủy còn khả năng hồi phục (che tủy trực tiếp).'],
+      kh: ['Che tủy trực tiếp răng...'],
+      dan: 'Theo dõi triệu chứng và tình trạng tủy. Tái khám theo hẹn; tái khám sớm nếu đau tự phát/kéo dài, đau về đêm, đau khi cắn hoặc sưng.',
+      db: 'Răng …… sâu sát tủy; trong quá trình làm sạch mô sâu ghi nhận lộ tủy điểm nhỏ. Tủy còn sống, chảy máu kiểm soát được, chưa ghi nhận dấu hiệu viêm tủy không hồi phục.',
+      buoi: [
+        {l: '', cd: 'Cách ly, kiểm soát chảy máu, làm sạch/sát khuẩn vùng lộ tủy. Che trực tiếp bằng BIO C REPAIR và trám phục hồi. Kiểm tra khớp cắn. Che tủy trực tiếp và trám phục hồi răng …….'},
+      ],
+      icd: ['K02.5', 'K04.0', 'K02.1'],
+    },
+    tram: {
+      ten: 'Trám răng',
+      lyDo: 'Răng …… sâu răng/sâu mặt nhai, mặt gần, mặt xa hoặc cổ răng; có thể nhét thức ăn/ê buốt, không đau tự phát (trám răng).',
+      qt: ['Răng …… sâu, nhét thức ăn/ê buốt khi ăn uống, không đau tự phát, không đau về đêm.'],
+      tm: ['Răng …… sâu ngà mặt ……, mô răng còn lại đủ khả năng phục hồi',
+        'Gõ không đau, mô quanh chóp không ghi nhận bất thường lâm sàng.'],
+      cls: ['Chụp phim X-quang'],
+      tt: 'Bệnh nhân …… đến khám vì răng …… sâu/nhét thức ăn/ê buốt. Khám ghi nhận sâu ngà mặt ……, chưa ghi nhận dấu hiệu bệnh lý tủy không hồi phục.',
+      dx: ['Sâu răng …… (trám răng).'],
+      kh: ['Trám răng ...'],
+      dan: 'Dặn theo dõi ê buốt sau trám. Vệ sinh răng miệng, hạn chế nhai thức ăn quá cứng tại vùng vừa trám. Tái khám nếu đau tự phát, đau kéo dài hoặc cộm khớp cắn.',
+      db: 'Răng …… sâu mặt nhai/phía gần/phía xa/cổ răng, chưa lộ tủy, không đau tự phát.',
+      buoi: [
+        {l: '', cd: 'Làm sạch xoang sâu, tạo xoang, xử lý bề mặt, trám composite/GIC. Chỉnh khớp cắn, hoàn tất và đánh bóng. Trám phục hồi răng …….'},
+      ],
+      icd: ['K02.1', 'K02.0', 'K02.5', 'K02.9', 'K03.0', 'K03.1', 'K00.2'],
+    },
+    tuy: {
+      ten: 'Điều trị tủy',
+      lyDo: 'Răng …… sâu vỡ lớn/đau tự phát/đau kéo dài, nghi tổn thương tủy (điều trị tủy).',
+      qt: ['Răng …… sâu vỡ lớn, đau tự phát/đau khi nhai/đau kéo dài; triệu chứng xuất hiện …… ngày. Chưa/đã dùng thuốc trước khi đến khám.'],
+      tm: ['Răng …… sâu vỡ lớn sát tuỷ/ lộ tủy hoặc phục hồi cũ', 'Đau tự phát/ đau liên tục'],
+      cls: ['Chụp phim X-quang'],
+      tt: 'Bệnh nhân …… đến khám vì răng …… sâu vỡ lớn/đau. Khám và cận lâm sàng ghi nhận tổn thương tủy răng …… phù hợp chỉ định điều trị nội nha.',
+      dx: ['Viêm tủy/hoại tử tủy/viêm quanh chóp răng …… (điều trị tủy).'],
+      kh: ['Điều trị tủy răng...'],
+      dan: 'Dặn giữ vệ sinh, tránh nhai cứng trên răng đang điều trị/chưa phục hồi hoàn chỉnh; tái khám đúng hẹn. Tái khám sớm nếu đau tăng, sưng hoặc có bất thường.',
+      db: 'Răng …… sâu vỡ lớn/đau tự phát/đau kéo dài/ lộ tuỷ/ nhiễm trùng chóp',
+      buoi: [
+        {l: 'LẦN 1', cd: 'Gây tê, đặt đê, mở tủy, sửa soạn ống tuỷ, xác định chiều dài làm việc, tạo hình và bơm rửa ống tủy. Đặt thuốc Ca(OH)2/ CHX trám tạm.'},
+        {l: 'LẦN 2', db: 'BN giảm đau/còn ê nhẹ.', cd: 'Tháo trám tạm, tiếp tục sửa soạn, bơm rửa NaOCl/EDTA, đặt Ca(OH)2/ CHX và trám tạm.'},
+        {l: 'LẦN 3', db: 'Răng hết đau, ống tủy sạch và khô.', cd: 'Bơm rửa, làm khô, trám bít ống tủy bằng gutta-percha + sealer, chụp phim kiểm tra, trám tạm.'},
+        {l: 'LẦN 4', cd: 'Phục hồi thân răng bằng trám hoặc phục hình sứ. Điều trị tủy răng …….'},
+      ],
+      icd: ['K04.0', 'K04.1', 'K04.4', 'K04.5', 'K04.6', 'K04.7', 'K02.5', 'K04.8'],
+    },
+    nho: {
+      ten: 'Nhổ răng thường',
+      lyDo: 'Răng …… sâu vỡ lớn không thể phục hồi/lung lay nhiều/còn chân răng, có chỉ định nhổ răng.',
+      qt: ['Răng …… sâu vỡ lớn không thể phục hồi/lung lay độ ……, đau khi ăn nhai hoặc còn chân răng. Bệnh nhân đồng ý nhổ răng sau khi được tư vấn.'],
+      tm: ['Răng …… sâu vỡ lớn không thể phục hồi/lung lay độ 4/còn chân răng...'],
+      cls: ['Chụp phim X-quang', 'Xét nghiệm đông máu', 'Xét nghiệm công thức máu'],
+      tt: 'Bệnh nhân …… đến khám vì răng …… sâu vỡ lớn/lung lay/đau. Khám ghi nhận răng không còn khả năng bảo tồn/ có chỉ định nhổ.',
+      dx: ['Răng …… sâu vỡ lớn không thể phục hồi/lung lay/ chân răng... (nhổ răng thường).'],
+      kh: ['Nhổ răng ……'],
+      dan: 'Cắn gạc 30–45 phút, không súc miệng mạnh/khạc nhổ trong ngày đầu, ăn mềm, tránh đồ nóng và không tác động vào ổ răng. Tái khám khi chảy máu kéo dài, đau hoặc sưng tăng.',
+      db: 'Răng …… sâu vỡ lớn không phục hồi được/lung lay độ …/còn chân răng, có chỉ định nhổ.',
+      buoi: [
+        {l: '', cd: 'Gây tê, nhổ răng. Kiểm tra ổ răng/ nạo rửa, cầm máu, cho bệnh nhân cắn gòn. Nhổ răng …….'},
+      ],
+      icd: ['K08.3', 'K05.3', 'K04.5', 'K02.9', 'S02.5', 'K10.3'],
+    },
+    tieuphau: {
+      ten: 'Nhổ răng tiểu phẫu',
+      lyDo: 'Răng …… mọc lệch/mọc ngầm, sưng/ đau nướu, nhét thức ăn (nhổ răng tiểu phẫu).',
+      qt: ['Răng …… mọc lệch/ngầm, có thể đau hoặc viêm lợi trùm tái phát. Đã tư vấn nguy cơ, phương pháp tiểu phẫu và bệnh nhân đồng ý điều trị.'],
+      tm: ['Răng …… mọc lệch/ngầm', 'Viêm lợi trùm, há miệng hạn chế'],
+      cls: ['Chụp phim X-quang', 'Xét nghiệm đông máu', 'Xét nghiệm công thức máu'],
+      tt: 'Bệnh nhân …… đến khám vì răng …… mọc lệch/ngầm. Khám và phim X-quang ghi nhận vị trí răng …… phù hợp chỉ định tiểu phẫu.',
+      dx: ['Răng …… mọc lệch/ngầm (nhổ răng tiểu phẫu).'],
+      kh: ['Nhổ răng tiểu phẫu răng ...'],
+      dan: 'Dặn dùng thuốc theo toa nếu có, chườm lạnh trong 24 giờ đầu, không súc miệng mạnh/khạc nhổ, ăn mềm và vệ sinh theo hướng dẫn. Tái khám/cắt chỉ theo hẹn; tái khám sớm nếu chảy máu kéo dài, sưng đau tăng hoặc có dấu hiệu bất thường.',
+      db: 'Răng …… mọc lệch/ngầm có chỉ định nhổ.',
+      buoi: [
+        {l: '', cd: 'Tư vấn nguy cơ và phương pháp điều trị, bệnh nhân đồng ý tiểu phẫu. Gây tê, lật vạt, mở xương, chia răng, lấy răng, kiểm tra ổ răng, bơm rửa, khâu và cắn gòn. Tiểu phẫu răng …….'},
+      ],
+      icd: ['K01.1', 'K01.0', 'K05.2', 'K09.0', 'K00.1'],
+    },
+    caovoi: {
+      ten: 'Cạo vôi răng',
+      lyDo: 'Chảy máu nướu/hôi miệng — cạo vôi răng.',
+      qt: ['Hai hàm nhiều vôi răng, vết dính, chảy máu khi đánh răng/ hôi miệng'],
+      tm: ['Hai hàm nhiều vôi răng, vết dính', 'Nướu viêm, sưng đỏ', 'Chảy máu khi chạm nhẹ'],
+      cls: [],
+      tt: 'Bệnh nhân …… đến khám vì chảy máu nướu/hôi miệng. Khám trong miệng ghi nhận hai hàm nhiều vôi răng, vết dính; nướu viêm, sưng đỏ, chảy máu khi chạm nhẹ.',
+      dx: ['Viêm nướu hai hàm do vôi răng'],
+      kh: ['Cạo vôi và đánh bóng hai hàm'],
+      dan: 'Hướng dẫn chải răng đúng cách ít nhất 2 lần/ngày, làm sạch kẽ bằng chỉ nha khoa/bàn chải kẽ phù hợp. Có thể ê nhẹ hoặc chảy máu nướu nhẹ trong thời gian ngắn sau điều trị. Tái khám kiểm tra và cạo vôi định kỳ khoảng 3–6 tháng. Tái khám sớm nếu đau, sưng, chảy máu bất thường.',
+      db: 'Khám ghi nhận vệ sinh răng miệng tốt/trung bình/kém. Mảng bám và vôi răng mức độ ít/vừa/nhiều',
+      buoi: [
+        {l: '', cd: 'Tiến hành cạo vôi răng hai hàm bằng máy siêu âm. Đánh bóng bề mặt răng. Cạo vôi răng hai hàm, làm sạch mảng bám/vết dính và đánh bóng.',
+         db2: 'Sau điều trị, vôi răng và mảng bám được làm sạch; nướu có thể chảy máu nhẹ tại vùng viêm.'},
+      ],
+      icd: ['K03.6', 'K05.1', 'K05.0', 'K05.3', 'K05.2', 'K06.0', 'Z01.2'],
+    },
+    nieng: {
+      ten: 'Niềng răng mắc cài',
+      lyDo: 'Răng hô/móm/chen chúc, lệch lạc — muốn niềng răng mắc cài.',
+      qt: ['Răng hô, môi khó khép kín', 'Răng móm, khớp cắn ngược',
+        'Răng chen chúc, khó vệ sinh, hay sâu kẽ', 'Răng thưa nhiều kẽ, ảnh hưởng thẩm mỹ'],
+      tm: ['Khớp cắn loại II', 'Khớp cắn loại III', 'Răng chen chúc cung hàm trên',
+        'Răng chen chúc cung hàm dưới', 'Cắn hở vùng răng cửa', 'Cắn sâu', 'Lệch đường giữa'],
+      cls: ['Chụp phim toàn cảnh (Panorex)', 'Chụp phim sọ nghiêng (Cephalo)'],
+      tt: 'Bệnh nhân …… đến khám vì răng hô/móm/chen chúc. Khám ghi nhận sai khớp cắn, có chỉ định chỉnh nha bằng mắc cài.',
+      dx: ['Sai khớp cắn, lệch lạc răng (chỉnh nha mắc cài).'],
+      kh: ['Niềng răng mắc cài hai hàm'],
+      dan: 'Hướng dẫn vệ sinh răng miệng khi mang mắc cài, tránh thức ăn cứng dính. Tái khám đúng hẹn hằng tháng; tái khám sớm nếu bung mắc cài, đứt dây cung hoặc đau kéo dài.',
+      db: 'Răng hô/móm/chen chúc, sai khớp cắn có chỉ định chỉnh nha.',
+      buoi: [
+        {l: 'LẦN 1', cd: 'Khám, lấy dấu, chụp phim, lên kế hoạch điều trị; gắn mắc cài hàm trên/hàm dưới.'},
+        {l: 'TÁI KHÁM', cd: 'Kiểm tra tiến triển, thay dây cung/thun, chỉnh lực; kiểm tra vệ sinh răng miệng.'},
+      ],
+      icd: ['K07.3', 'K07.2', 'K07.1', 'K07.0', 'Z46.4', 'K00.6'],
+    },
+    implant: {
+      ten: 'Cấy ghép Implant',
+      lyDo: 'Mất răng ……, muốn cấy ghép Implant.',
+      qt: ['Mất răng lâu năm, tiêu xương vùng mất răng', 'Mất răng đơn lẻ, không muốn mài răng kế cận',
+        'Vừa nhổ răng, muốn cấy ghép sớm'],
+      tm: ['Khoảng mất răng đủ rộng', 'Sống hàm đủ chiều cao và bề dày',
+        'Sống hàm tiêu nhiều, cần ghép xương', 'Niêm mạc sừng hóa đủ'],
+      cls: ['Chụp CT Cone Beam', 'Xét nghiệm công thức máu', 'Xét nghiệm đông máu', 'Đường huyết mao mạch'],
+      tt: 'Bệnh nhân …… đến khám vì mất răng ……. Khám và phim CT ghi nhận sống hàm phù hợp chỉ định cấy ghép Implant.',
+      dx: ['Mất răng …… (cấy ghép Implant).'],
+      kh: ['Cấy ghép Implant răng ……'],
+      dan: 'Uống thuốc theo toa, chườm lạnh 24 giờ đầu, ăn mềm, không tác động vùng phẫu thuật. Tái khám cắt chỉ và kiểm tra tích hợp xương theo hẹn.',
+      db: 'Mất răng ……, sống hàm đủ điều kiện cấy ghép Implant.',
+      buoi: [
+        {l: 'LẦN 1', cd: 'Gây tê, lật vạt, khoan xương theo hướng dẫn, đặt trụ Implant, khâu đóng. Chụp phim kiểm tra.'},
+        {l: 'LẦN 2', cd: 'Cắt chỉ, kiểm tra lành thương.'},
+        {l: 'LẦN 3', cd: 'Tháo nắp, đặt abutment, lấy dấu làm phục hình trên Implant.'},
+        {l: 'LẦN 4', cd: 'Gắn phục hình sứ trên Implant, kiểm tra khớp cắn.'},
+      ],
+      icd: ['K08.1', 'K08.2'],
+    },
+    tay: {
+      ten: 'Tẩy trắng răng',
+      lyDo: 'Răng ố vàng/xỉn màu, muốn tẩy trắng răng.',
+      qt: ['Răng ố vàng do cà phê, thuốc lá', 'Răng xỉn màu theo tuổi, muốn sáng hơn'],
+      tm: ['Răng nhiễm màu ngoại lai', 'Răng xỉn màu theo tuổi', 'Men răng còn tốt, không nứt'],
+      cls: [],
+      tt: 'Bệnh nhân …… đến khám vì răng ố vàng/xỉn màu. Khám ghi nhận men răng còn tốt, phù hợp chỉ định tẩy trắng.',
+      dx: ['Răng nhiễm màu (tẩy trắng răng).'],
+      kh: ['Tẩy trắng răng hai hàm'],
+      dan: 'Kiêng thực phẩm sẫm màu (cà phê, trà, nước tương) trong 1–2 tuần đầu. Có thể ê buốt nhẹ vài ngày, tự hết. Tái khám nếu ê buốt kéo dài.',
+      db: 'Răng nhiễm màu ngoại lai/xỉn màu theo tuổi, men răng còn tốt.',
+      buoi: [
+        {l: '', cd: 'Cạo vôi làm sạch, cách ly nướu, bôi thuốc tẩy trắng và chiếu đèn theo chu kỳ. Kiểm tra màu sau tẩy, bôi gel chống ê buốt.'},
+      ],
+      icd: ['K00.3', 'K03.7', 'K03.2'],
+    },
   },
-  /* Đoán nhóm dịch vụ từ câu lý do vào viện */
+  /* Thứ tự nhận diện nhóm dịch vụ — dòng nào khớp trước thì lấy nhóm đó */
+  DAU_HIEU: [
+    ['chetuygt',    /che tuy gian tiep/],
+    ['chetuytt',    /che tuy truc tiep/],
+    ['thaolaptoan', /thao lap toan ham|mat rang toan ham/],
+    ['thaolapban',  /thao lap ban ham|mat nhieu rang/],
+    ['su',          /rang su|boc rang|phuc hinh su/],
+    ['caovoi',      /cao voi|voi rang|cao rang|chay mau nuou|hoi mieng|nha chu/],
+    ['tieuphau',    /tieu phau|rang khon|rang ngam|moc lech|moc ngam/],
+    ['tuy',         /dieu tri tuy|chua tuy|noi nha|den tuy|ton thuong tuy/],
+    ['nho',         /nho rang|chan rang|lung lay/],
+    ['nieng',       /nieng|chinh nha|mac cai|rang ho|rang mom|lech lac/],
+    ['implant',     /implant|cay ghep/],
+    ['thaolapban',  /thao lap|ham gia/],
+    ['tay',         /tay trang|o vang|xin mau/],
+    ['tram',        /tram|sau rang|rang thua|sau mat nhai/],
+  ],
+  /* Lý do vào viện: đúng một dòng cho mỗi dịch vụ, chép từ mẫu */
+  get lyDo(){ return Object.keys(this.MAU).map(k => this.MAU[k].lyDo); },
+  /* Đoán nhóm dịch vụ từ một câu lý do vào viện */
   nhomDV(lyDo){
     const t = Combo.norm(lyDo || '');
     if (!t) return '';
-    if (/cao voi|vi rang|cao rang|chay mau nuou|hoi mieng|nha chu/.test(t)) return 'caovoi';
-    if (/tieu phau|rang khon|rang ngam/.test(t))                            return 'tieuphau';
-    if (/dieu tri tuy|chua tuy|noi nha|den tuy/.test(t))                    return 'tuy';
-    if (/nho rang|chan rang hu|lung lay/.test(t))                           return 'nho';
-    if (/nieng|chinh nha|mac cai|rang ho|rang mom|lech lac/.test(t))        return 'nieng';
-    if (/implant|cay ghep/.test(t))                                          return 'implant';
-    if (/thao lap|ham gia|ham thao lap/.test(t))                            return 'thaolap';
-    if (/rang su|boc rang|phuc hinh su|su tham my/.test(t))                  return 'su';
-    if (/tay trang|o vang|xin mau/.test(t))                                  return 'tay';
-    if (/tram|sau rang|rang thua/.test(t))                                   return 'tram';
+    for (let i = 0; i < this.DAU_HIEU.length; i++)
+      if (this.DAU_HIEU[i][1].test(t)) return this.DAU_HIEU[i][0];
     return '';
   },
-  qtCho(lyDo){
-    const k = this.nhomDV(lyDo);
-    return (k && this.QT_DV[k]) ? this.QT_DV[k] : this.quaTrinh;
+  /* Khách làm nhiều việc cùng lúc thì gom gợi ý của mọi dịch vụ đã tick */
+  nhomDS(lyDo){
+    const cau = String(lyDo || '').split(';').map(x => x.trim()).filter(Boolean);
+    const ds = [];
+    (cau.length ? cau : ['']).forEach(x => {
+      const k = this.nhomDV(x); if (k && ds.indexOf(k) < 0) ds.push(k);
+    });
+    return ds;
   },
-  /* Khám trong miệng — cũng bám theo dịch vụ đã chọn ở lý do vào viện */
-  TM_DV: {
-    caovoi: ['Cao răng bám nhiều hai hàm','Viêm nướu, nướu sưng đỏ','Chảy máu khi thăm khám nướu',
-      'Túi nha chu sâu > 5mm','Mảng bám nhiều mặt trong răng cửa dưới'],
-    tram: ['Sâu ngà mặt nhai','Sâu ngà mặt bên, giắt thức ăn','Lỗ sâu ngà chưa đến tủy',
-      'Miếng trám cũ bong, hở bờ','Mòn cổ răng','Khe thưa răng cửa'],
-    tuy: ['Sâu ngà sâu, gõ dọc đau','Tủy hoại tử, thử tủy âm tính','Lỗ dò vùng chóp',
-      'Răng đổi màu sẫm','Sưng đáy hành lang vùng chóp','Răng đã trám bít ống tủy, gõ dọc đau'],
-    nho: ['Răng lung lay độ II','Răng lung lay độ III','Chân răng còn sót',
-      'Vỡ lớn thân răng, không phục hồi được','Viêm quanh chóp mạn'],
-    tieuphau: ['Răng khôn mọc lệch gần','Răng khôn mọc ngang','Lợi trùm răng khôn, sưng đỏ',
-      'Răng khôn ngầm trong xương','Sâu kẽ mặt xa răng số 7'],
-    su: ['Cùi răng còn đủ mô, đã chữa tủy','Răng vỡ lớn còn chân, cần cùi giả',
-      'Khoảng mất răng, hai răng kế cận còn tốt','Răng sứ cũ hở cổ, đen viền nướu'],
-    thaolap: ['Mất nhiều răng xen kẽ','Mất răng toàn hàm','Sống hàm teo nhiều',
-      'Niêm mạc sống hàm bình thường','Hàm cũ lỏng, không vững'],
-    nieng: ['Khớp cắn loại II','Khớp cắn loại III','Răng chen chúc cung hàm trên',
-      'Răng chen chúc cung hàm dưới','Cắn hở vùng răng cửa','Cắn sâu','Lệch đường giữa'],
-    implant: ['Khoảng mất răng đủ rộng','Sống hàm đủ chiều cao và bề dày',
-      'Sống hàm tiêu nhiều, cần ghép xương','Niêm mạc sừng hóa đủ'],
-    tay: ['Răng nhiễm màu ngoại lai','Răng xỉn màu theo tuổi','Men răng còn tốt, không nứt'],
+  gom(lyDo, truong, mac){
+    const ra = [];
+    this.nhomDS(lyDo).forEach(k => {
+      const m = this.MAU[k]; if (!m) return;
+      [].concat(m[truong] || []).forEach(x => { if (x && ra.indexOf(x) < 0) ra.push(x); });
+    });
+    return ra.length ? ra : (mac || []);
   },
-  /* Mã ICD hay gặp cho từng dịch vụ — đưa lên đầu ô gợi ý, phần còn lại vẫn tra được */
-  ICD_DV: {
-    caovoi:   ['K03.6','K05.1','K05.0','K05.3','K05.2','K06.0','Z01.2'],
-    tram:     ['K02.1','K02.0','K02.5','K02.9','K03.0','K03.1','K00.2'],
-    tuy:      ['K04.0','K04.1','K04.4','K04.5','K04.6','K04.7','K02.5','K04.8'],
-    nho:      ['K08.3','K05.3','K04.5','K02.9','S02.5','K10.3'],
-    tieuphau: ['K01.1','K01.0','K05.2','K09.0','K00.1'],
-    su:       ['K08.1','S02.5','K02.5','K00.3','K03.7'],
-    thaolap:  ['K08.1','K08.2','Z97.2','Z46.3'],
-    nieng:    ['K07.3','K07.2','K07.1','K07.0','Z46.4','K00.6'],
-    implant:  ['K08.1','K08.2'],
-    tay:      ['K00.3','K03.7','K03.2'],
+  quaTrinh: ['Đau âm ỉ vài ngày nay, tăng về đêm', 'Ê buốt khi ăn nóng lạnh, chưa đau tự phát',
+    'Phát hiện tình cờ khi khám định kỳ', 'Sưng đau 2–3 ngày, có sốt nhẹ'],
+  qtCho(lyDo){ return this.gom(lyDo, 'qt', this.quaTrinh); },
+  tmCho(lyDo){ return this.gom(lyDo, 'tm', this.trongMieng); },
+  clsCho(lyDo){
+    const rieng = this.gom(lyDo, 'cls', []);
+    return ['Không'].concat(rieng, this.canLamSang.filter(x => x !== 'Không'))
+      .filter((x, i, a) => a.indexOf(x) === i);
+  },
+  ttCho(lyDo){ return this.gom(lyDo, 'tt', this.tomTat); },
+  dxCho(lyDo){ return this.gom(lyDo, 'dx', []); },
+  khCho(lyDo){ return this.gom(lyDo, 'kh', []); },
+  danCho(lyDo){ return this.gom(lyDo, 'dan', []); },
+  /* Các buổi điều trị cho Phiếu theo dõi — theo đúng mẫu phòng khám */
+  buoiCho(lyDo){
+    const ra = [];
+    this.nhomDS(lyDo).forEach(k => {
+      const m = this.MAU[k]; if (!m) return;
+      (m.buoi || []).forEach(b => ra.push({
+        nhom: k, ten: m.ten, l: b.l || '',
+        db: [b.l ? b.l + ':' : '', b.db || (b.l ? '' : m.db), b.db2 || ''].filter(Boolean).join(' ').trim() || m.db,
+        cd: b.cd || '', dan: m.dan || '',
+      }));
+    });
+    return ra;
   },
   /* Danh sách ICD cho ô chẩn đoán: mã hợp với dịch vụ lên trước, còn lại theo sau */
   icdCho(lyDo){
-    const k = this.nhomDV(lyDo);
-    const uu = (k && this.ICD_DV[k]) || [];
+    const uu = [];
+    this.nhomDS(lyDo).forEach(k => ((this.MAU[k] || {}).icd || [])
+      .forEach(m => { if (uu.indexOf(m) < 0) uu.push(m); }));
     const het = icdOptions();
     if (!uu.length) return het;
     const dau = uu.map(ma => het.find(x => x.s === ma)).filter(Boolean)
@@ -2205,10 +2451,9 @@ const GY = {
     const daCo = new Set(uu);
     return dau.concat(het.filter(x => !daCo.has(x.s)));
   },
-  tmCho(lyDo){
-    const k = this.nhomDV(lyDo);
-    return (k && this.TM_DV[k]) ? this.TM_DV[k] : this.trongMieng;
-  },
+  trongMieng: ['Bình thường', 'Sâu ngà', 'Sâu ngà sâu, gõ dọc đau', 'Tủy hoại tử, gõ dọc đau',
+    'Viêm nướu, cao răng nhiều', 'Túi nha chu sâu > 5mm', 'Răng lung lay độ I', 'Răng lung lay độ II',
+    'Răng lung lay độ III', 'Lỗ dò vùng chóp', 'Mô nướu hồng, không sưng', 'Vỡ lớn thân răng, còn chân răng'],
   tienSu: ['Không','Tăng huyết áp','Đái tháo đường','Bệnh tim mạch','Hen suyễn','Viêm dạ dày',
     'Đang dùng thuốc chống đông','Rối loạn đông máu','Phụ nữ có thai','Phụ nữ cho con bú'],
   diUng: ['Không','Penicillin','Lidocaine','Thuốc tê nhóm Amide','Aspirin / NSAID','Hải sản','Sulfamid'],
@@ -2522,13 +2767,17 @@ const HoSo = {
     });
     /* Ghép các dòng đã tick với ô "Khác" thành một câu */
     ['lyDo','quaTrinh','diUng','tienSuBanThan','tienSuGiaDinh',
-     'toanThan','ngoaiMieng','trongMieng','canLamSang','keHoach'].forEach(n => {
+     'toanThan','ngoaiMieng','trongMieng','canLamSang','keHoach',
+     'chanDoanMo','danDo'].forEach(n => {
       if (d[n + 'Tick'] === undefined && d[n + 'Khac'] === undefined) return;
       const ghep = (d[n + 'Tick'] || []).concat([(d[n + 'Khac'] || '').trim()]).filter(Boolean).join('; ');
       /* Ô "Không" chỉ có ở ba mục tiền sử — không tick gì thì ghi thẳng "Không" */
       /* Không tick gì thì ghi thẳng nhãn bình thường của mục đó */
-      d[n] = ghep || ((f.querySelector(`[name="${n}Khong"]`) || {}).dataset || {}).nhan || '';
-      delete d[n + 'Tick']; delete d[n + 'Khac']; delete d[n + 'Khong'];
+      const oK = f.querySelector(`[name="${n}Khong"]`), oB = f.querySelector(`[name="${n}Bat"]`);
+      d[n] = ghep
+        || (oK && oK.checked ? (oK.dataset.nhan || '') : '')
+        || (oB && oB.checked ? (oB.dataset.nhan || '') : '');
+      delete d[n + 'Tick']; delete d[n + 'Khac']; delete d[n + 'Khong']; delete d[n + 'Bat'];
     });
     if (d.chanDoan != null) d.chanDoan = icdCode(d.chanDoan);
     if (d.chanDoanKem != null) d.chanDoanKem = icdCode(d.chanDoanKem);
@@ -2580,65 +2829,95 @@ const HoSo = {
     const f = document.querySelector('#modalBody form'); if (!f) return;
     const ly = [...f.querySelectorAll('[name="lyDoTick"]:checked')].map(x => x.value)
       .concat([(f.querySelector('[name="lyDoKhac"]')||{}).value || '']).join('; ');
-    const ds = GY.qtCho(ly);
-    this.veLaiTick('tkQT', 'quaTrinhTick', ds);
-    this.veLaiTick('tkTM', 'trongMiengTick', GY.tmCho(ly), 1);
+    this.veLaiTick('tkQT',  'quaTrinhTick',   GY.qtCho(ly));
+    this.veLaiTick('tkTM',  'trongMiengTick', GY.tmCho(ly), 1);
+    this.veLaiTick('tkCLS', 'canLamSangTick', GY.clsCho(ly), 1);
+    this.veLaiTick('tkDX',  'chanDoanMoTick', GY.dxCho(ly));
+    this.veLaiTick('tkDan', 'danDoTick',      GY.danCho(ly));
     const icd = GY.icdCho(ly);
     Combo.setOpts('gy_dx', icd); Combo.setOpts('gy_dx2', icd);
+    const oTT = document.getElementById('ttMau');
+    if (oTT) oTT.innerHTML = '<option value="">— chọn câu mẫu —</option>'
+      + GY.ttCho(ly).map(x => `<option value="${h(x)}">${h(x)}</option>`).join('');
+  },
+  /* Câu lý do vào viện đang tick — dùng chung cho mọi ô gợi ý bám theo dịch vụ */
+  lyDoDang(c, ep){
+    const f = document.querySelector('#modalBody form');
+    if (f && f.querySelector('[name="lyDoTick"]'))
+      return [...f.querySelectorAll('[name="lyDoTick"]:checked')].map(x => x.value)
+        .concat([(f.querySelector('[name="lyDoKhac"]') || {}).value || '']).join('; ');
+    const r = (c || {}).record || {};
+    return r.lyDo || (ep || {}).lyDo || '';
+  },
+  chenTomTat(v){
+    if (!v) return;
+    const o = document.querySelector('#modalBody [name="tomTat"]'); if (!o) return;
+    o.value = (o.value.trim() ? o.value.trim() + ' ' : '') + v;
   },
   /* Vẽ lại một danh sách tick, giữ nguyên những dòng người dùng đã tick */
   veLaiTick(id, ten, ds, giuDongKhong){
     const box = document.getElementById(id); if (!box) return;
     const cu = new Set([...box.querySelectorAll(`[name="${ten}"]:checked`)].map(x => Combo.norm(x.value)));
-    const dau = giuDongKhong ? box.querySelector('.tick-khong') : null;
-    const vach = giuDongKhong ? '<div class="tick-vach"></div>' : '';
-    const html = ds.filter(x => !this.laKhong(x)).map(x => `<label class="tick-d">
-      <input type="checkbox" name="${ten}" value="${h(x)}"${cu.has(Combo.norm(x))?' checked':''}
-        ${giuDongKhong?` onchange="HoSo.coBenh('${id}','${ten.replace(/Tick$/,'')}')"`:''}> <span>${h(x)}</span></label>`).join('')
+    box.innerHTML = ds.filter(x => !this.laKhong(x)).map(x => `<label class="tick-d">
+      <input type="checkbox" name="${ten}" value="${h(x)}"${cu.has(Combo.norm(x)) ? ' checked' : ''}
+        ${giuDongKhong ? ` onchange="HoSo.coBenh('${id}','${ten.replace(/Tick$/, '')}')"` : ''}> <span>${h(x)}</span></label>`).join('')
       || '<span class="sub-line">Chọn lý do vào viện ở trên để thấy gợi ý.</span>';
-    box.innerHTML = (dau ? dau.outerHTML + vach : '') + html;
   },
 
-  /* Tiền sử: mặc định tick "Không". Tick bệnh nào thì tự bỏ "Không" và mở ô ghi rõ;
-     tick lại "Không" thì xóa hết bệnh đã tick — hai bên loại trừ nhau. */
-  laKhong(v){ const t = Combo.norm(v||''); return !t || t === 'khong' || t === 'binh thuong'; },
+  /* Hai ô riêng: "Bình thường" và "Bất thường" (hoặc "Không" / "Có") — theo đúng
+     khuôn mẫu giấy tờ, mỗi bên một ô vuông để tick. Hai ô loại trừ nhau. Tick một
+     dòng bên dưới hoặc gõ ô Ghi rõ thì tự chuyển sang "Bất thường". */
+  laKhong(v){ const t = Combo.norm(v || ''); return !t || t === 'khong' || t === 'binh thuong'; },
+  nhanBat(nhanKhong){ return Combo.norm(nhanKhong) === 'binh thuong' ? 'Bất thường' : 'Có'; },
   tickKhong(id, ten, ds, daLuu, nhan, ghiChu, nhanKhong, macDinhBT){
     nhanKhong = nhanKhong || 'Không';
+    const nBat = this.nhanBat(nhanKhong);
     /* Khám trong miệng thì mặc định KHÔNG tick "Bình thường" — khách đã đến khám thì
        trong miệng gần như luôn có gì đó, tick sẵn bình thường dễ ký nhầm. */
     const khong = daLuu ? this.laKhong(daLuu) : (macDinhBT !== false);
+    const bat = daLuu ? !this.laKhong(daLuu) : false;
     const cau = khong ? [] : this.tachCau(daLuu);
     const co = new Set(ds.map(x => Combo.norm(x)));
     const chon = new Set(cau.filter(x => co.has(Combo.norm(x))).map(x => Combo.norm(x)));
     const ro = cau.filter(x => !co.has(Combo.norm(x))).join('; ');
     return `<div class="f full"><label>${nhan}</label>
+      <div class="tick-doi">
+        <label class="tick-d tick-khong"><input type="checkbox" name="${ten}Khong" data-nhan="${h(nhanKhong)}"${khong ? ' checked' : ''}
+          onchange="HoSo.doiKhong('${id}','${ten}',this.checked)"> <span>${h(nhanKhong)}</span></label>
+        <label class="tick-d tick-bat"><input type="checkbox" name="${ten}Bat" data-nhan="${h(nBat)}"${bat ? ' checked' : ''}
+          onchange="HoSo.doiBat('${id}','${ten}',this.checked)"> <span>${h(nBat)}, ghi rõ:</span></label>
+      </div>
       <div class="tick-ds" id="${id}">
-        <label class="tick-d tick-khong"><input type="checkbox" name="${ten}Khong" data-nhan="${h(nhanKhong)}"${khong?' checked':''}
-          onchange="HoSo.doiKhong('${id}','${ten}',this.checked)"> <span><b>${h(nhanKhong)}</b> — không có gì bất thường</span></label>
-        <div class="tick-vach"></div>
         ${ds.filter(x => !this.laKhong(x)).map(x => `<label class="tick-d">
-          <input type="checkbox" name="${ten}Tick" value="${h(x)}"${chon.has(Combo.norm(x))?' checked':''}
+          <input type="checkbox" name="${ten}Tick" value="${h(x)}"${chon.has(Combo.norm(x)) ? ' checked' : ''}
             onchange="HoSo.coBenh('${id}','${ten}')"> <span>${h(x)}</span></label>`).join('')}
       </div>
       <div class="tick-khac"><span>Ghi rõ:</span>
-        <input name="${ten}Khac" value="${h(ro)}" placeholder="bệnh khác, thuốc đang dùng…"
+        <input name="${ten}Khac" value="${h(ro)}" placeholder="gõ tay nếu không dòng nào ở trên hợp"
           oninput="HoSo.coBenh('${id}','${ten}')"></div>
-      ${ghiChu?`<div class="combo-hint">${ghiChu}</div>`:''}</div>`;
+      ${ghiChu ? `<div class="combo-hint">${ghiChu}</div>` : ''}</div>`;
   },
-  /* Tick "Không" -> bỏ hết bệnh và xóa ô ghi rõ */
+  /* Tick ô bình thường -> bỏ hết dòng bất thường và xóa ô ghi rõ */
   doiKhong(id, ten, bat){
-    const f = document.querySelector('#modalBody form'); if (!f || !bat) return;
+    const f = document.querySelector('#modalBody form'); if (!f) return;
+    const oBat = f.querySelector(`[name="${ten}Bat"]`);
+    if (!bat) return;
+    if (oBat) oBat.checked = false;
     f.querySelectorAll(`[name="${ten}Tick"]`).forEach(x => x.checked = false);
     const o = f.querySelector(`[name="${ten}Khac"]`); if (o) o.value = '';
   },
-  /* Tick một bệnh hoặc gõ ghi rõ -> tự bỏ "Không" */
+  /* Tick ô bất thường -> bỏ ô bình thường */
+  doiBat(id, ten, bat){
+    const f = document.querySelector('#modalBody form'); if (!f || !bat) return;
+    const k = f.querySelector(`[name="${ten}Khong"]`); if (k) k.checked = false;
+  },
+  /* Tick một dòng bất thường hoặc gõ ghi rõ -> tự chuyển sang ô bất thường */
   coBenh(id, ten){
     const f = document.querySelector('#modalBody form'); if (!f) return;
     const coTick = !!f.querySelector(`[name="${ten}Tick"]:checked`);
-    const ro = ((f.querySelector(`[name="${ten}Khac"]`)||{}).value || '').trim();
-    const k = f.querySelector(`[name="${ten}Khong"]`);
-    if (k && (coTick || ro)) k.checked = false;
-    if (k && !coTick && !ro) k.checked = true;
+    const ro = ((f.querySelector(`[name="${ten}Khac"]`) || {}).value || '').trim();
+    const k = f.querySelector(`[name="${ten}Khong"]`), bt = f.querySelector(`[name="${ten}Bat"]`);
+    if (coTick || ro) { if (k) k.checked = false; if (bt) bt.checked = true; }
   },
 
   /* Tóm tắt bệnh án tự viết từ những gì đã điền: hành chính + lý do vào viện +
@@ -2659,10 +2938,10 @@ const HoSo = {
     p.push('Bệnh nhân ' + (c.gender ? c.gender.toLowerCase() : '') +
       (nam ? ', sinh năm ' + nam : '') + (tuoi ? ' (' + tuoi + ' tuổi)' : ''));
     const ly = lay('lyDo');
-    if (ly) p.push('vào viện vì ' + ly.charAt(0).toLowerCase() + ly.slice(1));
+    if (ly) p.push('đến khám vì ' + ly.charAt(0).toLowerCase() + ly.slice(1).replace(/\.$/, ''));
     let cau = p.join(', ') + '.';
     const tm = lay('trongMieng');
-    if (tm && !this.laKhong(tm)) cau += ' Khám trong miệng ghi nhận: ' + tm + '.';
+    if (tm && !this.laKhong(tm)) cau += ' Khám trong miệng thấy: ' + tm + '.';
     else if (tm) cau += ' Khám trong miệng bình thường.';
     const dx = f ? icdName(icdCode(((f.querySelector('[name="chanDoan"]')||{}).value) || '')) : '';
     if (dx) cau += ' Chẩn đoán: ' + dx + '.';
@@ -2683,7 +2962,8 @@ const HoSo = {
     const tuDot = Dot.mucCua(ep).map(t => t.name + (t.tooth ? ' — R' + t.tooth : ''));
     const tuSoDo = Object.keys(c.teethKH || {}).map(Number).filter(n => !isNaN(n))
       .sort((a,b)=>a-b).map(n => (c.teethKH[n].dichVu||'') + ' — R' + n).filter(x => x.trim()[0] !== '—');
-    const ds = [...new Set(tuDot.concat(tuSoDo).concat(cau))];
+    const mau = GY.khCho(this.lyDoDang(c, ep));
+    const ds = [...new Set(tuDot.concat(tuSoDo).concat(mau).concat(cau))];
     const co = new Set(ds.map(x => Combo.norm(x)));
     const chon = new Set(cau.map(x => Combo.norm(x)));
     return `<div class="f full"><label>V. Kế hoạch điều trị</label>
@@ -2825,22 +3105,29 @@ Object.assign(HoSo, {
     ${this.tickKhong('tkTM','trongMieng', GY.tmCho(g('lyDo', ep.lyDo || r.lyDo)), g('trongMieng', r.trongMieng),
       'Khám trong miệng', 'Danh sách này <b>đổi theo lý do vào viện</b>. Mặc định <b>chưa tick</b> Bình thường — khách đến khám thì trong miệng thường có vấn đề.',
       'Bình thường', false)}
-    ${this.tickKhong('tkCLS','canLamSang', GY.canLamSang, g('canLamSang', r.canLamSang), 'III.3. Cận lâm sàng cần làm', '', 'Không')}
+    ${this.tickKhong('tkCLS','canLamSang', GY.clsCho(g('lyDo', ep.lyDo || r.lyDo)), g('canLamSang', r.canLamSang),
+      'III.3. Cận lâm sàng cần làm', 'Danh sách này <b>đổi theo dịch vụ</b> đã tick ở mục I, đúng theo mẫu phòng khám.', 'Không')}
     <div class="f full"><label>III.4. Tóm tắt bệnh án</label>
       <textarea name="tomTat" rows="3" placeholder="Bấm nút bên dưới để phần mềm tự viết từ những mục đã điền">${h(g('tomTat', r.tomTat))}</textarea>
       <div class="form-actions" style="justify-content:flex-start;margin-top:6px">
         <button type="button" class="btn small" onclick="HoSo.vietTomTat()">Tự viết từ các mục đã điền</button></div>
-      <div class="combo-hint">Câu mẫu: <i>Bệnh nhân nam, sinh năm 1990 (36 tuổi), vào viện vì sâu răng, muốn trám răng.
-        Khám trong miệng ghi nhận: sâu ngà mặt nhai. Chẩn đoán: K02.1 — Sâu ngà.</i>
-        Viết xong sửa lại tùy ý.</div></div>
+      <div style="margin-top:6px"><select id="ttMau" onchange="HoSo.chenTomTat(this.value);this.value=''">
+        <option value="">— chọn câu mẫu —</option>
+        ${GY.ttCho(g('lyDo', ep.lyDo || r.lyDo)).map(x => `<option value="${h(x)}">${h(x)}</option>`).join('')}</select></div>
+      <div class="combo-hint">Câu mẫu theo hồ sơ phòng khám: <i>Bệnh nhân nam, sinh năm 1990 đến khám vì …,
+        khám trong miệng thấy …</i> Viết xong sửa lại tùy ý.</div></div>
     <div class="f full"><label>IV. Chẩn đoán chính (ICD)</label>
       ${Combo.html('gy_dx','chanDoan', icdName(g('chanDoan', ep.chanDoan || r.chanDoan)) || '',
         GY.icdCho(g('lyDo', ep.lyDo || r.lyDo)), 'Gõ tên bệnh hoặc mã ICD')}
       <div class="combo-hint">Mã hay gặp với dịch vụ đã chọn ở trên được xếp lên đầu; gõ để tra cả bảng ICD.</div></div>
+    ${this.tickDong('tkDX','chanDoanMo', GY.dxCho(g('lyDo', ep.lyDo || r.lyDo)), g('chanDoanMo'),
+      'Chẩn đoán ghi theo mẫu (in kèm mã ICD)', 'Câu chữ lấy đúng từ mẫu bệnh án của phòng khám.')}
     <div class="f full"><label>Bệnh kèm theo</label>
       ${Combo.html('gy_dx2','chanDoanKem', icdName(g('chanDoanKem', ep.chanDoanKem || r.chanDoanKem)) || '',
         GY.icdCho(g('lyDo', ep.lyDo || r.lyDo)), 'Gõ tên bệnh hoặc mã ICD')}</div>
     ${this.khoiKeHoach(c, ep, g('keHoach', ep.keHoach || r.keHoach))}
+    ${this.tickDong('tkDan','danDo', GY.danCho(g('lyDo', ep.lyDo || r.lyDo)), g('danDo'),
+      'Hướng điều trị và dặn dò tiếp theo', 'In ở cuối <b>Phiếu theo dõi điều trị</b> (tờ số 3).')}
     ${this.khoiThoiGian(c)}
     <div class="note-block full">Mục VI <b>Quá trình điều trị</b> và <b>Sơ đồ răng</b> tự lấy từ hồ sơ, không cần nhập lại ở đây.</div>`;
   },
@@ -2896,12 +3183,14 @@ Object.assign(HoSo, {
         const ds = Object.keys(kho).map(Number).filter(n => !isNaN(n) && kho[n] && kho[n].dichVu).sort((a,b)=>a-b);
         const {khung, note} = Tooth.tomTat(c, 'teethKH');
         if (!ds.length && !khung.length) return '';
-        const a = ds.map(n => 'R' + n + ': ' + h(Tooth.moTa(n, kho[n])) + ' → <b>' + h(kho[n].dichVu) + '</b>').join('<br>');
+        const a = ds.map(n => 'R' + n + ': ' + h(Tooth.moTa(n, kho[n]))
+          + (kho[n].chanDoan ? ' · ' + h(icdName(kho[n].chanDoan)) : '')
+          + ' → <b>' + h(kho[n].dichVu) + '</b>').join('<br>');
         const b = khung.length ? '<br>Hàm khung tháo lắp: ' + h(khung.join(' và ')) + (note ? ' — ' + h(note) : '') : '';
         return '<br><b>Kế hoạch điều trị theo răng:</b><br>' + a + b;
       })()}</p>
     <p><b>IV. CHẨN ĐOÁN</b> (tên bệnh kèm mã ICD)<br>
-      Bệnh chính: <b>${this.gach(icdName(g('chanDoan', ep.chanDoan || r.chanDoan)),54)}</b><br>
+      Bệnh chính: <b>${this.gach([icdName(g('chanDoan', ep.chanDoan || r.chanDoan)), g('chanDoanMo')].filter(Boolean).join(' — '),54)}</b><br>
       Bệnh kèm theo: ${this.gach(icdName(g('chanDoanKem', ep.chanDoanKem || r.chanDoanKem)),54)}<br>
       Biến chứng: ${this.gach(icdName(r.bienChung),54)}</p>
     <p><b>V. KẾ HOẠCH ĐIỀU TRỊ</b><br>${h(g('keHoach', ep.keHoach || r.keHoach)).replace(/\n/g,'<br>') || this.cham(100)+'<br>'+this.cham(100)}</p>
@@ -2926,8 +3215,12 @@ Object.assign(HoSo, {
       ${Combo.html('gy_tdx','chanDoan', icdName(d.chanDoan || ep.chanDoan || r.chanDoan)||'', icdOptions(), 'Gõ tên bệnh hoặc mã ICD')}</div>
     <div class="f full"><label>Chẩn đoán phân biệt</label>
       ${Combo.html('gy_tdx2','chanDoanKem', icdName(d.chanDoanKem || ep.chanDoanKem)||'', icdOptions(), 'Gõ tên bệnh hoặc mã ICD')}</div>
+    <div class="f full"><label>Dặn dò — hướng điều trị tiếp theo (in cuối phiếu)</label>
+      <textarea name="danDo" rows="2" placeholder="để trống thì lấy phần dặn dò trong bệnh án">${h(d.danDo || '')}</textarea>
+      <div class="combo-hint">Bỏ trống thì phiếu tự lấy mục <b>Hướng điều trị và dặn dò</b> đã ghi trong Bệnh án ngoại trú.</div></div>
     <div class="note-block full">Bảng <b>Thời gian · Diễn biến bệnh · Chỉ định</b> tự lấy từ mục
-      <b>Quá trình điều trị</b> của khách. Muốn thêm dòng thì thêm diễn biến ở đó.</div>
+      <b>Quá trình điều trị</b> của khách — mỗi buổi một dòng, có bác sĩ và người phụ.
+      Muốn thêm dòng thì bấm <b>Thêm diễn biến</b> ở hồ sơ khách; ở đó có sẵn nút điền nhanh theo mẫu.</div>
     <div class="f full"><label>Số dòng trống chừa thêm để viết tay</label>
       <select name="dongTrong">${[0,2,4,6,8].map(n=>`<option${String(d.dongTrong)===String(n)?' selected':''}>${n}</option>`).join('')}</select></div>`;
   },
@@ -2935,11 +3228,15 @@ Object.assign(HoSo, {
     const d = this.dl(ep, 'theodoi'), r = c.record || {};
     const ds = (r.dienBien||[]).slice().sort((a,b)=>(a.date||'')<(b.date||'')?-1:1);
     const rows = ds.map(v => {
-      const bs = staffById(v.doctorId);
-      return `<tr><td style="width:110px">${fmtD(v.date)}</td>
-        <td>${h(v.db||'')}${bs?'<br><i>BS: '+h(bs.name)+'</i>':''}</td><td>${h(v.xt||'')}</td></tr>`;
+      const bs = staffById(v.doctorId), pt = staffById(v.assistantId);
+      const ky = [bs ? 'BS: ' + h(bs.name) : '', pt ? 'Phụ tá: ' + h(pt.name) : ''].filter(Boolean).join(' · ');
+      return `<tr><td style="width:104px">${fmtD(v.date)}</td>
+        <td>${h(v.db||'')}</td>
+        <td>${h(v.xt||'')}${v.dan?'<br><i>Dặn dò: '+h(v.dan)+'</i>':''}</td>
+        <td style="width:22%">${ky ? '<i>'+ky+'</i>' : ''}<br><br></td></tr>`;
     }).join('');
-    const trong = '<tr><td>&nbsp;</td><td></td><td></td></tr>'.repeat(ds.length ? (+d.dongTrong || 0) : 6);
+    const trong = '<tr><td>&nbsp;</td><td></td><td></td><td></td></tr>'.repeat(ds.length ? (+d.dongTrong || 0) : 6);
+    const dan = d.danDo || r.danDo || '';
     return `
     ${this.dau(c, 'PHIẾU THEO DÕI ĐIỀU TRỊ', 'MS: 36/BV2', `<div style="font-size:11px">Tờ số: ${h(d.toSo||'1')}</div>`)}
     <table class="no-border">
@@ -2951,11 +3248,13 @@ Object.assign(HoSo, {
       <tr><td>Chẩn đoán phân biệt:</td><td colspan="3">${this.gach(icdName(d.chanDoanKem || ep.chanDoanKem),70)}</td></tr>
     </table>
     <table style="margin-top:8px">
-      <tr><th style="width:110px">Thời gian<br>(Ngày, giờ)</th>
-          <th>Diễn biến bệnh<br><span style="font-weight:400">(Viết diễn biến theo cấu trúc như SOAP)</span></th>
-          <th style="width:34%">Chỉ định</th></tr>
+      <tr><th style="width:104px">Thời gian<br>(Ngày, giờ)</th>
+          <th>Diễn biến bệnh</th>
+          <th style="width:30%">Chỉ định</th>
+          <th style="width:22%">Bác sỹ — Phụ tá<br><span style="font-weight:400">(Ký, ghi rõ họ tên)</span></th></tr>
       ${rows}${trong}
     </table>
+    ${dan ? `<p style="margin-top:8px"><b>Hướng điều trị và dặn dò tiếp theo:</b> ${h(dan)}</p>` : ''}
     <p style="margin-top:8px"><b>Ghi chú:</b> Bác sỹ ký ngay sau mỗi lần ghi chép trong phần “Diễn biến bệnh” hoặc “Chỉ định”.</p>`;
   },
 
@@ -3321,6 +3620,10 @@ const Svc = {
       .sort((a, b) => thu(a.group) - thu(b.group) || String(a.name).localeCompare(String(b.name), 'vi'))
       .map(x => ({t: x.name, s: (x.group || '') + (coGia && x.price ? ' · ' + money(x.price) : '')}));
   },
+
+  /* Gợi ý chỉ có TÊN dịch vụ — dùng cho ô hẹp như "Kế hoạch điều trị" của từng răng,
+     ở đó tên nhóm hiện bên phải làm chữ chồng lên nhau, đọc không ra. */
+  goiYTen(){ return this.goiY().map(x => x.t); },
 
   bang(q){
     if (q != null) App.state.svcQ = q;
@@ -4761,8 +5064,8 @@ const QT = {
         Tiền công mọi người nhận <b>đúng bằng phần khách đã trả</b>; khách trả nốt thì phần còn lại tự cộng vào.</div>
       ${q.truLab?`<div class="f full"><label>Tiền lab (trừ trước khi tính %)</label>
         ${Tien.o('tienLab', t.tienLab||0)}
-        ${q.labGY.length?`<div class="combo-hint">Mức thường dùng: ${q.labGY.map(([n,v])=>
-          `<button type="button" class="link-btn" onclick="this.form.tienLab.value=Tien.dinh('${v}')">${h(n)} ${money(v)}</button>`).join(' · ')}</div>`:''}</div>`:''}
+        ${(() => { const gy = GiaLab.goiY().length ? GiaLab.goiY() : q.labGY; return gy.length?`<div class="combo-hint">Mức thường dùng: ${gy.map(([n,v])=>
+          `<button type="button" class="link-btn" onclick="this.form.tienLab.value=Tien.dinh('${v}')">${h(n)} ${money(v)}</button>`).join(' · ')}</div>`:''; })()}</div>`:''}
       <div class="full"><div class="tbl-wrap"><table style="min-width:560px">
         <thead><tr><th>Công đoạn</th><th>Người làm</th><th>Ngày</th><th class="r">Đủ 100%</th><th class="r">Thực nhận</th></tr></thead>
         <tbody>${rows}</tbody></table></div></div>
@@ -5544,6 +5847,73 @@ SCREENS.hr = () => {
 };
 
 /* ---------- Lab ---------- */
+/* ---------- Bảng giá gia công răng sứ (lab) ----------
+   Trước đây mức tiền lab nằm cứng trong từng quy trình, muốn đổi phải sửa mã.
+   Nay để thành một bảng giá riêng, quản lý tự sửa trong tab Cài đặt. */
+const GiaLab = {
+  MAC_DINH: [
+    {n:'Mão sứ kim loại (Cr-Co)', d:'răng', p:180000},
+    {n:'Mão sứ Titan',            d:'răng', p:280000},
+    {n:'Mão sứ Zirconia',         d:'răng', p:600000},
+    {n:'Mão toàn sứ Emax',        d:'răng', p:900000},
+    {n:'Dán sứ Veneer',           d:'răng', p:900000},
+    {n:'Cầu răng sứ',             d:'đơn vị', p:600000},
+    {n:'Sườn Implant / Abutment', d:'cái', p:1200000},
+    {n:'Hàm khung kim loại',      d:'hàm', p:1200000},
+    {n:'Hàm nhựa dẻo',            d:'hàm', p:700000},
+    {n:'Hàm nhựa cứng',           d:'hàm', p:500000},
+    {n:'Răng nhựa trên hàm',      d:'răng', p:50000},
+    {n:'Máng tẩy trắng',          d:'hàm', p:300000},
+    {n:'Máng chống nghiến',       d:'hàm', p:500000},
+    {n:'Máng duy trì chỉnh nha',  d:'hàm', p:300000},
+  ],
+  ds(){
+    if (!db.giaLab || !db.giaLab.length) db.giaLab = this.MAC_DINH.map(x => Object.assign({id: uid()}, x));
+    return db.giaLab;
+  },
+  /* Dùng cho nút điền nhanh "Tiền lab" trong bảng công đoạn */
+  goiY(){ return this.ds().map(x => [x.n, +x.p || 0]); },
+  bang(){
+    const sua = Perm.can('caidat');
+    const rows = this.ds().map(x => `<tr>
+      <td>${sua ? `<input value="${h(x.n)}" onchange="GiaLab.sua('${x.id}','n',this.value)">` : h(x.n)}</td>
+      <td style="width:110px">${sua ? `<input value="${h(x.d||'')}" onchange="GiaLab.sua('${x.id}','d',this.value)">` : h(x.d||'')}</td>
+      <td class="r" style="width:150px">${sua ? Tien.o('', x.p, `onchange="GiaLab.sua('${x.id}','p',this.value)"`) : money(x.p)}</td>
+      <td style="width:56px">${sua ? `<button class="btn small danger" onclick="GiaLab.xoa('${x.id}')">Xóa</button>` : ''}</td></tr>`).join('');
+    App.modal('Bảng giá gia công răng sứ (lab)', `
+      <div class="note-block mb">Đây là <b>tiền trả cho lab</b>, không phải giá bán cho khách.
+        Khi tính hoa hồng phục hình, phần mềm <b>trừ tiền lab trước rồi mới tính %</b> —
+        mức ở đây hiện ra thành nút bấm nhanh trong bảng công đoạn.</div>
+      <div class="tbl-wrap"><table style="min-width:520px">
+        <thead><tr><th>Loại gia công</th><th>Đơn vị</th><th class="r">Giá lab</th><th></th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="4" class="sub-line">Chưa có dòng nào.</td></tr>'}</tbody></table></div>
+      <div class="form-actions">
+        ${sua ? `<button class="btn" onclick="GiaLab.them()">${IC.plus} Thêm dòng</button>
+        <button class="btn" onclick="GiaLab.datLai()">Nạp lại bảng mặc định</button>` : ''}
+        <span class="spacer"></span><button class="btn primary" onclick="App.closeModal()">Xong</button></div>`);
+  },
+  sua(id, k, v){
+    if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới sửa được bảng giá lab'); return; }
+    const x = this.ds().find(y => y.id === id); if (!x) return;
+    x[k] = (k === 'p') ? num(v) : v;
+    save(); App.toast('Đã lưu ✓');
+  },
+  them(){
+    this.ds().push({id: uid(), n: '', d: 'răng', p: 0});
+    save(); this.bang();
+  },
+  xoa(id){
+    if (!confirm('Xóa dòng này khỏi bảng giá lab?')) return;
+    db.giaLab = this.ds().filter(x => x.id !== id);
+    save(); this.bang();
+  },
+  datLai(){
+    if (!confirm('Nạp lại bảng giá lab mặc định? Những dòng đã sửa sẽ mất.')) return;
+    db.giaLab = this.MAC_DINH.map(x => Object.assign({id: uid()}, x));
+    save(); this.bang(); App.toast('Đã nạp lại ✓');
+  },
+};
+
 const Lab = {
   form(id){
     const l = id ? db.labs.find(x=>x.id===id) : {sent:todayISO(), due:isoAdd(todayISO(),5), qty:1};
@@ -5647,6 +6017,67 @@ const Rep = {
     const [,,label] = this.range();
     App.print(`<h1>BÁO CÁO KINH DOANH — ${h(db.clinic.name).toUpperCase()}</h1><p style="text-align:center">Kỳ báo cáo: <b>${label}</b> · Lập ngày ${fmtD(todayISO())}</p>` + (html?html.innerHTML.replace(/<button[^>]*>.*?<\/button>/g,''):''));
   },
+};
+
+/* ================= Cài đặt =================
+   Gom mọi thứ chỉ-sửa-một-lần về một chỗ, thay vì rải rác trong các tab nghiệp vụ. */
+SCREENS.settings = () => {
+  const cl = db.clinic || {};
+  const the = (ten, mo, nut) => `<div class="ho-so-file">
+    <div class="hsf-than"><div class="hsf-dau"><b>${ten}</b></div>
+      <div class="hsf-mo">${mo}</div></div>
+    <div class="hsf-nut">${nut}</div></div>`;
+  const q = Perm.can('caidat');
+  const khoa = q ? '' : ' disabled title="Chỉ quản lý mới sửa được"';
+
+  return `
+  <div class="page-head"><h1>Cài đặt</h1>
+    <div class="sub">${h(cl.name || '')} · ${h(cl.addr || '')}</div></div>
+
+  <div class="card mb"><div class="card-h"><h2>Giá và quy trình</h2>
+    <span class="hint">sửa ở đây, mọi nơi trong phần mềm dùng theo</span></div>
+    <div class="card-b">
+      ${the('Bảng giá dịch vụ', `${(db.services||[]).length} dịch vụ · giá bán cho khách, dùng cho kế hoạch điều trị và phiếu thu`,
+        `<button class="btn small primary" onclick="Svc.bang()"${khoa}>Mở bảng giá</button>`)}
+      ${the('Bảng giá gia công răng sứ (lab)', `${GiaLab.ds().length} loại · tiền trả cho lab, trừ trước khi tính hoa hồng phục hình`,
+        `<button class="btn small primary" onclick="GiaLab.bang()"${khoa}>Mở bảng giá lab</button>`)}
+      ${the('Quy trình &amp; tỷ lệ hoa hồng theo công đoạn', 'Ai làm công đoạn nào hưởng phần đó · đặt được tỷ lệ riêng cho từng người',
+        `<button class="btn small primary" onclick="QT.bang()"${khoa}>Mở quy trình</button>`)}
+      ${the('Vật tư — danh mục', `${(typeof VAT_LIEU!=='undefined'?VAT_LIEU.length:0)} tên vật tư gợi ý sẵn khi nhập kho`,
+        `<button class="btn small" onclick="App.go('inventory')">Vào kho</button>`)}
+    </div></div>
+
+  <div class="card mb"><div class="card-h"><h2>Phòng khám và nhân sự</h2></div>
+    <div class="card-b">
+      ${the('Thông tin phòng khám, giờ làm việc, chấm công',
+        `${h(Att.moTaCa())}${cl.wifiIp ? ' · đã đặt mạng phòng khám' : ' · chưa đặt mạng phòng khám'}`,
+        `<button class="btn small primary" onclick="Att.settingsForm()"${khoa}>Mở cài đặt</button>`)}
+      ${the('Nhân viên', `${db.staff.filter(x=>x.active!==false).length} người đang làm việc · tên, chức danh, vai trò, tỷ lệ riêng`,
+        `<button class="btn small primary" onclick="HR.dsNhanVien()"${khoa}>Sửa nhân viên</button>`)}
+      ${the('Tài khoản truy cập', 'Mời nhân viên, đặt quyền vào từng mục',
+        `<button class="btn small" onclick="Att.accountsPanel()"${khoa}>Quản lý tài khoản</button>`)}
+      ${the('Mã QR chấm công', 'Dán ở quầy để nhân viên quét ghi giờ vào — giờ ra',
+        `<button class="btn small" onclick="Att.clinicQR()"${khoa}>Xem mã QR</button>`)}
+    </div></div>
+
+  <div class="card mb"><div class="card-h"><h2>Đặt hẹn online</h2></div>
+    <div class="card-b">
+      ${the('Liên kết đặt hẹn cho khách', 'Khách tự chọn khung giờ còn trống · lịch đặt chạy thẳng vào Lịch hẹn chờ duyệt',
+        `<button class="btn small primary" onclick="DatHen.moLienKet()">Lấy liên kết &amp; mã QR</button>`)}
+    </div></div>
+
+  <div class="card"><div class="card-h"><h2>Dữ liệu</h2></div>
+    <div class="card-b">
+      ${the('Đồng bộ đám mây', (() => { const st = Sync.status(); return `<span class="pill ${st.k}">${h(st.t)}</span>`; })(),
+        `<button class="btn small" onclick="App.syncNow()">Đồng bộ ngay</button>`)}
+      ${the('Nhập khách hàng từ Google Sheet', 'Dán bảng từ Sheet để nạp hàng loạt hồ sơ khách',
+        `<button class="btn small" onclick="Importer.form()"${khoa}>Mở trình nhập</button>`)}
+      ${the('Dọn trùng lặp', 'Gộp hồ sơ trùng mã và bỏ phiếu thu trùng số — không mất lịch sử điều trị',
+        `<button class="btn small" onclick="App.dedupeForm()"${khoa}>Kiểm tra</button>`)}
+    </div></div>
+
+  ${q ? '' : '<div class="note-block" style="margin-top:12px">Bạn đang xem với quyền <b>' + h(Perm.label()) +
+    '</b> — chỉ quản lý mới sửa được các mục có khóa.</div>'}`;
 };
 
 SCREENS.reports = () => {

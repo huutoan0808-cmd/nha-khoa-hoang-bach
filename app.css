@@ -117,7 +117,7 @@ a{color:var(--accent-ink)}
 /* Bảng */
 .tbl-wrap{overflow-x:auto;min-width:0;max-width:100%}
 table{width:100%;border-collapse:collapse;font-size:13.5px;min-width:560px}
-th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;font-weight:600;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11.5px;letter-spacing:.02em;color:var(--muted);text-align:left;font-weight:600;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
 td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
 tr:last-child td{border-bottom:none}
 tbody tr.clickable{cursor:pointer}
@@ -176,7 +176,7 @@ td.r,th.r{text-align:right}
 /* Form */
 .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px 14px}
 .form-grid .full{grid-column:1/-1}
-.f label{display:block;font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+.f label{display:block;font-size:12.5px;color:var(--muted);font-weight:600;letter-spacing:0;margin-bottom:3px}
 .f input,.f select,.f textarea{
   width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;
   background:var(--surface);color:var(--ink);font:inherit;
@@ -365,6 +365,10 @@ input,textarea,[contenteditable]{-webkit-spell-check:none}
 .tick-d:hover{background:var(--surface2);border-radius:6px}
 .tick-d input{margin-top:3px;flex:none}
 .tick-khong{background:var(--surface2);border-radius:6px}
+.tick-doi{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:6px}
+.tick-doi .tick-d{flex:1;min-width:170px;border:1px solid var(--line);border-radius:9px;padding:8px 11px;background:var(--surface)}
+.tick-doi .tick-d:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.tick-doi .tick-d span{font-weight:600}
 .tick-vach{height:1px;background:var(--line);margin:5px 0}
 .tick-khac{display:flex;align-items:center;gap:9px;margin-top:7px}
 .tick-khac>span{color:var(--muted);font-size:13px;flex:none}
