@@ -1,4 +1,4 @@
-/* Nha Khoa Hoàng Bách — ứng dụng quản lý phòng khám (v1, dữ liệu lưu trên thiết bị) */
+/* Nha Khoa Hoàng Bách - Gò Quao — ứng dụng quản lý phòng khám (v1, dữ liệu lưu trên thiết bị) */
 'use strict';
 
 /* ================= Tiện ích ================= */
@@ -166,8 +166,8 @@ function seed() {
   svc('Khác','Khám + tư vấn + chụp phim',150000); svc('Khác','Cắt chỉ / tái khám',0);
 
   return {ver: 1,
-    clinic: {name:'Nha Khoa Hoàng Bách', legal:'Công ty TNHH Nha Khoa Hoàng Bách – Gò Quao',
-             authority:'Sở Y tế An Giang', addr:'Rạch Giá, An Giang', phone:'', taxCode:'', maCSKCB:'',
+    clinic: {name:'Nha Khoa Hoàng Bách - Gò Quao', legal:'Công ty TNHH Nha Khoa Hoàng Bách – Gò Quao',
+             authority:'Sở Y tế An Giang', addr:'Số 33 đường 3/2, Xã Gò Quao, An Giang', phone:'', taxCode:'', maCSKCB:'',
              caSangVao:'07:00', caSangRa:'12:00', caChieuVao:'13:00', caChieuRa:'17:00',
              treCho:5, wifiIp:''},
     seq: {cust: 1, receipt: 1},
@@ -197,6 +197,13 @@ function migrate() {
     cl.caChieuRa  = '17:00';
   }
   if (cl.treCho == null) cl.treCho = 5;
+  /* Đổi tên và địa chỉ phòng khám một lần cho các máy đã cài. Đánh dấu để lần sau
+     không đè lên nữa — quản lý vẫn sửa lại được trong Cài đặt. */
+  if (!cl.tenGQ) {
+    cl.name = 'Nha Khoa Hoàng Bách - Gò Quao';
+    cl.addr = 'Số 33 đường 3/2, Xã Gò Quao, An Giang';
+    cl.tenGQ = 1;
+  }
   delete cl.shiftStart;
   /* Sơ đồ răng cũ chỉ có một trạng thái mỗi răng: 'rct' (điều trị tủy) và 'crown'
      (bọc sứ chung). Nay nội nha là ô tick riêng, còn răng sứ tách kim loại / toàn sứ.

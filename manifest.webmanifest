@@ -1,7 +1,7 @@
 {
-  "name": "Nha Khoa Hoàng Bách",
-  "short_name": "NK Hoàng Bách",
-  "description": "Phần mềm quản lý nha khoa — bản mockup giao diện",
+  "name": "Nha Khoa Hoàng Bách - Gò Quao",
+  "short_name": "NK Hoàng Bách - Gò Quao",
+  "description": "Phần mềm quản lý phòng khám — Số 33 đường 3/2, Xã Gò Quao, An Giang",
   "lang": "vi",
   "start_url": ".",
   "scope": ".",
