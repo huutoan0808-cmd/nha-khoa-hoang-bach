@@ -359,6 +359,17 @@ input,textarea,[contenteditable]{-webkit-spell-check:none}
 /* Trên điện thoại kéo thả không chạy, ẩn tay cầm cho đỡ rối, chỉ để hai nút mũi tên */
 @media (max-width:767px){ .keo-tay{display:none} }
 
+/* Danh sách tick nhiều dòng, dòng cuối để gõ tay */
+.tick-ds{display:grid;gap:2px;border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:var(--surface)}
+.tick-d{display:flex;align-items:flex-start;gap:9px;padding:4px 2px;cursor:pointer;font-size:13.5px;line-height:1.4}
+.tick-d:hover{background:var(--surface2);border-radius:6px}
+.tick-d input{margin-top:3px;flex:none}
+.tick-khong{background:var(--surface2);border-radius:6px}
+.tick-vach{height:1px;background:var(--line);margin:5px 0}
+.tick-khac{display:flex;align-items:center;gap:9px;margin-top:7px}
+.tick-khac>span{color:var(--muted);font-size:13px;flex:none}
+.tick-khac input{flex:1;min-width:0}
+
 /* Dọn trùng: mỗi bản trùng một dòng có nút chọn giữ lại */
 .don-dong{display:flex;align-items:flex-start;gap:9px;padding:7px 0;border-bottom:1px dashed var(--line);cursor:pointer}
 .don-dong:last-child{border-bottom:none}

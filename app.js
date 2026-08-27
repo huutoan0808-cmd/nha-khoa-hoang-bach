@@ -2068,12 +2068,147 @@ SCREENS.treatment = () => {
 
 /* Gợi ý cho các ô trống — gõ chọn cho nhanh, vẫn gõ tự do được */
 const GY = {
-  lyDo: ['Đau răng','Sâu răng','Chảy máu nướu','Răng lung lay','Mất răng, muốn phục hình',
-    'Răng hô/móm, muốn chỉnh nha','Răng ố vàng, muốn thẩm mỹ','Khám định kỳ, lấy cao răng',
-    'Sưng đau vùng hàm mặt','Răng khôn mọc lệch','Gãy vỡ thân răng','Ê buốt khi ăn nóng lạnh'],
-  quaTrinh: ['Đau âm ỉ vài ngày nay, tăng về đêm','Đau nhức dữ dội, uống thuốc giảm đau không đỡ',
-    'Ê buốt khi ăn nóng lạnh, chưa đau tự phát','Phát hiện tình cờ khi khám định kỳ',
-    'Sưng đau 2–3 ngày, có sốt nhẹ','Răng lung lay tăng dần vài tháng nay','Mất răng lâu năm, ăn nhai khó'],
+  /* Lý do vào viện gắn với dịch vụ phòng khám làm, để lễ tân chọn một phát ra luôn */
+  lyDo: [
+    'Cao răng nhiều, muốn cạo vôi răng',
+    'Chảy máu nướu, hôi miệng — muốn cạo vôi răng',
+    'Khám định kỳ, cạo vôi răng',
+    'Sâu răng, muốn trám răng',
+    'Răng thưa, muốn trám thẩm mỹ',
+    'Đau nhức tự phát, cần điều trị tủy',
+    'Sâu răng đến tủy, cần điều trị tủy',
+    'Răng đã chữa tủy đau lại, cần điều trị tủy lại',
+    'Răng lung lay nhiều, muốn nhổ răng',
+    'Chân răng hư, muốn nhổ răng',
+    'Răng khôn mọc lệch, cần nhổ tiểu phẫu',
+    'Răng ngầm, cần nhổ tiểu phẫu',
+    'Mất răng, muốn phục hình răng sứ',
+    'Răng vỡ lớn, muốn bọc răng sứ',
+    'Răng xấu màu, muốn làm răng sứ thẩm mỹ',
+    'Mất nhiều răng, muốn phục hình tháo lắp',
+    'Hàm tháo lắp cũ lỏng, muốn làm lại',
+    'Răng hô, muốn niềng răng mắc cài kim loại',
+    'Răng móm, muốn niềng răng mắc cài kim loại',
+    'Răng lệch lạc, chen chúc — muốn niềng răng',
+    'Mất răng, muốn cấy ghép Implant',
+    'Răng ố vàng, muốn tẩy trắng',
+    'Sưng đau vùng hàm mặt',
+    'Ê buốt khi ăn nóng lạnh',
+  ],
+  /* Quá trình bệnh lý — bám theo dịch vụ đã chọn ở ô "Lý do vào viện" */
+  quaTrinh: ['Đau âm ỉ vài ngày nay, tăng về đêm','Ê buốt khi ăn nóng lạnh, chưa đau tự phát',
+    'Phát hiện tình cờ khi khám định kỳ','Sưng đau 2–3 ngày, có sốt nhẹ'],
+  QT_DV: {
+    caovoi: ['Cao răng bám nhiều, chưa lấy vôi hơn 1 năm nay',
+      'Chảy máu nướu khi chải răng vài tháng nay',
+      'Hôi miệng kéo dài, nướu sưng đỏ',
+      'Khám định kỳ, chưa có triệu chứng đau'],
+    tram: ['Phát hiện lỗ sâu, giắt thức ăn khi ăn',
+      'Ê buốt khi ăn nóng lạnh, hết ê sau vài giây',
+      'Sâu răng phát hiện tình cờ khi khám định kỳ',
+      'Miếng trám cũ bong, ê buốt trở lại',
+      'Răng thưa, ảnh hưởng thẩm mỹ khi cười'],
+    tuy: ['Đau nhức tự phát, tăng về đêm, uống thuốc giảm đau không đỡ',
+      'Đau lan lên thái dương, không xác định rõ răng đau',
+      'Sâu răng lâu ngày, nay đau dữ dội từng cơn',
+      'Răng đổi màu sẫm, gõ dọc đau',
+      'Răng đã chữa tủy nay đau lại, có lỗ dò vùng chóp'],
+    nho: ['Răng lung lay tăng dần vài tháng nay, ăn nhai đau',
+      'Chân răng vỡ lớn không phục hồi được',
+      'Răng viêm nha chu nặng, tiêu xương nhiều',
+      'Răng sữa lung lay, răng vĩnh viễn đã mọc'],
+    tieuphau: ['Răng khôn mọc lệch, sưng đau tái đi tái lại',
+      'Viêm lợi trùm răng khôn, há miệng hạn chế',
+      'Răng khôn ngầm phát hiện trên phim toàn cảnh',
+      'Răng khôn tì vào răng số 7 gây sâu kẽ'],
+    su: ['Răng vỡ lớn sau chữa tủy, cần bọc bảo vệ',
+      'Mất răng, muốn phục hồi ăn nhai và thẩm mỹ',
+      'Răng nhiễm màu nặng, tẩy trắng không cải thiện',
+      'Răng sứ cũ hở cổ, đen viền nướu'],
+    thaolap: ['Mất nhiều răng, ăn nhai khó, sụt cân',
+      'Hàm tháo lắp cũ lỏng, rơi khi ăn',
+      'Mất răng toàn hàm, chưa phục hình lần nào',
+      'Hàm cũ gây đau, loét niêm mạc'],
+    nieng: ['Răng hô, môi khó khép kín',
+      'Răng móm, khớp cắn ngược',
+      'Răng chen chúc, khó vệ sinh, hay sâu kẽ',
+      'Răng thưa nhiều kẽ, ảnh hưởng thẩm mỹ'],
+    implant: ['Mất răng lâu năm, tiêu xương vùng mất răng',
+      'Mất răng đơn lẻ, không muốn mài răng kế cận',
+      'Vừa nhổ răng, muốn cấy ghép sớm'],
+    tay: ['Răng ố vàng do cà phê, thuốc lá',
+      'Răng xỉn màu theo tuổi, muốn sáng hơn'],
+  },
+  /* Đoán nhóm dịch vụ từ câu lý do vào viện */
+  nhomDV(lyDo){
+    const t = Combo.norm(lyDo || '');
+    if (!t) return '';
+    if (/cao voi|vi rang|cao rang|chay mau nuou|hoi mieng|nha chu/.test(t)) return 'caovoi';
+    if (/tieu phau|rang khon|rang ngam/.test(t))                            return 'tieuphau';
+    if (/dieu tri tuy|chua tuy|noi nha|den tuy/.test(t))                    return 'tuy';
+    if (/nho rang|chan rang hu|lung lay/.test(t))                           return 'nho';
+    if (/nieng|chinh nha|mac cai|rang ho|rang mom|lech lac/.test(t))        return 'nieng';
+    if (/implant|cay ghep/.test(t))                                          return 'implant';
+    if (/thao lap|ham gia|ham thao lap/.test(t))                            return 'thaolap';
+    if (/rang su|boc rang|phuc hinh su|su tham my/.test(t))                  return 'su';
+    if (/tay trang|o vang|xin mau/.test(t))                                  return 'tay';
+    if (/tram|sau rang|rang thua/.test(t))                                   return 'tram';
+    return '';
+  },
+  qtCho(lyDo){
+    const k = this.nhomDV(lyDo);
+    return (k && this.QT_DV[k]) ? this.QT_DV[k] : this.quaTrinh;
+  },
+  /* Khám trong miệng — cũng bám theo dịch vụ đã chọn ở lý do vào viện */
+  TM_DV: {
+    caovoi: ['Cao răng bám nhiều hai hàm','Viêm nướu, nướu sưng đỏ','Chảy máu khi thăm khám nướu',
+      'Túi nha chu sâu > 5mm','Mảng bám nhiều mặt trong răng cửa dưới'],
+    tram: ['Sâu ngà mặt nhai','Sâu ngà mặt bên, giắt thức ăn','Lỗ sâu ngà chưa đến tủy',
+      'Miếng trám cũ bong, hở bờ','Mòn cổ răng','Khe thưa răng cửa'],
+    tuy: ['Sâu ngà sâu, gõ dọc đau','Tủy hoại tử, thử tủy âm tính','Lỗ dò vùng chóp',
+      'Răng đổi màu sẫm','Sưng đáy hành lang vùng chóp','Răng đã trám bít ống tủy, gõ dọc đau'],
+    nho: ['Răng lung lay độ II','Răng lung lay độ III','Chân răng còn sót',
+      'Vỡ lớn thân răng, không phục hồi được','Viêm quanh chóp mạn'],
+    tieuphau: ['Răng khôn mọc lệch gần','Răng khôn mọc ngang','Lợi trùm răng khôn, sưng đỏ',
+      'Răng khôn ngầm trong xương','Sâu kẽ mặt xa răng số 7'],
+    su: ['Cùi răng còn đủ mô, đã chữa tủy','Răng vỡ lớn còn chân, cần cùi giả',
+      'Khoảng mất răng, hai răng kế cận còn tốt','Răng sứ cũ hở cổ, đen viền nướu'],
+    thaolap: ['Mất nhiều răng xen kẽ','Mất răng toàn hàm','Sống hàm teo nhiều',
+      'Niêm mạc sống hàm bình thường','Hàm cũ lỏng, không vững'],
+    nieng: ['Khớp cắn loại II','Khớp cắn loại III','Răng chen chúc cung hàm trên',
+      'Răng chen chúc cung hàm dưới','Cắn hở vùng răng cửa','Cắn sâu','Lệch đường giữa'],
+    implant: ['Khoảng mất răng đủ rộng','Sống hàm đủ chiều cao và bề dày',
+      'Sống hàm tiêu nhiều, cần ghép xương','Niêm mạc sừng hóa đủ'],
+    tay: ['Răng nhiễm màu ngoại lai','Răng xỉn màu theo tuổi','Men răng còn tốt, không nứt'],
+  },
+  /* Mã ICD hay gặp cho từng dịch vụ — đưa lên đầu ô gợi ý, phần còn lại vẫn tra được */
+  ICD_DV: {
+    caovoi:   ['K03.6','K05.1','K05.0','K05.3','K05.2','K06.0','Z01.2'],
+    tram:     ['K02.1','K02.0','K02.5','K02.9','K03.0','K03.1','K00.2'],
+    tuy:      ['K04.0','K04.1','K04.4','K04.5','K04.6','K04.7','K02.5','K04.8'],
+    nho:      ['K08.3','K05.3','K04.5','K02.9','S02.5','K10.3'],
+    tieuphau: ['K01.1','K01.0','K05.2','K09.0','K00.1'],
+    su:       ['K08.1','S02.5','K02.5','K00.3','K03.7'],
+    thaolap:  ['K08.1','K08.2','Z97.2','Z46.3'],
+    nieng:    ['K07.3','K07.2','K07.1','K07.0','Z46.4','K00.6'],
+    implant:  ['K08.1','K08.2'],
+    tay:      ['K00.3','K03.7','K03.2'],
+  },
+  /* Danh sách ICD cho ô chẩn đoán: mã hợp với dịch vụ lên trước, còn lại theo sau */
+  icdCho(lyDo){
+    const k = this.nhomDV(lyDo);
+    const uu = (k && this.ICD_DV[k]) || [];
+    const het = icdOptions();
+    if (!uu.length) return het;
+    const dau = uu.map(ma => het.find(x => x.s === ma)).filter(Boolean)
+      .map(x => Object.assign({}, x, {s: x.s + ' · hay gặp'}));
+    const daCo = new Set(uu);
+    return dau.concat(het.filter(x => !daCo.has(x.s)));
+  },
+  tmCho(lyDo){
+    const k = this.nhomDV(lyDo);
+    return (k && this.TM_DV[k]) ? this.TM_DV[k] : this.trongMieng;
+  },
   tienSu: ['Không','Tăng huyết áp','Đái tháo đường','Bệnh tim mạch','Hen suyễn','Viêm dạ dày',
     'Đang dùng thuốc chống đông','Rối loạn đông máu','Phụ nữ có thai','Phụ nữ cho con bú'],
   diUng: ['Không','Penicillin','Lidocaine','Thuốc tê nhóm Amide','Aspirin / NSAID','Hải sản','Sulfamid'],
@@ -2083,8 +2218,20 @@ const GY = {
   trongMieng: ['Bình thường','Sâu ngà','Sâu ngà sâu, gõ dọc đau','Tủy hoại tử, gõ dọc đau',
     'Viêm nướu, cao răng nhiều','Túi nha chu sâu > 5mm','Răng lung lay độ I','Răng lung lay độ II',
     'Răng lung lay độ III','Lỗ dò vùng chóp','Mô nướu hồng, không sưng','Vỡ lớn thân răng, còn chân răng'],
-  canLamSang: ['Không','Chụp phim quanh chóp','Chụp phim toàn cảnh (Panorama)','Chụp CT Cone Beam',
-    'Xét nghiệm công thức máu, đông máu','Đo đường huyết','Đo huyết áp'],
+  canLamSang: ['Không',
+    'Chụp phim quanh chóp',
+    'Chụp phim toàn cảnh (Panorex)',
+    'Chụp phim sọ nghiêng (Cephalo)',
+    'Chụp CT Cone Beam',
+    'Xét nghiệm công thức máu',
+    'Máu chảy — máu đông (TS – TC)',
+    'Đông máu: TQ (PT) — INR',
+    'Đông máu: TCK (APTT)',
+    'Định lượng Fibrinogen',
+    'Đường huyết mao mạch',
+    'HbA1c',
+    'Đo huyết áp',
+    'HBsAg — Anti HCV — HIV (trước phẫu thuật)'],
   tomTat: ['Bệnh nhân tỉnh, tiếp xúc tốt, đến khám vì đau răng','Tình trạng toàn thân ổn định, tổn thương khu trú tại răng',
     'Không có chống chỉ định can thiệp nha khoa'],
   tienLuong: ['Tiên lượng tốt, hồi phục sau 3–5 ngày',
@@ -2171,6 +2318,23 @@ const Dot = {
     App.state.dotSel = e.id;
     save(); App.closeModal(); App.render(); App.toast('Đã lưu đợt điều trị ✓');
   },
+  /* Chốt đợt: điền ngày kết thúc và chuyển trạng thái sang Hoàn tất */
+  ketThuc(id){
+    const e = (db.episodes||[]).find(x => x.id === id); if (!e) return;
+    const con = db.treatments.filter(t => t.episodeId === id && t.status !== 'Hoàn tất' && t.status !== 'Báo giá');
+    const X = String.fromCharCode(10);
+    if (con.length && !confirm('Đợt này còn ' + con.length + ' hạng mục chưa xong:' + X + X
+        + con.map(t => '• ' + t.name + (t.tooth ? ' (R' + t.tooth + ')' : '') + ' — ' + t.status).join(X)
+        + X + X + 'Vẫn kết thúc đợt?')) return;
+    e.denNgay = todayISO();
+    e.status = 'Hoàn tất';
+    e._up = Date.now();
+    const c = custById(e.customerId);
+    if (c) { if (!c.record) c.record = {}; c.record.denNgay = e.denNgay; c._up = Date.now(); }
+    save(); App.closeModal(); App.render();
+    App.toast('Đã kết thúc đợt "' + (e.ten||'') + '" ngày ' + fmtD(e.denNgay) + ' ✓');
+  },
+
   del(id){
     if (!confirm('Xóa đợt điều trị này? Các hạng mục dịch vụ vẫn giữ nguyên, chỉ gỡ khỏi đợt.')) return;
     db.treatments.forEach(t => { if (t.episodeId === id) t.episodeId = ''; });
@@ -2356,6 +2520,16 @@ const HoSo = {
     new Set([...f.querySelectorAll('input[type="checkbox"][name]')].map(x => x.name)).forEach(n => {
       d[n] = [...f.querySelectorAll(`[name="${n}"]:checked`)].map(x => x.value);
     });
+    /* Ghép các dòng đã tick với ô "Khác" thành một câu */
+    ['lyDo','quaTrinh','diUng','tienSuBanThan','tienSuGiaDinh',
+     'toanThan','ngoaiMieng','trongMieng','canLamSang','keHoach'].forEach(n => {
+      if (d[n + 'Tick'] === undefined && d[n + 'Khac'] === undefined) return;
+      const ghep = (d[n + 'Tick'] || []).concat([(d[n + 'Khac'] || '').trim()]).filter(Boolean).join('; ');
+      /* Ô "Không" chỉ có ở ba mục tiền sử — không tick gì thì ghi thẳng "Không" */
+      /* Không tick gì thì ghi thẳng nhãn bình thường của mục đó */
+      d[n] = ghep || ((f.querySelector(`[name="${n}Khong"]`) || {}).dataset || {}).nhan || '';
+      delete d[n + 'Tick']; delete d[n + 'Khac']; delete d[n + 'Khong'];
+    });
     if (d.chanDoan != null) d.chanDoan = icdCode(d.chanDoan);
     if (d.chanDoanKem != null) d.chanDoanKem = icdCode(d.chanDoanKem);
     d._at = todayISO();
@@ -2381,6 +2555,192 @@ const HoSo = {
     const fn = this['p_' + k];
     if (!fn) { App.toast('Chưa có mẫu này'); return; }
     App.print(fn.call(this, c, ep || {}));
+  },
+
+  /* Danh sách tick, dòng cuối để gõ tự do nếu không dòng nào ở trên hợp.
+     Câu đã lưu được tách theo dấu ; — dòng nào khớp thì tick lại, phần còn lại
+     rơi vào ô "Khác" để sửa tiếp. */
+  tachCau(v){ return String(v||'').split(';').map(x => x.trim()).filter(Boolean); },
+  tickDong(id, ten, ds, daLuu, nhan, ghiChu){
+    const cau = this.tachCau(daLuu);
+    const co = new Set(ds.map(x => Combo.norm(x)));
+    const chon = new Set(cau.filter(x => co.has(Combo.norm(x))).map(x => Combo.norm(x)));
+    const khac = cau.filter(x => !co.has(Combo.norm(x))).join('; ');
+    return `<div class="f full"><label>${nhan}</label>
+      <div class="tick-ds" id="${id}">${ds.map(x => `<label class="tick-d">
+        <input type="checkbox" name="${ten}Tick" value="${h(x)}"${chon.has(Combo.norm(x))?' checked':''}
+          ${ten==='lyDo'?` onchange="HoSo.doiLyDo()"`:''}> <span>${h(x)}</span></label>`).join('')
+        || '<span class="sub-line">Chọn lý do vào viện ở trên để thấy gợi ý.</span>'}</div>
+      <div class="tick-khac"><span>Khác:</span>
+        <input name="${ten}Khac" value="${h(khac)}" placeholder="gõ tay nếu không dòng nào ở trên hợp"></div>
+      ${ghiChu?`<div class="combo-hint">${ghiChu}</div>`:''}</div>`;
+  },
+  /* Đổi lý do thì đổi luôn danh sách gợi ý quá trình bệnh lý bên dưới */
+  doiLyDo(){
+    const f = document.querySelector('#modalBody form'); if (!f) return;
+    const ly = [...f.querySelectorAll('[name="lyDoTick"]:checked')].map(x => x.value)
+      .concat([(f.querySelector('[name="lyDoKhac"]')||{}).value || '']).join('; ');
+    const ds = GY.qtCho(ly);
+    this.veLaiTick('tkQT', 'quaTrinhTick', ds);
+    this.veLaiTick('tkTM', 'trongMiengTick', GY.tmCho(ly), 1);
+    const icd = GY.icdCho(ly);
+    Combo.setOpts('gy_dx', icd); Combo.setOpts('gy_dx2', icd);
+  },
+  /* Vẽ lại một danh sách tick, giữ nguyên những dòng người dùng đã tick */
+  veLaiTick(id, ten, ds, giuDongKhong){
+    const box = document.getElementById(id); if (!box) return;
+    const cu = new Set([...box.querySelectorAll(`[name="${ten}"]:checked`)].map(x => Combo.norm(x.value)));
+    const dau = giuDongKhong ? box.querySelector('.tick-khong') : null;
+    const vach = giuDongKhong ? '<div class="tick-vach"></div>' : '';
+    const html = ds.filter(x => !this.laKhong(x)).map(x => `<label class="tick-d">
+      <input type="checkbox" name="${ten}" value="${h(x)}"${cu.has(Combo.norm(x))?' checked':''}
+        ${giuDongKhong?` onchange="HoSo.coBenh('${id}','${ten.replace(/Tick$/,'')}')"`:''}> <span>${h(x)}</span></label>`).join('')
+      || '<span class="sub-line">Chọn lý do vào viện ở trên để thấy gợi ý.</span>';
+    box.innerHTML = (dau ? dau.outerHTML + vach : '') + html;
+  },
+
+  /* Tiền sử: mặc định tick "Không". Tick bệnh nào thì tự bỏ "Không" và mở ô ghi rõ;
+     tick lại "Không" thì xóa hết bệnh đã tick — hai bên loại trừ nhau. */
+  laKhong(v){ const t = Combo.norm(v||''); return !t || t === 'khong' || t === 'binh thuong'; },
+  tickKhong(id, ten, ds, daLuu, nhan, ghiChu, nhanKhong, macDinhBT){
+    nhanKhong = nhanKhong || 'Không';
+    /* Khám trong miệng thì mặc định KHÔNG tick "Bình thường" — khách đã đến khám thì
+       trong miệng gần như luôn có gì đó, tick sẵn bình thường dễ ký nhầm. */
+    const khong = daLuu ? this.laKhong(daLuu) : (macDinhBT !== false);
+    const cau = khong ? [] : this.tachCau(daLuu);
+    const co = new Set(ds.map(x => Combo.norm(x)));
+    const chon = new Set(cau.filter(x => co.has(Combo.norm(x))).map(x => Combo.norm(x)));
+    const ro = cau.filter(x => !co.has(Combo.norm(x))).join('; ');
+    return `<div class="f full"><label>${nhan}</label>
+      <div class="tick-ds" id="${id}">
+        <label class="tick-d tick-khong"><input type="checkbox" name="${ten}Khong" data-nhan="${h(nhanKhong)}"${khong?' checked':''}
+          onchange="HoSo.doiKhong('${id}','${ten}',this.checked)"> <span><b>${h(nhanKhong)}</b> — không có gì bất thường</span></label>
+        <div class="tick-vach"></div>
+        ${ds.filter(x => !this.laKhong(x)).map(x => `<label class="tick-d">
+          <input type="checkbox" name="${ten}Tick" value="${h(x)}"${chon.has(Combo.norm(x))?' checked':''}
+            onchange="HoSo.coBenh('${id}','${ten}')"> <span>${h(x)}</span></label>`).join('')}
+      </div>
+      <div class="tick-khac"><span>Ghi rõ:</span>
+        <input name="${ten}Khac" value="${h(ro)}" placeholder="bệnh khác, thuốc đang dùng…"
+          oninput="HoSo.coBenh('${id}','${ten}')"></div>
+      ${ghiChu?`<div class="combo-hint">${ghiChu}</div>`:''}</div>`;
+  },
+  /* Tick "Không" -> bỏ hết bệnh và xóa ô ghi rõ */
+  doiKhong(id, ten, bat){
+    const f = document.querySelector('#modalBody form'); if (!f || !bat) return;
+    f.querySelectorAll(`[name="${ten}Tick"]`).forEach(x => x.checked = false);
+    const o = f.querySelector(`[name="${ten}Khac"]`); if (o) o.value = '';
+  },
+  /* Tick một bệnh hoặc gõ ghi rõ -> tự bỏ "Không" */
+  coBenh(id, ten){
+    const f = document.querySelector('#modalBody form'); if (!f) return;
+    const coTick = !!f.querySelector(`[name="${ten}Tick"]:checked`);
+    const ro = ((f.querySelector(`[name="${ten}Khac"]`)||{}).value || '').trim();
+    const k = f.querySelector(`[name="${ten}Khong"]`);
+    if (k && (coTick || ro)) k.checked = false;
+    if (k && !coTick && !ro) k.checked = true;
+  },
+
+  /* Tóm tắt bệnh án tự viết từ những gì đã điền: hành chính + lý do vào viện +
+     khám trong miệng + chẩn đoán. Bác sĩ sửa lại được, không ép. */
+  cauTomTat(c){
+    const f = document.querySelector('#modalBody form');
+    const lay = n => {
+      if (!f) return '';
+      const tk = [...f.querySelectorAll(`[name="${n}Tick"]:checked`)].map(x => x.value);
+      const kh = ((f.querySelector(`[name="${n}Khac"]`)||{}).value || '').trim();
+      const bt = f.querySelector(`[name="${n}Khong"]`);
+      const ghep = tk.concat(kh ? [kh] : []).filter(Boolean).join('; ');
+      return ghep || (bt && bt.checked ? (bt.dataset.nhan || '') : '');
+    };
+    const nam = c.dob ? c.dob.slice(0, 4) : '';
+    const tuoi = this.tuoi(c);
+    const p = [];
+    p.push('Bệnh nhân ' + (c.gender ? c.gender.toLowerCase() : '') +
+      (nam ? ', sinh năm ' + nam : '') + (tuoi ? ' (' + tuoi + ' tuổi)' : ''));
+    const ly = lay('lyDo');
+    if (ly) p.push('vào viện vì ' + ly.charAt(0).toLowerCase() + ly.slice(1));
+    let cau = p.join(', ') + '.';
+    const tm = lay('trongMieng');
+    if (tm && !this.laKhong(tm)) cau += ' Khám trong miệng ghi nhận: ' + tm + '.';
+    else if (tm) cau += ' Khám trong miệng bình thường.';
+    const dx = f ? icdName(icdCode(((f.querySelector('[name="chanDoan"]')||{}).value) || '')) : '';
+    if (dx) cau += ' Chẩn đoán: ' + dx + '.';
+    return cau.replace(/\s+/g, ' ').trim();
+  },
+  vietTomTat(){
+    const c = custById(App.state.custSel); if (!c) return;
+    const o = document.querySelector('#modalBody [name="tomTat"]');
+    if (o) { o.value = this.cauTomTat(c); App.toast('Đã viết tóm tắt — sửa lại tùy ý'); }
+  },
+
+  /* Mục V. Kế hoạch điều trị — danh sách dịch vụ sẽ làm trong đợt này.
+     Gợi ý lấy từ bảng giá phòng khám nhưng CHỈ TÊN, không kèm giá (bản in bệnh án
+     không phải chỗ bàn tiền — tiền nằm ở phiếu báo giá và phiếu thu). */
+  khoiKeHoach(c, ep, daLuu){
+    const cau = this.tachCau(daLuu);
+    /* Dịch vụ đã gắn vào đợt và dịch vụ đã vạch trên sơ đồ kế hoạch — gợi ý sẵn */
+    const tuDot = Dot.mucCua(ep).map(t => t.name + (t.tooth ? ' — R' + t.tooth : ''));
+    const tuSoDo = Object.keys(c.teethKH || {}).map(Number).filter(n => !isNaN(n))
+      .sort((a,b)=>a-b).map(n => (c.teethKH[n].dichVu||'') + ' — R' + n).filter(x => x.trim()[0] !== '—');
+    const ds = [...new Set(tuDot.concat(tuSoDo).concat(cau))];
+    const co = new Set(ds.map(x => Combo.norm(x)));
+    const chon = new Set(cau.map(x => Combo.norm(x)));
+    return `<div class="f full"><label>V. Kế hoạch điều trị</label>
+      <div class="tick-ds" id="tkKH">${ds.length ? ds.map(x => `<label class="tick-d">
+        <input type="checkbox" name="keHoachTick" value="${h(x)}"${chon.has(Combo.norm(x))||!cau.length?' checked':''}> <span>${h(x)}</span></label>`).join('')
+        : '<span class="sub-line">Chưa có dịch vụ nào — chọn ở ô bên dưới để thêm vào kế hoạch.</span>'}</div>
+      <div style="margin-top:8px">${Combo.html('gy_kh','', '', Svc.goiY(), 'Gõ tên dịch vụ để thêm vào kế hoạch',
+        v => HoSo.themKeHoach(v), 'Gợi ý lấy từ bảng giá phòng khám — chỉ tên dịch vụ, không kèm giá.')}</div>
+      <div class="tick-khac"><span>Ghi thêm:</span>
+        <input name="keHoachKhac" placeholder="ghi chú kế hoạch, thứ tự làm, hẹn tái khám…"></div></div>`;
+  },
+  themKeHoach(v){
+    v = String(v || '').trim(); if (!v) return;
+    const box = document.getElementById('tkKH'); if (!box) return;
+    const co = [...box.querySelectorAll('[name="keHoachTick"]')].some(x => Combo.norm(x.value) === Combo.norm(v));
+    if (co) { App.toast('Đã có trong kế hoạch rồi'); }
+    else {
+      const l = document.createElement('label');
+      l.className = 'tick-d';
+      l.innerHTML = `<input type="checkbox" name="keHoachTick" value="${h(v)}" checked> <span>${h(v)}</span>`;
+      const trong = box.querySelector('.sub-line'); if (trong) trong.remove();
+      box.appendChild(l);
+    }
+    const inp = document.querySelector('#gy_kh .combo-input'); if (inp) inp.value = '';
+  },
+
+  /* VII. Thời gian điều trị — từ ngày đầu tiên đến ngày kết thúc.
+     Điền sẵn: ngày đầu = đợt sớm nhất (hoặc diễn biến sớm nhất); ngày kết thúc để trống
+     cho tới khi lễ tân bấm "Kết thúc đợt điều trị". */
+  ngayDau(c){
+    const ds = (db.episodes||[]).filter(e => e.customerId === c.id).map(e => e.tuNgay).filter(Boolean)
+      .concat(((c.record||{}).dienBien||[]).map(v => v.date).filter(Boolean));
+    return ds.sort()[0] || '';
+  },
+  ngayCuoi(c){
+    const ds = (db.episodes||[]).filter(e => e.customerId === c.id).map(e => e.denNgay).filter(Boolean);
+    return ds.sort().pop() || '';
+  },
+  khoiThoiGian(c){
+    const r = c.record || {};
+    const ep = Dot.dangChon(c);
+    const dangMo = (db.episodes||[]).filter(e => e.customerId === c.id && !e.denNgay);
+    return `<div class="f"><label>VII. Điều trị từ ngày</label>
+        <input type="date" name="tuNgay" value="${h(r.tuNgay || this.ngayDau(c))}"></div>
+      <div class="f"><label>Đến ngày</label>
+        <input type="date" name="denNgay" value="${h(r.denNgay || this.ngayCuoi(c))}"></div>
+      <div class="f"><label>Ngày ký bệnh án</label>
+        <input type="date" name="ngayKy" value="${h(r.ngayKy || r.denNgay || this.ngayCuoi(c) || this.ngayDau(c) || todayISO())}">
+        <div class="combo-hint">Ngày này in vào <b>cả hai ô ký</b> — Bác sỹ điều trị và Đại diện cơ sở.
+          Điền sẵn theo ngày kết thúc đợt, sửa lại tùy ý.</div></div>
+      <div class="f full">${ep && !ep.denNgay
+        ? `<div class="note-block">Đợt <b>${h(ep.ten||'')}</b> đang mở${dangMo.length>1?` (còn ${dangMo.length} đợt chưa đóng)`:''}.
+            Xong hẳn thì bấm nút dưới — phần mềm điền ngày kết thúc và chuyển đợt sang <b>Hoàn tất</b>.
+            <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
+              <button type="button" class="btn small" onclick="Dot.ketThuc('${ep.id}')">Kết thúc đợt điều trị</button></div></div>`
+        : `<div class="note-block">${ep ? `Đợt <b>${h(ep.ten||'')}</b> đã kết thúc ngày <b>${fmtD(ep.denNgay)}</b>.`
+            : 'Chưa có đợt điều trị nào.'}</div>`}</div>`;
   },
 
   /* Ô nhập kèm gợi ý */
@@ -2410,15 +2770,46 @@ const HoSo = {
 Object.assign(HoSo, {
 
   /* ---------- 1. Bệnh án ngoại trú RHM (BA-18) ---------- */
+  /* Mục A lấy thẳng từ phần hành chính của khách — hiện ra để soát, sửa thì bấm
+     "Sửa hồ sơ khách", không nhập lại ở đây cho khỏi lệch hai nơi. */
+  khoiA(c){
+    const r = c.record || {};
+    const A = [
+      ['1. Họ và tên', (c.name||'').toUpperCase()],
+      ['2. Ngày sinh', c.dob ? fmtD(c.dob) + (this.tuoi(c) ? ' · ' + this.tuoi(c) + ' tuổi' : '') : ''],
+      ['3. Giới tính', c.gender],
+      ['4. Điện thoại', c.phone],
+      ['5. Nghề nghiệp', r.job || c.job],
+      ['6. Dân tộc', r.danToc || c.danToc],
+      ['7. Quốc tịch', r.quocTich || 'Việt Nam'],
+      ['8. Địa chỉ', fullAddr(c)],
+      ['9. Đối tượng', c.doiTuong],
+      ['10. Số thẻ BHYT', c.bhyt],
+      ['11. Số căn cước', c.cccd],
+      ['12. Thân nhân báo tin', c.kinName ? c.kinName + (c.kinPhone ? ' · ' + c.kinPhone : '') : ''],
+    ];
+    const thieu = A.filter(x => !x[1]).length;
+    return `<div class="f full"><label>A. Thông tin chung
+        <span class="sub-line">lấy từ hồ sơ khách${thieu?` · còn ${thieu} mục trống`:' · đã đủ'}</span></label>
+      <div class="ba-a">${A.map(([k, v]) => `<div class="ba-o ${v?'':'trong'}">
+        <span class="ba-k">${h(k)}</span><span class="ba-v">${v ? h(v) : '— chưa có —'}</span></div>`).join('')}</div>
+      <div class="combo-hint">Mục này <b>không nhập ở đây</b> — sửa trong hồ sơ khách để hai nơi khỏi lệch.
+        <button type="button" class="link-btn" onclick="Cust.form('${c.id}')">Sửa hồ sơ khách</button></div></div>`;
+  },
+
   f_ba18(c, ep){
     const d = c.record || {}, r = d;
     const g = (k, fb) => d[k] != null ? d[k] : (fb || '');
     return `
-    ${this.oGY('lyDo','lyDo', g('lyDo', ep.lyDo || r.lyDo), GY.lyDo, 'I. Lý do vào viện, vấn đề sức khỏe', 1)}
-    ${this.oGY('qtr','quaTrinh', g('quaTrinh', r.quaTrinh), GY.quaTrinh, 'II.1. Quá trình bệnh lý và diễn biến lâm sàng', 1)}
-    ${this.oGY('tsbt','tienSuBanThan', g('tienSuBanThan', r.tienSuBanThan), GY.tienSu, 'II.2. Tiền sử bản thân')}
-    ${this.oGY('tsgd','tienSuGiaDinh', g('tienSuGiaDinh', r.tienSuGiaDinh), GY.tienSu, 'Tiền sử gia đình')}
-    ${this.oGY('diUng','diUng', g('diUng', c.allergy), GY.diUng, 'Dị ứng')}
+    ${this.khoiA(c)}
+    ${this.tickDong('tkLyDo','lyDo', GY.lyDo, g('lyDo', ep.lyDo || r.lyDo),
+      'I. Lý do vào viện, vấn đề sức khỏe', 'Tick được nhiều dòng — khách đến vì nhiều việc cùng lúc thì tick hết.')}
+    ${this.tickDong('tkQT','quaTrinh', GY.qtCho(g('lyDo', ep.lyDo || r.lyDo)), g('quaTrinh', r.quaTrinh),
+      'II.1. Quá trình bệnh lý và diễn biến lâm sàng', 'Danh sách này <b>đổi theo lý do vào viện</b> đã tick ở trên.')}
+    ${this.tickKhong('tkDiUng','diUng', GY.diUng, g('diUng', c.allergy), 'II.2. Dị ứng',
+      'Mặc định tick <b>Không</b>. Tick một dị nguyên hoặc gõ vào ô Ghi rõ thì <b>Không</b> tự bỏ.')}
+    ${this.tickKhong('tkTSBT','tienSuBanThan', GY.tienSu, g('tienSuBanThan', r.tienSuBanThan), 'Tiền sử bản thân')}
+    ${this.tickKhong('tkTSGD','tienSuGiaDinh', GY.tienSu, g('tienSuGiaDinh', r.tienSuGiaDinh), 'Tiền sử gia đình')}
     ${this.oGY('nghe','job', g('job', c.job), GY.ngheNghiep, 'Nghề nghiệp')}
     ${this.oGY('dt','danToc', g('danToc', c.danToc || 'Kinh'), GY.danToc, 'Dân tộc')}
     <div class="f"><label>Quốc tịch</label><input name="quocTich" value="${h(g('quocTich', c.quocTich || 'Việt Nam'))}"></div>
@@ -2428,28 +2819,40 @@ Object.assign(HoSo, {
     <div class="f"><label>Nhịp thở (lần/phút)</label><input name="nhipTho" value="${h(g('nhipTho'))}" placeholder="Vd: 18"></div>
     <div class="f"><label>Cân nặng (kg)</label><input name="canNang" value="${h(g('canNang'))}"></div>
     <div class="f"><label>Chiều cao (cm)</label><input name="chieuCao" value="${h(g('chieuCao'))}"></div>
-    ${this.oGY('tt','toanThan', g('toanThan', r.toanThan), GY.toanThan, 'III.1. Toàn thân', 1)}
-    ${this.oGY('nm','ngoaiMieng', g('ngoaiMieng', r.ngoaiMieng), GY.ngoaiMieng, 'III.2. Khám ngoài miệng', 1)}
-    ${this.oGY('tm','trongMieng', g('trongMieng', r.trongMieng), GY.trongMieng, 'Khám trong miệng', 1)}
-    ${this.oGY('cls','canLamSang', g('canLamSang', r.canLamSang), GY.canLamSang, 'III.3. Cận lâm sàng cần làm', 1)}
-    ${this.oGY('tomTat','tomTat', g('tomTat', r.tomTat), GY.tomTat, 'III.4. Tóm tắt bệnh án', 1)}
+    ${this.tickKhong('tkTT','toanThan', GY.toanThan, g('toanThan', r.toanThan), 'III.1. Khám toàn thân',
+      'Mặc định tick <b>Bình thường</b>. Có gì bất thường thì tick vào, hoặc gõ ở ô Ghi rõ.', 'Bình thường')}
+    ${this.tickKhong('tkNM','ngoaiMieng', GY.ngoaiMieng, g('ngoaiMieng', r.ngoaiMieng), 'III.2. Khám ngoài miệng', '', 'Bình thường')}
+    ${this.tickKhong('tkTM','trongMieng', GY.tmCho(g('lyDo', ep.lyDo || r.lyDo)), g('trongMieng', r.trongMieng),
+      'Khám trong miệng', 'Danh sách này <b>đổi theo lý do vào viện</b>. Mặc định <b>chưa tick</b> Bình thường — khách đến khám thì trong miệng thường có vấn đề.',
+      'Bình thường', false)}
+    ${this.tickKhong('tkCLS','canLamSang', GY.canLamSang, g('canLamSang', r.canLamSang), 'III.3. Cận lâm sàng cần làm', '', 'Không')}
+    <div class="f full"><label>III.4. Tóm tắt bệnh án</label>
+      <textarea name="tomTat" rows="3" placeholder="Bấm nút bên dưới để phần mềm tự viết từ những mục đã điền">${h(g('tomTat', r.tomTat))}</textarea>
+      <div class="form-actions" style="justify-content:flex-start;margin-top:6px">
+        <button type="button" class="btn small" onclick="HoSo.vietTomTat()">Tự viết từ các mục đã điền</button></div>
+      <div class="combo-hint">Câu mẫu: <i>Bệnh nhân nam, sinh năm 1990 (36 tuổi), vào viện vì sâu răng, muốn trám răng.
+        Khám trong miệng ghi nhận: sâu ngà mặt nhai. Chẩn đoán: K02.1 — Sâu ngà.</i>
+        Viết xong sửa lại tùy ý.</div></div>
     <div class="f full"><label>IV. Chẩn đoán chính (ICD)</label>
-      ${Combo.html('gy_dx','chanDoan', icdName(g('chanDoan', ep.chanDoan || r.chanDoan)) || '', icdOptions(), 'Gõ tên bệnh hoặc mã ICD')}</div>
+      ${Combo.html('gy_dx','chanDoan', icdName(g('chanDoan', ep.chanDoan || r.chanDoan)) || '',
+        GY.icdCho(g('lyDo', ep.lyDo || r.lyDo)), 'Gõ tên bệnh hoặc mã ICD')}
+      <div class="combo-hint">Mã hay gặp với dịch vụ đã chọn ở trên được xếp lên đầu; gõ để tra cả bảng ICD.</div></div>
     <div class="f full"><label>Bệnh kèm theo</label>
-      ${Combo.html('gy_dx2','chanDoanKem', icdName(g('chanDoanKem', ep.chanDoanKem || r.chanDoanKem)) || '', icdOptions(), 'Gõ tên bệnh hoặc mã ICD')}</div>
-    <div class="f full"><label>V. Kế hoạch điều trị</label>
-      <textarea name="keHoach" placeholder="Mỗi dòng một việc">${h(g('keHoach', ep.keHoach || r.keHoach))}</textarea></div>
+      ${Combo.html('gy_dx2','chanDoanKem', icdName(g('chanDoanKem', ep.chanDoanKem || r.chanDoanKem)) || '',
+        GY.icdCho(g('lyDo', ep.lyDo || r.lyDo)), 'Gõ tên bệnh hoặc mã ICD')}</div>
+    ${this.khoiKeHoach(c, ep, g('keHoach', ep.keHoach || r.keHoach))}
+    ${this.khoiThoiGian(c)}
     <div class="note-block full">Mục VI <b>Quá trình điều trị</b> và <b>Sơ đồ răng</b> tự lấy từ hồ sơ, không cần nhập lại ở đây.</div>`;
   },
   p_ba18(c, ep){
     const d = c.record || {}, r = d;
     const g = (k, fb) => (d[k] != null && d[k] !== '') ? d[k] : (fb || '');
     const ds = (r.dienBien || []).slice().sort((a,b)=>(a.date||'')<(b.date||'')?-1:1);
-    const tenDot = id => { const e = (db.episodes||[]).find(x => x.id === id); return e ? (e.ten || 'Đợt ' + fmtD(e.tuNgay)) : ''; };
-    const rows = ds.map(v => `<tr><td style="width:78px">${fmtD(v.date)}</td><td>${h(v.db||'')}</td><td>${h(v.xt||'')}</td><td style="width:96px">${h(tenDot(v.episodeId))}</td></tr>`).join('')
-      || '<tr><td>&nbsp;</td><td></td><td></td><td></td></tr>'.repeat(4);
-    const tuN = ep.tuNgay ? fmtD(ep.tuNgay) : (ds.length ? fmtD(ds[0].date) : '…/…/……');
-    const denN = ep.denNgay ? fmtD(ep.denNgay) : (ds.length ? fmtD(ds[ds.length-1].date) : '…/…/……');
+    /* Mục VI để TRỐNG cho bác sĩ viết tay — theo yêu cầu phòng khám. Diễn biến vẫn
+       lưu trong phần mềm và in đầy đủ ở Phiếu theo dõi điều trị (tờ số 3). */
+    const rows = '<tr><td>&nbsp;</td><td></td><td></td><td></td></tr>'.repeat(10);
+    const tuN = fmtD(g('tuNgay', this.ngayDau(c))) || '…/…/……';
+    const denN = fmtD(g('denNgay', this.ngayCuoi(c))) || '…/…/……';
     const bs = this.bacSi(c, ep);
     const diUng = g('diUng', c.allergy), coDiUng = diUng && !/^không$/i.test(diUng);
     const tsbt = g('tienSuBanThan'), tsgd = g('tienSuGiaDinh');
@@ -2505,10 +2908,12 @@ Object.assign(HoSo, {
     <h2>VI. QUÁ TRÌNH ĐIỀU TRỊ</h2>
     <table><tr><th style="width:78px">Ngày</th><th>Diễn biến bệnh</th><th>Xử trí</th><th style="width:96px">Đợt điều trị</th></tr>${rows}</table>
     <p style="margin-top:8px"><b>VII. THỜI GIAN ĐIỀU TRỊ</b><br>Điều trị từ ngày ${tuN} đến ngày ${denN}</p>
-    <div class="sign">
-      <div>${this.ngayChu(ep.denNgay)}<br><b>Bác sỹ điều trị</b><br>(Ký, ghi rõ họ tên)<br><br><br>${h(bs?bs.name:'')}</div>
-      <div>${this.ngayChu(ep.denNgay)}<br><b>Đại diện cơ sở KB, CB</b><br>(Ký, đóng dấu)<br><br><br></div>
-    </div>`;
+    ${(() => {
+      const ngay = g('ngayKy', g('denNgay', this.ngayCuoi(c) || this.ngayDau(c)));
+      return `<div class="sign">
+      <div>${this.ngayChu(ngay)}<br><b>Bác sỹ điều trị</b><br>(Ký, ghi rõ họ tên)<br><br><br>${h(bs?bs.name:'')}</div>
+      <div>${this.ngayChu(ngay)}<br><b>Đại diện cơ sở KB, CB</b><br>(Ký, đóng dấu)<br><br><br></div>
+    </div>`; })()}`;
   },
 
   /* ---------- 2. Phiếu theo dõi điều trị ---------- */
