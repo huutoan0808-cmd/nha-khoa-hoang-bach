@@ -1256,12 +1256,52 @@ const Cal = {
         <button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu lịch hẹn</button></div>
     </form>`);
   },
+  /* Hai lịch hẹn đè lên nhau khi khoảng [giờ, giờ+thời lượng) của chúng giao nhau */
+  deNhau(a, b){
+    const x = hm2m(a.time), y = hm2m(b.time);
+    if (x == null || y == null || a.date !== b.date) return false;
+    return x < y + (+b.dur || 30) && y < x + (+a.dur || 30);
+  },
+  /* Các lịch hẹn đã có đè lên khung này. loc để lọc thêm theo bác sĩ hoặc ghế. */
+  trungGio(hen, boQuaId, loc){
+    return (db.appointments || []).filter(a =>
+      a.id !== boQuaId && a.status !== 'Hủy' && this.deNhau(hen, a) && (!loc || loc(a)));
+  },
+  moTaHen(a){
+    const c = custById(a.customerId), bs = staffById(a.doctorId);
+    return a.time + ' — ' + (c ? c.name : '?') + (a.service ? ' (' + a.service + ')' : '')
+      + (bs ? ' · ' + bs.name : '') + (a.chair ? ' · ' + a.chair : '');
+  },
+
   save(ev, id){
     ev.preventDefault();
     const d = Object.fromEntries(new FormData(ev.target).entries());
     if (!d.customerId) { App.toast('Hãy chọn khách hàng từ danh sách gợi ý'); return; }
     delete d.customerName;
     d.dur = num(d.dur) || 30;
+    /* Một bác sĩ không thể ngồi hai ghế cùng lúc — chặn hẳn, không cho lưu. */
+    if (d.doctorId && d.status !== 'Hủy') {
+      const dung = this.trungGio(d, id, a => a.doctorId === d.doctorId);
+      if (dung.length) {
+        const bs = staffById(d.doctorId);
+        App.modal('Trùng giờ bác sĩ', `
+          <div class="note-block mb" style="border-color:var(--danger)">
+            <b>${h(bs ? bs.name : 'Bác sĩ này')}</b> đã có lịch đè lên khung
+            <b>${h(d.time)}</b> ngày <b>${fmtD(d.date)}</b> (${d.dur} phút):</div>
+          <ul>${dung.map(a => `<li>${h(Cal.moTaHen(a))}</li>`).join('')}</ul>
+          <div class="note-block" style="margin-top:10px">Đổi giờ, đổi bác sĩ, hoặc rút ngắn thời lượng rồi lưu lại.</div>
+          <div class="form-actions"><button class="btn primary" onclick="App.closeModal()">Đã hiểu</button></div>`);
+        return;
+      }
+    }
+    /* Cùng một ghế cũng không kê được hai người — cái này chỉ cảnh báo, vì có thể
+       đổi ghế lúc làm thật hoặc ca trước xong sớm. */
+    if (d.chair && d.status !== 'Hủy') {
+      const ghe = this.trungGio(d, id, a => a.chair === d.chair);
+      const X = String.fromCharCode(10);
+      if (ghe.length && !confirm(d.chair + ' đang có lịch đè lên khung này:' + X + X
+          + ghe.map(a => '• ' + Cal.moTaHen(a)).join(X) + X + X + 'Vẫn lưu?')) return;
+    }
     if (id) Object.assign(db.appointments.find(x=>x.id===id), d);
     else db.appointments.push(Object.assign({id:uid()}, d));
     if (d.labOrderId) { const l = db.labs.find(x=>x.id===d.labOrderId); if (l) l.apptId = id || db.appointments[db.appointments.length-1].id; }
@@ -1357,6 +1397,7 @@ SCREENS.calendar = () => {
     <button class="btn small" onclick="Cal.setDate('${todayISO()}')">Hôm nay</button>
     <span class="spacer"></span><span class="sub-line">${h(tieuDe)} · ${trong.length} lịch hẹn</span>
   </div>
+  ${DatHen.bangChoHTML()}
   ${than}
   <div class="legend" style="margin-top:10px"><span><i style="background:var(--ok)"></i>Đã xác nhận</span><span><i style="background:var(--warn)"></i>Chờ xác nhận</span><span><i style="background:var(--info)"></i>Đang điều trị</span></div>`;
 };
@@ -4037,15 +4078,45 @@ const DatHen = {
     return 'Chờ xác nhận';
   },
   /* Đếm số yêu cầu đang chờ để hiện lên nút, chỉ vẽ lại khi con số đổi */
-  _cho: null, _dangDem: false,
+  _cho: null, _ds: null, _dangDem: false,
   async capNhatDem(){
     if (this._dangDem || !Cloud.configured() || !Cloud.loggedIn()) return;
     this._dangDem = true;
     try {
       const ds = await this.tai();
-      const n = ds.filter(x => this.trangThai(x) === 'Chờ xác nhận').length;
-      if (n !== this._cho) { this._cho = n; App.render(); }
+      const cho = ds.filter(x => this.trangThai(x) === 'Chờ xác nhận');
+      const doi = cho.length !== this._cho || JSON.stringify(cho.map(x=>x.id)) !== JSON.stringify((this._ds||[]).map(x=>x.id));
+      this._cho = cho.length; this._ds = cho;
+      if (doi) App.render();
     } catch(e){} finally { this._dangDem = false; }
+  },
+
+  /* Bảng yêu cầu đang chờ, vẽ thẳng trên màn hình Lịch hẹn cho dễ thấy mà duyệt */
+  bangChoHTML(){
+    if (!Cloud.configured() || !Cloud.loggedIn()) return '';
+    const ds = this._ds || [];
+    if (!ds.length) return '';
+    const rows = ds.map(x => {
+      const sdt = (x.sdt||'').replace(/\D/g,'');
+      const cu = db.customers.find(y => sdt && (y.phone||'').replace(/\D/g,'') === sdt);
+      const dung = Cal.trungGio({date:x.ngay, time:x.gio, dur:30});
+      return `<tr>
+        <td class="num"><b>${h(x.gio)}</b><br><span class="sub-line">${fmtD(x.ngay)}</span></td>
+        <td><b>${h(x.ten)}</b><br><span class="sub-line num">${h(x.sdt)}</span>
+          ${cu?`<br><span class="pill ok">khách cũ · ${h(cu.code||'')}</span>`:'<span class="pill info">khách mới</span>'}</td>
+        <td>${h(x.dichvu || 'chưa rõ, nhờ tư vấn')}${x.ghichu?`<br><span class="sub-line">${h(x.ghichu)}</span>`:''}</td>
+        <td>${dung.length?`<span class="pill warn">Giờ này đã có ${dung.length} hẹn</span>`:'<span class="pill ok">Giờ còn trống</span>'}</td>
+        <td style="white-space:nowrap">
+          <button class="btn small primary" onclick="DatHen.duyet('${x.id}')">Nhận lịch</button>
+          <button class="btn small danger" onclick="DatHen.tuChoi('${x.id}')">Từ chối</button></td></tr>`;
+    }).join('');
+    return `<div class="card mb" style="border-color:var(--warn)">
+      <div class="card-h"><h2>Khách đặt hẹn online — ${ds.length} yêu cầu đang chờ</h2>
+        <span class="hint">nhận là vào thẳng lịch hẹn</span><span class="spacer"></span>
+        <button class="btn small" onclick="DatHen.moDanhSach()">Xem tất cả</button></div>
+      <div class="tbl-wrap"><table style="min-width:680px">
+        <thead><tr><th>Giờ hẹn</th><th>Khách</th><th>Dịch vụ · ghi chú</th><th>Kiểm tra</th><th></th></tr></thead>
+        <tbody>${rows}</tbody></table></div></div>`;
   },
 
   async tai(){
@@ -4094,14 +4165,18 @@ const DatHen = {
     save();
     try { await Cloud.auth('/rest/v1/datlich?id=eq.' + encodeURIComponent(id),
       {method:'PATCH', headers:{Prefer:'return=minimal'}, body:{trangthai:'Đã xác nhận'}}); } catch(e){}
-    App.render(); App.toast('Đã nhận lịch cho ' + c.name + ' ✓');
-    this.moDanhSach();
+    this._ds = (this._ds||[]).filter(y => String(y.id) !== String(id));
+    this._cho = this._ds.length;
+    App.closeModal(); App.render();
+    App.toast('Đã nhận lịch cho ' + c.name + ' ✓');
   },
   async tuChoi(id){
     if (!confirm('Từ chối yêu cầu này? Nhớ gọi báo khách.')) return;
     try { await Cloud.auth('/rest/v1/datlich?id=eq.' + encodeURIComponent(id),
       {method:'PATCH', headers:{Prefer:'return=minimal'}, body:{trangthai:'Từ chối'}}); } catch(e){}
-    App.toast('Đã từ chối'); this.moDanhSach();
+    this._ds = (this._ds||[]).filter(y => String(y.id) !== String(id));
+    this._cho = this._ds.length;
+    App.closeModal(); App.render(); App.toast('Đã từ chối');
   },
   lienKet(){ return location.origin + location.pathname + '#book'; },
   SQL: `-- Bang nhan yeu cau dat hen tu khach. Khach CHI duoc them, khong doc duoc gi.
