@@ -258,6 +258,31 @@ function migrate() {
     });
     if (giu.size !== db.services.length) db.services = [...giu.values()];
   }
+  /* Trước đây BA-18 lưu theo TỪNG ĐỢT, nên một khách nhiều đợt là nhiều bệnh án —
+     sai với quy định (mỗi người bệnh chỉ có một bệnh án ngoại trú). Gộp về bệnh án
+     chung của khách: lấy bản mới nhất, chỉ điền vào ô nào bệnh án chung còn trống.
+     KHÔNG xóa bản cũ trong đợt, để còn đối chiếu. */
+  if (!db.gopBA18) {
+    (db.episodes || []).slice()
+      .sort((a, b) => (a.tuNgay || '') < (b.tuNgay || '') ? -1 : 1)
+      .forEach(ep => {
+        const d = (ep.phieu || {}).ba18; if (!d) return;
+        const c = (db.customers || []).find(x => x.id === ep.customerId); if (!c) return;
+        if (!c.record) c.record = {};
+        Object.keys(d).forEach(k => {
+          if (k === '_at' || k === 'dienBien' || k === 'vanDe') return;
+          if (d[k] !== '' && d[k] != null && (c.record[k] === '' || c.record[k] == null)) c.record[k] = d[k];
+        });
+        c._up = Date.now();
+      });
+    db.gopBA18 = 1;
+  }
+  /* Chẩn đoán cũ chỉ là hai dòng chữ. Dựng thành danh sách vấn đề để thêm bớt được. */
+  (db.customers || []).forEach(c => {
+    const r = c.record; if (!r || r.vanDe) return;
+    r.vanDe = [];
+    if (r.chanDoan) r.vanDe.push({id: uid(), icd: r.chanDoan, rang: '', ngay: c.createdAt || '', tinhTrang: 'Đang điều trị', note: ''});
+  });
   /* Diễn biến điều trị cũ (kể cả bản nhập từ sổ Google Sheet) chưa có mã riêng,
      nên không sửa từng dòng được. Gắn mã cho chúng. */
   (db.customers || []).forEach(c => {
@@ -899,13 +924,24 @@ const Cust = {
     const c = custById(App.state.custSel); if (!c) return;
     const t = (c[lop]||{})[n] || {s:'ok', mat:[], note:''};
     const mat = t.mat || [];
+    const kh = lop === 'teethKH';
+    const hienTai = (c.teeth||{})[n];
     App.modal('Răng ' + n + (Tooth.hamTren(n)?' · hàm trên':' · hàm dưới') + (Tooth.benPhai(n)?' bên phải':' bên trái')
       + (lop === 'teethKH' ? ' — SƠ ĐỒ KẾ HOẠCH' : ''), `
-    ${lop === 'teethKH' ? '<div class="note-block mb">Bạn đang sửa <b>sơ đồ theo kế hoạch điều trị</b> — tình trạng răng <b>sau khi làm xong</b>. Sơ đồ hiện trạng không đổi.</div>' : ''}
+    ${kh ? `<div class="note-block mb">Đang lập <b>kế hoạch điều trị</b> cho răng ${n} —
+        ghi <b>kết quả sau khi làm xong</b> và chọn dịch vụ sẽ làm. Sơ đồ trước điều trị không đổi.
+        ${hienTai ? `<br>Hiện trạng răng này: <b>${h(Tooth.moTa(n, hienTai))}</b>` : ''}</div>` : ''}
     <form class="form-grid" onsubmit="Cust.toothSave(event,${n},'${lop}')">
-      <div class="f full"><label>Tình trạng</label>
+      <div class="f full"><label>${kh ? 'Kế hoạch — răng sẽ thành' : 'Tình trạng'}</label>
         <select name="s" onchange="Cust.toothMatHien(this.value)">
           ${TOOTH_STATES.map(([k,l])=>`<option value="${k}"${t.s===k?' selected':''}>${l}</option>`).join('')}</select></div>
+      ${kh ? `<div class="f full"><label>Dịch vụ sẽ làm cho răng này</label>
+        ${Combo.html('cbRangDV','dichVu', t.dichVu||'', Svc.goiY(1), 'Gõ tên dịch vụ, vd: boc su, noi nha',
+          null, 'Gợi ý lấy từ bảng giá phòng khám. Lưu xong bấm "Đưa vào điều trị" để tạo hạng mục.')}</div>
+      <div class="f full"><label>Dịch vụ gợi ý cho tình trạng này</label>
+        <div class="check-row" id="dvGoiY" data-rang="${n}">${Cust.dvHopVoi(t.s, hienTai).map(x =>
+          `<button type="button" class="btn small" onclick="Combo.pick('cbRangDV',this.dataset.v)" data-v="${h(x)}">${h(x)}</button>`).join('')
+          || '<span class="sub-line">Chọn kế hoạch ở ô trên để thấy gợi ý.</span>'}</div></div>` : ''}
       <div class="f full" id="oMat" style="display:${t.s==='caries'||t.s==='filled'?'':'none'}">
         <label>Mặt răng (chọn được nhiều mặt)</label>
         <div class="check-row">${TOOTH_SURF.map(([k,l])=>
@@ -921,12 +957,67 @@ const Cust = {
         chọn "Răng sứ" mà vẫn tick được nội nha, sơ đồ hiện cả hai.</div>
       <div class="form-actions full">
         ${(c[lop]||{})[n]?`<button type="button" class="btn danger" onclick="Cust.toothXoa(${n},'${lop}')">Xóa đánh dấu</button><span class="spacer"></span>`:''}
-        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu</button></div>
+        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+        ${kh?`<button type="button" class="btn" onclick="Cust.rangSangDieuTri(${n})">Lưu &amp; đưa vào điều trị →</button>`:''}
+        <button class="btn primary">Lưu</button></div>
     </form>`);
   },
+  /* Dịch vụ hay dùng cho từng kết quả mong muốn — chỉ là gợi ý, gõ tự do vẫn được */
+  DV_THEO_KH: {
+    filled:  ['Trám sâu răng phía trong — tiêu chuẩn','Trám răng cửa — tiêu chuẩn','Đóng khe thưa Bioclear — mức độ 1'],
+    crownKL: ['Răng sứ kim loại thường','Răng sứ Chrome - Coban','Răng sứ Titan'],
+    crownTS: ['Răng toàn sứ Zirconia','Răng toàn sứ Cercon','Răng toàn sứ Lava','Mặt dán sứ Veneer Emax Press','Endocrown'],
+    implant: ['Trụ Implant Hàn Quốc','Trụ Implant Pháp','Trụ Implant Mỹ','Trụ Implant Thụy Sĩ'],
+    thaolap: ['Răng tháo lắp nhựa — Nhật','Răng tháo lắp nhựa — Mỹ','Hàm khung hợp kim Titan'],
+    missing: ['Nhổ răng vĩnh viễn — 1 chân','Nhổ răng vĩnh viễn — 2 chân','Nhổ răng vĩnh viễn — 3 chân',
+              'Nhổ răng khôn mọc lệch — mức độ 1','Nhổ răng sữa — tê tiêm'],
+    caries:  ['Trám sâu răng phía trong — tiêu chuẩn'],
+    ok:      ['Cạo vôi răng — mức độ 1','Khám và tư vấn'],
+  },
+  /* Răng đang sâu mà kế hoạch bọc sứ thì thường phải nội nha trước — gợi thêm */
+  dvHopVoi(kh, hienTai){
+    const ds = (this.DV_THEO_KH[kh] || []).slice();
+    const sauNang = hienTai && (hienTai.s === 'caries' || hienTai.nn || hienTai.loDo || hienTai.sung);
+    if (sauNang && (kh === 'crownTS' || kh === 'crownKL' || kh === 'filled')) {
+      ds.unshift('Nội nha răng cối lớn — gói cơ bản', 'Nội nha răng cửa — gói cơ bản');
+    }
+    /* Chỉ giữ những dịch vụ thật sự có trong bảng giá */
+    const co = new Set((db.services||[]).map(x => Combo.norm(x.name||'')));
+    return ds.filter(x => co.has(Combo.norm(x))).slice(0, 6);
+  },
+  /* Lưu răng rồi tạo luôn hạng mục điều trị từ dịch vụ đã chọn */
+  rangSangDieuTri(n){
+    const f = document.querySelector('#modalBody form');
+    if (!f) return;
+    const ten = ((f.querySelector('[name="dichVu"]')||{}).value || '').trim();
+    if (!ten) { App.toast('Chọn dịch vụ sẽ làm trước đã'); return; }
+    this.toothSave({preventDefault(){}, target: f}, n, 'teethKH');
+    const c = custById(App.state.custSel);
+    const dv = (db.services||[]).find(x => Combo.norm(x.name||'') === Combo.norm(ten));
+    const ep = Dot.dangChon(c);
+    const t = {id: uid(), customerId: c.id, episodeId: ep ? ep.id : '',
+      name: dv ? dv.name : ten, group: dv ? dv.group : 'Khác', serviceId: dv ? dv.id : '',
+      price: dv ? (dv.price || 0) : 0, tooth: String(n), status: 'Báo giá',
+      doctorId: (ep && ep.doctorId) || '', assistantId: '', date: todayISO(), cd: []};
+    db.treatments.push(t);
+    save(); App.render();
+    App.toast('Đã thêm "' + t.name + '" cho răng ' + n + ' vào kế hoạch điều trị ✓');
+    App.state.treatCust = c.id;
+    setTimeout(() => Treat.itemForm(t.id), 60);
+  },
+
   toothMatHien(v){
     const o = document.getElementById('oMat');
     if (o) o.style.display = (v === 'caries' || v === 'filled') ? '' : 'none';
+    /* Trên sơ đồ kế hoạch: đổi kết quả mong muốn thì đổi luôn danh sách dịch vụ gợi ý */
+    const gy = document.getElementById('dvGoiY');
+    if (gy) {
+      const c = custById(App.state.custSel);
+      const n = +(gy.dataset.rang || 0);
+      const ds = this.dvHopVoi(v, c && (c.teeth||{})[n]);
+      gy.innerHTML = ds.map(x => `<button type="button" class="btn small" onclick="Combo.pick('cbRangDV',this.dataset.v)" data-v="${h(x)}">${h(x)}</button>`).join('')
+        || '<span class="sub-line">Không có dịch vụ nào hợp — cứ gõ tự do ở ô trên.</span>';
+    }
     /* Mất răng, implant, tháo lắp thì không có tủy để nội nha — giấu luôn ô tick,
        và bỏ dấu đã tick kẻo lưu lại một thông tin vô lý. */
     const nn = document.getElementById('oNoiNha');
@@ -948,8 +1039,8 @@ const Cust = {
     const sung = !!f.querySelector('[name="sung"]:checked');
     const c = custById(App.state.custSel);
     if (!c[lop]) c[lop] = {};
-    if (d.s === 'ok' && !nn && !loDo && !sung && !mat.length && !d.note) delete c[lop][n];
-    else c[lop][n] = {s:d.s, mat, nn, loDo, sung, note:d.note};
+    if (d.s === 'ok' && !nn && !loDo && !sung && !mat.length && !d.note && !(d.dichVu||'').trim()) delete c[lop][n];
+    else c[lop][n] = {s:d.s, mat, nn, loDo, sung, note:d.note, dichVu:(d.dichVu||'').trim()};
     save(); App.closeModal(); App.render();
     App.toast('Đã lưu răng ' + n + (lop === 'teethKH' ? ' (kế hoạch) ✓' : ' ✓'));
   },
@@ -1030,6 +1121,85 @@ const Cust = {
       <div class="form-actions full"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu bệnh án</button></div>
     </form>`);
   },
+  /* ---------- Các vấn đề (chẩn đoán) của khách ----------
+     Một khách có thể có nhiều vấn đề cùng lúc, mỗi cái gắn một răng. Vấn đề đầu
+     danh sách là bệnh chính, còn lại vào "bệnh kèm theo" trên bản in BA-18. */
+  vanDe(c){ return ((c || {}).record || {}).vanDe || []; },
+  vanDeForm(vid){
+    const c = custById(App.state.custSel); if (!c) return;
+    const v = vid ? this.vanDe(c).find(x => x.id === vid) : {ngay: todayISO(), tinhTrang: 'Chưa điều trị'};
+    App.modal((vid ? 'Sửa' : 'Thêm') + ' vấn đề — ' + c.name, `
+    <form class="form-grid" onsubmit="Cust.vanDeSave(event,'${vid||''}')">
+      <div class="f full"><label>Chẩn đoán (tên bệnh kèm mã ICD)</label>
+        ${Combo.html('cbVanDe','icd', v.icd ? icdName(v.icd) : '', icdOptions(),
+          'Gõ tên bệnh hoặc mã ICD, vd: viem tuy, K04')}</div>
+      <div class="f"><label>Răng / vị trí</label><input name="rang" value="${h(v.rang||'')}" placeholder="R36, hàm trên, 2 hàm..."></div>
+      <div class="f"><label>Ngày phát hiện</label><input type="date" name="ngay" value="${h(v.ngay||todayISO())}"></div>
+      <div class="f"><label>Tình trạng</label><select name="tinhTrang">
+        ${['Chưa điều trị','Đang điều trị','Đã xử lý','Theo dõi'].map(x=>`<option${v.tinhTrang===x?' selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="f full"><label>Ghi chú</label><input name="note" value="${h(v.note||'')}"></div>
+      <div class="note-block full">Vấn đề <b>đứng đầu danh sách</b> được in vào dòng "Bệnh chính" của bệnh án,
+        các vấn đề còn lại vào dòng "Bệnh kèm theo". Kéo thứ tự bằng nút ↑ ↓.</div>
+      <div class="form-actions full">
+        ${vid?`<button type="button" class="btn danger" onclick="Cust.vanDeXoa('${vid}')">Xóa vấn đề</button><span class="spacer"></span>`:''}
+        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu</button></div>
+    </form>`);
+  },
+  vanDeSave(ev, vid){
+    ev.preventDefault();
+    const c = custById(App.state.custSel);
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    d.icd = icdCode(d.icd);
+    if (!d.icd) { App.toast('Chưa chọn chẩn đoán'); return; }
+    if (!c.record) c.record = {};
+    if (!c.record.vanDe) c.record.vanDe = [];
+    const cu = vid && c.record.vanDe.find(x => x.id === vid);
+    if (cu) Object.assign(cu, d); else c.record.vanDe.push(Object.assign({id: uid()}, d));
+    this.dongBoChanDoan(c);
+    save(); App.closeModal(); App.render(); App.toast('Đã lưu vấn đề ✓');
+  },
+  vanDeXoa(vid){
+    const c = custById(App.state.custSel);
+    if (!confirm('Xóa vấn đề này khỏi bệnh án?')) return;
+    c.record.vanDe = this.vanDe(c).filter(x => x.id !== vid);
+    this.dongBoChanDoan(c);
+    save(); App.closeModal(); App.render(); App.toast('Đã xóa');
+  },
+  vanDeDoiCho(vid, huong){
+    const c = custById(App.state.custSel), ds = this.vanDe(c);
+    const i = ds.findIndex(x => x.id === vid), j = i + huong;
+    if (i < 0 || j < 0 || j >= ds.length) return;
+    const t = ds[i]; ds[i] = ds[j]; ds[j] = t;
+    this.dongBoChanDoan(c);
+    save(); App.render();
+  },
+  /* Vấn đề đầu = bệnh chính, còn lại = bệnh kèm theo — để bản in giữ đúng mẫu BA-18 */
+  dongBoChanDoan(c){
+    const ds = this.vanDe(c);
+    if (!c.record) c.record = {};
+    if (!ds.length) return;
+    c.record.chanDoan = ds[0].icd;
+    c.record.chanDoanKem = ds.slice(1).map(x => icdName(x.icd) + (x.rang ? ' (R' + x.rang + ')' : '')).join('; ');
+    c._up = Date.now();
+  },
+  vanDeHTML(c){
+    const ds = this.vanDe(c);
+    const rows = ds.map((v, i) => `<tr>
+      <td>${i === 0 ? '<span class="pill danger">Bệnh chính</span>' : '<span class="pill mutedp">Kèm theo</span>'}</td>
+      <td><b>${h(icdName(v.icd))}</b>${v.note?`<br><span class="sub-line">${h(v.note)}</span>`:''}</td>
+      <td class="num">${h(v.rang||'—')}</td>
+      <td class="num">${v.ngay?fmtD(v.ngay):'—'}</td>
+      <td>${h(v.tinhTrang||'')}</td>
+      <td style="white-space:nowrap">
+        <button class="btn small" ${i===0?'disabled':''} onclick="Cust.vanDeDoiCho('${v.id}',-1)">↑</button>
+        <button class="btn small" ${i===ds.length-1?'disabled':''} onclick="Cust.vanDeDoiCho('${v.id}',1)">↓</button>
+        <button class="btn small" onclick="Cust.vanDeForm('${v.id}')">Sửa</button></td></tr>`).join('')
+      || '<tr><td colspan="6" class="sub-line">Chưa ghi vấn đề nào. Một khách có thể có nhiều vấn đề cùng lúc — thêm từng cái, mỗi cái gắn một răng.</td></tr>';
+    return `<div class="tbl-wrap"><table style="min-width:560px">
+      <thead><tr><th></th><th>Chẩn đoán (ICD)</th><th>Răng</th><th>Phát hiện</th><th>Tình trạng</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+  },
+
   recordSave(ev){
     ev.preventDefault();
     const c = custById(App.state.custSel);
@@ -1052,6 +1222,9 @@ const Cust = {
       <div class="f"><label>Bác sĩ thực hiện</label><select name="doctorId">
         <option value="">— chưa ghi —</option>
         ${db.staff.filter(s=>s.active!==false).map(s=>`<option value="${s.id}"${v&&v.doctorId===s.id?' selected':''}>${h(s.name)}</option>`).join('')}</select></div>
+      <div class="f full"><label>Thuộc đợt điều trị</label><select name="episodeId">
+        <option value="">— không gắn đợt nào —</option>
+        ${Dot.cua(c.id).map(e=>`<option value="${e.id}"${(v?v.episodeId:(Dot.dangChon(c)||{}).id)===e.id?' selected':''}>${h(e.ten||'(chưa đặt tên)')} — ${fmtD(e.tuNgay)}</option>`).join('')}</select></div>
       <div class="f full"><label>Diễn biến bệnh</label><textarea name="db" required>${h((v&&v.db)||'')}</textarea></div>
       <div class="f full"><label>Xử trí</label><textarea name="xt">${h((v&&v.xt)||'')}</textarea></div>
       <div class="form-actions full">
@@ -1085,7 +1258,8 @@ const Cust = {
       const bs = staffById(v.doctorId);
       return `<div class="tl-item clickable" onclick="Cust.visitForm('${v.id||''}','${c.id}')" title="Bấm để sửa">
         <span class="tl-date num">${fmtD(v.date)}</span>
-        <b>${h(v.db)}</b><p>${h(v.xt||'')}${bs?` <span class="sub-line">· ${h(bs.name)}</span>`:''}</p></div>`;
+        <b>${h(v.db)}</b><p>${h(v.xt||'')}${bs?` <span class="sub-line">· ${h(bs.name)}</span>`:''}${
+          (() => { const e=(db.episodes||[]).find(x=>x.id===v.episodeId); return e?` <span class="pill mutedp">${h(e.ten||'đợt')}</span>`:''; })()}</p></div>`;
     }).join('');
   },
 
@@ -1181,6 +1355,7 @@ SCREENS.customers = () => {
     </div>`;
     })()}
     ${Cal.cardKhachHTML(c)}
+    ${HoSo.cardBA18(c)}
     ${HoSo.cardHTML(c)}
     ${Photo.cardHTML(c)}
     <div class="card">
@@ -1821,18 +1996,25 @@ const Dot = {
 /* ---------- Bệnh án điện tử ---------- */
 const HoSo = {
   DS: [
-    {k:'ba18',    ten:'Bệnh án ngoại trú RHM',              ms:'MS: BA-18'},
     {k:'theodoi', ten:'Phiếu theo dõi điều trị',            ms:'MS: 36/BV2'},
     {k:'camket',  ten:'Giấy cam kết phẫu thuật, thủ thuật', ms:'MS: 01/BV2'},
     {k:'phieuthu',ten:'Phiếu thu (bảng chi tiết)',          ms:''},
     {k:'tuvan',   ten:'Phiếu tư vấn + báo giá',             ms:''},
   ],
-  ten(k){ return (this.DS.find(x=>x.k===k)||{}).ten || k; },
+  ten(k){ return k === 'ba18' ? 'Bệnh án ngoại trú RHM'
+                              : ((this.DS.find(x=>x.k===k)||{}).ten || k); },
 
   cham(n){ return '.'.repeat(n || 60); },
   gach(v, n){ return v ? h(v) : this.cham(n || 60); },
   o(danh, nhan){ return `<span class="o-tick">${danh ? '☒' : '☐'}</span> ${nhan}`; },
-  dl(ep, k){ return ((ep && ep.phieu) || {})[k] || {}; },
+  /* BA-18 là bệnh án của KHÁCH, dùng chung cho mọi đợt — lưu ở c.record.
+     Bốn phiếu còn lại (theo dõi, cam kết, thu, tư vấn) mới thuộc từng đợt. */
+  KHACH: ['ba18'],
+  cuaKhach(k){ return this.KHACH.includes(k); },
+  dl(ep, k, c){
+    if (this.cuaKhach(k)) return (c && c.record) || {};
+    return ((ep && ep.phieu) || {})[k] || {};
+  },
 
   dau(c, tieu, ms, phu){
     return `<table class="no-border pa-dau"><tr>
@@ -1876,7 +2058,7 @@ const HoSo = {
 
   /* Vài dòng tóm tắt nội dung mỗi biểu mẫu đang có, để nhìn là biết đã đủ chưa */
   tomTat(k, c, ep){
-    const d = this.dl(ep, k), r = c.record || {};
+    const d = this.dl(ep, k, c), r = c.record || {};
     if (k === 'ba18') {
       const dx = icdName(d.chanDoan || ep.chanDoan || r.chanDoan);
       const ly = d.lyDo || ep.lyDo || r.lyDo;
@@ -1906,19 +2088,49 @@ const HoSo = {
     return '';
   },
 
+  /* ---------- Bệnh án ngoại trú: MỘT bản cho mỗi khách, dùng suốt mọi đợt ---------- */
+  cardBA18(c){
+    const r = c.record || {};
+    const daDien = !!(r.lyDo || r.chanDoan || (r.vanDe||[]).length);
+    const n = ((r.dienBien)||[]).length;
+    return `<div class="card mb"><div class="card-h"><h2>Bệnh án ngoại trú (BA-18)</h2>
+      <span class="hint">một bản duy nhất cho khách này, dùng suốt mọi đợt điều trị</span>
+      <span class="spacer"></span>
+      ${daDien?'<span class="pill ok">Đã lập</span>':'<span class="pill warn">Chưa lập</span>'}</div>
+      <div class="card-b">
+        <div class="form-grid" style="gap:8px 16px">
+          <div class="f full"><label>Lý do vào viện</label><b>${h(r.lyDo||'—')}</b></div>
+          <div class="f full"><label>Kế hoạch điều trị</label><b style="white-space:pre-wrap">${h(r.keHoach||'—')}</b></div>
+        </div>
+        <div style="margin-top:12px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+          <b style="font-size:13.5px">Các vấn đề của khách</b>
+          <span class="sub-line">nhiều vấn đề cùng lúc đều nằm trên một bệnh án</span>
+          <span class="spacer"></span>
+          <button class="btn small" onclick="Cust.vanDeForm()">${IC.plus} Thêm vấn đề</button></div>
+        <div style="margin-top:6px">${Cust.vanDeHTML(c)}</div>
+        <div class="note-block" style="margin-top:12px">Mục <b>VI. Quá trình điều trị</b> trên bản in cộng dồn
+          <b>${n} lần diễn biến</b> của mọi đợt, sắp theo ngày và ghi rõ thuộc đợt nào.
+          Hết chỗ thì in tiếp <b>Phiếu theo dõi điều trị</b>.</div>
+        <div class="form-actions" style="justify-content:flex-start;margin-top:12px">
+          <button class="btn primary" onclick="HoSo.dien('ba18')">Điền bệnh án</button>
+          <button class="btn" onclick="HoSo.in('ba18')">${IC.print} In bệnh án A4</button>
+          <button class="btn" onclick="Cust.recordForm()">Sửa chi tiết (khám, tiền sử)</button></div>
+      </div></div>`;
+  },
+
   /* ---------- Thẻ trong hồ sơ khách ---------- */
   cardHTML(c){
     const ds = Dot.cua(c.id), ep = Dot.dangChon(c);
-    if (!ds.length) return `<div class="card mb"><div class="card-h"><h2>Bệnh án điện tử</h2>
-      <span class="hint">5 biểu mẫu · điền trên máy rồi in khổ A4</span></div>
-      <div class="card-b"><div class="note-block">Chưa có đợt điều trị nào. Một <b>đợt điều trị</b> gom nhiều dịch vụ
-        làm cùng thời gian cho khách này — chẩn đoán, bác sĩ, danh sách dịch vụ nhập một lần,
-        cả năm biểu mẫu cùng dùng.</div>
+    if (!ds.length) return `<div class="card mb"><div class="card-h"><h2>Giấy tờ theo đợt điều trị</h2>
+      <span class="hint">in khổ A4</span></div>
+      <div class="card-b"><div class="note-block">Chưa có đợt điều trị nào. <b>Bệnh án ngoại trú ở trên</b> là của khách,
+        dùng suốt mọi đợt. Còn <b>đợt điều trị</b> gom các dịch vụ làm cùng thời gian, và giữ
+        giấy cam kết, phiếu tư vấn, báo giá, phiếu thu của lần can thiệp đó.</div>
       <div class="form-actions" style="justify-content:flex-start;margin-top:10px">
         <button class="btn primary" onclick="Dot.form()">${IC.plus} Mở đợt điều trị</button></div></div></div>`;
     const muc = Dot.mucCua(ep);
     const tong = muc.reduce((s,t)=>s+(t.price||0),0);
-    return `<div class="card mb"><div class="card-h"><h2>Bệnh án điện tử</h2>
+    return `<div class="card mb"><div class="card-h"><h2>Giấy tờ theo đợt điều trị</h2>
       <span class="hint">điền trên máy rồi in khổ A4</span><span class="spacer"></span>
       <button class="btn small" onclick="Dot.form()">${IC.plus} Đợt mới</button></div>
       <div class="card-b">
@@ -1995,9 +2207,17 @@ const HoSo = {
     if (d.chanDoan != null) d.chanDoan = icdCode(d.chanDoan);
     if (d.chanDoanKem != null) d.chanDoanKem = icdCode(d.chanDoanKem);
     d._at = todayISO();
-    if (!ep.phieu) ep.phieu = {};
-    ep.phieu[k] = d;
-    ep._up = Date.now();
+    if (this.cuaKhach(k)) {
+      /* Bệnh án của khách: gộp vào bản đang có, giữ nguyên quá trình điều trị
+         và danh sách vấn đề vì hai thứ đó sửa ở chỗ khác. */
+      const cu = c.record || {};
+      c.record = Object.assign({}, cu, d, {dienBien: cu.dienBien || [], vanDe: cu.vanDe || []});
+      c._up = Date.now();
+    } else {
+      if (!ep.phieu) ep.phieu = {};
+      ep.phieu[k] = d;
+      ep._up = Date.now();
+    }
     save(); App.closeModal(); App.render();
     App.toast('Đã lưu ' + this.ten(k) + ' ✓');
     if (inLuon) this.in(k);
@@ -2039,7 +2259,7 @@ Object.assign(HoSo, {
 
   /* ---------- 1. Bệnh án ngoại trú RHM (BA-18) ---------- */
   f_ba18(c, ep){
-    const r = c.record || {}, d = this.dl(ep, 'ba18');
+    const d = c.record || {}, r = d;
     const g = (k, fb) => d[k] != null ? d[k] : (fb || '');
     return `
     ${this.oGY('lyDo','lyDo', g('lyDo', ep.lyDo || r.lyDo), GY.lyDo, 'I. Lý do vào viện, vấn đề sức khỏe', 1)}
@@ -2070,10 +2290,11 @@ Object.assign(HoSo, {
     <div class="note-block full">Mục VI <b>Quá trình điều trị</b> và <b>Sơ đồ răng</b> tự lấy từ hồ sơ, không cần nhập lại ở đây.</div>`;
   },
   p_ba18(c, ep){
-    const r = c.record || {}, d = this.dl(ep, 'ba18');
+    const d = c.record || {}, r = d;
     const g = (k, fb) => (d[k] != null && d[k] !== '') ? d[k] : (fb || '');
     const ds = (r.dienBien || []).slice().sort((a,b)=>(a.date||'')<(b.date||'')?-1:1);
-    const rows = ds.map(v => `<tr><td style="width:80px">${fmtD(v.date)}</td><td>${h(v.db||'')}</td><td>${h(v.xt||'')}</td><td></td></tr>`).join('')
+    const tenDot = id => { const e = (db.episodes||[]).find(x => x.id === id); return e ? (e.ten || 'Đợt ' + fmtD(e.tuNgay)) : ''; };
+    const rows = ds.map(v => `<tr><td style="width:78px">${fmtD(v.date)}</td><td>${h(v.db||'')}</td><td>${h(v.xt||'')}</td><td style="width:96px">${h(tenDot(v.episodeId))}</td></tr>`).join('')
       || '<tr><td>&nbsp;</td><td></td><td></td><td></td></tr>'.repeat(4);
     const tuN = ep.tuNgay ? fmtD(ep.tuNgay) : (ds.length ? fmtD(ds[0].date) : '…/…/……');
     const denN = ep.denNgay ? fmtD(ep.denNgay) : (ds.length ? fmtD(ds[ds.length-1].date) : '…/…/……');
@@ -2121,7 +2342,7 @@ Object.assign(HoSo, {
       Biến chứng: ${this.gach(icdName(r.bienChung),54)}</p>
     <p><b>V. KẾ HOẠCH ĐIỀU TRỊ</b><br>${h(g('keHoach', ep.keHoach || r.keHoach)).replace(/\n/g,'<br>') || this.cham(100)+'<br>'+this.cham(100)}</p>
     <h2>VI. QUÁ TRÌNH ĐIỀU TRỊ</h2>
-    <table><tr><th style="width:80px">Ngày</th><th>Diễn biến bệnh</th><th>Xử trí</th><th style="width:80px">Ghi chú</th></tr>${rows}</table>
+    <table><tr><th style="width:78px">Ngày</th><th>Diễn biến bệnh</th><th>Xử trí</th><th style="width:96px">Đợt điều trị</th></tr>${rows}</table>
     <p style="margin-top:8px"><b>VII. THỜI GIAN ĐIỀU TRỊ</b><br>Điều trị từ ngày ${tuN} đến ngày ${denN}</p>
     <div class="sign">
       <div>${this.ngayChu(ep.denNgay)}<br><b>Bác sỹ điều trị</b><br>(Ký, ghi rõ họ tên)<br><br><br>${h(bs?bs.name:'')}</div>
