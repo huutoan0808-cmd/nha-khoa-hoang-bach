@@ -387,6 +387,7 @@ const IC = {
   more:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   search:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  cam:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M3 8.5A2 2 0 0 1 5 6.5h2.2l1.2-2h7.2l1.2 2H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.4"/></svg>',
   cog:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.6v2.6M12 18.8v2.6M21.4 12h-2.6M5.2 12H2.6M18.6 5.4l-1.8 1.8M7.2 16.8l-1.8 1.8M18.6 18.6l-1.8-1.8M7.2 7.2 5.4 5.4"/></svg>',
   print:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg>',
 };
@@ -1702,8 +1703,8 @@ SCREENS.customers = () => {
 
   return `
   <div class="page-head"><h1>Khách hàng</h1><span class="spacer"></span>
-    ${Perm.only('caidat', `<button class="btn" onclick="App.dedupeForm()">Dọn trùng lặp</button>
-    <button class="btn" onclick="Importer.form()">Nhập từ Google Sheet</button>`)}
+    ${Perm.only('caidat', `<button class="btn" onclick="App.dedupeForm()">Dọn trùng lặp</button>`)}
+    <button class="btn" onclick="Importer.anhForm()">${IC.cam} Nhập từ ảnh chụp</button>
     <button class="btn primary" onclick="Cust.form()">${IC.plus} Thêm khách hàng</button>
     <div class="sub">${db.customers.length} hồ sơ · thông tin hành chính theo mẫu BA-18</div></div>
   <div class="searchbar">${IC.search}<input placeholder="Tìm theo tên, số điện thoại, mã KH..." value="${h(App.state.custQ)}"
@@ -6222,6 +6223,8 @@ SCREENS.settings = () => {
     <div class="card-b">
       ${the('Đồng bộ đám mây', (() => { const st = Sync.status(); return `<span class="pill ${st.k}">${h(st.t)}</span>`; })(),
         `<button class="btn small" onclick="App.syncNow()">Đồng bộ ngay</button>`)}
+      ${the('Nhập hồ sơ từ ảnh chụp phiếu giấy', 'Chụp phiếu điều trị cũ, trợ lý AI đọc thành bảng, dán vào đây',
+        `<button class="btn small primary" onclick="Importer.anhForm()">Nhập từ ảnh chụp</button>`)}
       ${the('Nhập khách hàng từ Google Sheet', 'Dán bảng từ Sheet để nạp hàng loạt hồ sơ khách',
         `<button class="btn small" onclick="Importer.form()"${khoa}>Mở trình nhập</button>`)}
       ${the('Dọn trùng lặp', 'Gộp hồ sơ trùng mã và bỏ phiếu thu trùng số — không mất lịch sử điều trị',

@@ -282,6 +282,55 @@ const Importer = {
     appointments:{label:'Lịch hẹn',          sheet:'DAT HEN'},
     inventory:   {label:'Vật liệu / kho',    sheet:'VAT LIEU'},
   },
+  /* ---------- Nhập từ ẢNH CHỤP phiếu giấy ----------
+     Lễ tân chụp phiếu bằng điện thoại, gửi cho trợ lý AI của phòng khám, nhận lại
+     bảng CSV rồi dán vào đây. Máy không tự đọc chữ viết tay được, nên bước đọc ảnh
+     nằm ngoài phần mềm — nhưng bước DÁN thì để ngay đây cho khỏi phải đi vòng. */
+  anhForm(kind){
+    kind = kind || 'customers';
+    App.modal('Nhập hồ sơ từ ảnh chụp', `
+    <div class="card mb"><div class="card-h"><h2>Làm theo 4 bước</h2></div>
+      <div class="card-b">
+        <div class="alert-line"><span class="alert-ico info">1</span><div>
+          <b>Chụp phiếu giấy</b> bằng điện thoại — chụp thẳng góc, đủ sáng, mỗi tấm một tờ.
+          Bệnh nhân có mấy tờ thì chụp đủ mấy tờ, vì cột tiền tờ sau nối tiếp tờ trước.</div></div>
+        <div class="alert-line"><span class="alert-ico info">2</span><div>
+          <b>Gửi ảnh cho trợ lý AI</b> của phòng khám, nói <i>"nhập hồ sơ này vào app"</i>.</div></div>
+        <div class="alert-line"><span class="alert-ico info">3</span><div>
+          Trợ lý gửi lại <b>hai bảng</b>: một bảng khách hàng, một bảng lịch sử điều trị,
+          kèm danh sách những chỗ chữ mờ không đọc được.</div></div>
+        <div class="alert-line"><span class="alert-ico info">4</span><div>
+          <b>Dán từng bảng vào ô bên dưới</b> — khách hàng trước, lịch sử điều trị sau.
+          Phần mềm hiện bảng xem trước để bạn duyệt rồi mới ghi vào.</div></div>
+      </div></div>
+
+    <form class="form-grid" onsubmit="Importer.run(event)">
+      <div class="f full"><label>Đang dán bảng nào</label>
+        <select name="kind">${Object.entries(this.KINDS).map(([k, v]) =>
+          `<option value="${k}"${k === kind ? ' selected' : ''}>${v.label}</option>`).join('')}</select></div>
+      <div class="f full"><label>Dán nội dung bảng vào đây</label>
+        <textarea name="csv" style="min-height:130px;font-family:ui-monospace,Consolas,monospace;font-size:12.5px"
+          placeholder="Mã KH,Họ và tên,Ngày sinh,Giới tính,Số điện thoại,...&#10;167,Trần Thị Hơn,,Nữ,0916620531,..."></textarea></div>
+      <div class="f full"><label>Cách xử lý</label>
+        <select name="mode">
+          <option value="append">Thêm vào dữ liệu hiện có</option>
+          <option value="replace">Thay thế toàn bộ bảng này</option>
+        </select>
+        <div class="combo-hint">Nhập hồ sơ mới thì luôn để <b>Thêm vào</b> —
+          "Thay thế" sẽ xoá sạch bảng đang có.</div></div>
+      <div class="note-block full"><b>Nhớ đúng thứ tự:</b> nhập bảng <b>Khách hàng</b> trước,
+        rồi mới tới <b>Lịch sử điều trị</b>. Bảng điều trị ghép vào khách theo mã KH —
+        khách chưa có thì các dòng điều trị sẽ rơi hết.
+        <br>Nhập xong nhớ vào <b>Cài đặt → Nhân viên</b> đặt lại vai trò cho bác sĩ, phụ tá mới,
+        vì phần mềm tạo mới ai cũng thành "Bác sĩ điều trị".</div>
+      <div class="form-actions full">
+        <button type="button" class="btn" onclick="Importer.form()">Nhập từ file / Google Sheet</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" onclick="App.closeModal()">Đóng</button>
+        <button class="btn primary">Đọc bảng vừa dán</button></div>
+    </form>`);
+  },
+
   form(){
     App.modal('Nhập dữ liệu từ sổ cũ (AppSheet / Google Sheet)', `
     <div class="card mb"><div class="card-h"><h2>Cách nhanh nhất — nhập tất cả một lần</h2></div>
@@ -316,7 +365,10 @@ const Importer = {
       <div class="note-block full"><b>Cách lấy file CSV:</b> mở Google Sheet → chọn đúng tab cần nhập
         → <b>File → Tải xuống → Giá trị được phân tách bằng dấu phẩy (.csv)</b> → chọn file vừa tải ở ô trên.
         <br>Làm lần lượt 4 bảng: Khách hàng → Lịch sử điều trị → Lịch hẹn → Vật liệu.</div>
-      <div class="form-actions full"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+      <div class="form-actions full">
+        <button type="button" class="btn" onclick="Importer.anhForm()">Nhập từ ảnh chụp</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
         <button class="btn primary">Đọc dữ liệu</button></div>
     </form>`);
   },
