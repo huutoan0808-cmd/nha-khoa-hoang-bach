@@ -172,6 +172,69 @@ const Importer = {
     return st.id;
   },
 
+  /* ---------- Hạng mục điều trị (bảng HANG MUC) ----------
+     Khác với bảng "Lịch sử điều trị" chỉ ghi lại diễn biến và tiền đã thu, bảng này
+     dựng ra HẠNG MỤC thật: có số răng, đơn giá, giảm giá, bác sĩ, trạng thái. Nhờ đó
+     sơ đồ "Sau điều trị" vẽ được, hoa hồng công đoạn tính được, và báo cáo theo nhóm
+     dịch vụ mới có số. */
+  buildItems(rows){
+    const byCode = {}; db.customers.forEach(c => byCode[c.code] = c);
+    const items = [], created = [], dotMoi = [];
+    const missing = new Set(); let noName = 0;
+    const g = (r, k) => this.norm(r[k] !== undefined ? r[k] : r[k + ' ']);
+    /* Đợt điều trị: mỗi (khách + tên đợt) chỉ dựng một lần */
+    const dot = {};
+    const timDot = (c, ten, ngay) => {
+      ten = this.norm(ten); if (!ten) return '';
+      const khoa = c.id + '|' + Combo.norm(ten);
+      if (dot[khoa]) return dot[khoa];
+      const co = (db.episodes || []).find(e => e.customerId === c.id && Combo.norm(e.ten || '') === Combo.norm(ten));
+      if (co) { dot[khoa] = co.id; return co.id; }
+      const e = {id: uid(), customerId: c.id, ten, tuNgay: ngay || todayISO(), denNgay: '',
+                 doctorId: '', status: 'Đang điều trị', muc: [], phieu: {}};
+      dotMoi.push(e); dot[khoa] = e.id;
+      return e.id;
+    };
+
+    rows.forEach(r => {
+      const code = this.custCode(g(r, 'Mã KH'));
+      const c = byCode[code];
+      if (!c) { if (code) missing.add(code); return; }
+      const ten = g(r, 'Dịch vụ') || g(r, 'Công việc');
+      if (!ten) { noName++; return; }
+
+      /* Khớp với bảng giá phòng khám để lấy đúng nhóm và mã dịch vụ */
+      const dv = (db.services || []).find(x => Combo.norm(x.name || '') === Combo.norm(ten));
+      const rang = g(r, 'Răng') || g(r, 'Vị trí răng');
+      const donGia = this.money(g(r, 'Đơn giá')) || (dv ? (dv.price || 0) : 0);
+      const sl = Math.max(1, parseInt(g(r, 'Số lượng'), 10) || Treat.demRang(rang) || 1);
+      const pct = Math.min(100, Math.max(0, parseFloat(String(g(r, 'Giảm %')).replace(',', '.')) || 0));
+      const giam = this.money(g(r, 'Giảm thêm'));
+      const tt = this.norm(g(r, 'Trạng thái'));
+      const status = TREAT_STATUS.find(x => Combo.norm(x) === Combo.norm(tt)) || 'Hoàn tất';
+
+      items.push({
+        id: uid(), customerId: c.id,
+        episodeId: timDot(c, g(r, 'Đợt điều trị'), this.anyDate(g(r, 'Ngày'))),
+        serviceId: dv ? dv.id : '',
+        name: dv ? dv.name : ten,
+        group: dv ? dv.group : (this.mapGroup(g(r, 'Nhóm')) !== 'Khác' ? this.mapGroup(g(r, 'Nhóm')) : (g(r, 'Nhóm') || 'Khác')),
+        tooth: rang,
+        donGia, sl, giamPct: pct, giamTien: giam,
+        price: Treat.thanhTien(donGia, sl, pct, giam),
+        tienLab: this.money(g(r, 'Tiền lab')),
+        doctorId: this.staffByName(g(r, 'Bác sĩ') || g(r, 'Điều trị'), 'Bác sĩ điều trị', created),
+        assistantId: this.staffByName(g(r, 'Phụ tá'), 'Phụ tá', created),
+        status,
+        date: this.anyDate(g(r, 'Ngày')) || todayISO(),
+        note: g(r, 'Ghi chú'),
+        cd: [],
+      });
+    });
+    const tong = items.reduce((s, t) => s + (t.price || 0), 0);
+    return {items, dotMoi, created, missing: [...missing], noName, tong};
+  },
+
   /* ---------- Điều trị (bảng CONG VIEC) ---------- */
   buildTreatments(rows){
     const byCode = {}; db.customers.forEach(c => byCode[c.code] = c);
@@ -279,6 +342,7 @@ const Importer = {
   KINDS: {
     customers:   {label:'Khách hàng',        sheet:'THONG TIN'},
     treatments:  {label:'Lịch sử điều trị',  sheet:'CONG VIEC'},
+    items:       {label:'Hạng mục điều trị', sheet:'HANG MUC'},
     appointments:{label:'Lịch hẹn',          sheet:'DAT HEN'},
     inventory:   {label:'Vật liệu / kho',    sheet:'VAT LIEU'},
   },
@@ -378,7 +442,10 @@ const Importer = {
     if (!rows.length) return '';
     const cols = Object.keys(rows[0]).map(x => x.toLowerCase());
     const has = t => cols.some(c => c.includes(t));
-    if (has('họ và tên') && has('ngày tháng năm sinh')) return 'customers';
+    /* Chỉ bảng khách hàng mới có cột họ tên, nên một dấu hiệu là đủ — trước đây
+       còn đòi đúng chữ "ngày tháng năm sinh" nên file ghi "Ngày sinh" là không nhận ra. */
+    if (has('họ và tên') || has('họ tên') || has('tên khách hàng')) return 'customers';
+    if (has('dịch vụ') && (has('đơn giá') || has('giảm'))) return 'items';
     if (has('ngày điều trị') || has('tổng thu')) return 'treatments';
     if (has('ngày đặt hẹn') || (has('giờ bắt đầu') && has('mã kh'))) return 'appointments';
     if (has('tên vật liệu') || has('mã vật liệu')) return 'inventory';
@@ -387,7 +454,7 @@ const Importer = {
 
   /* Nhập nhiều file cùng lúc, tự sắp đúng thứ tự: khách hàng trước, còn lại sau */
   async runMulti(files, mode){
-    const order = ['customers','treatments','appointments','inventory'];
+    const order = ['customers','items','treatments','appointments','inventory'];
     const found = {}, unknown = [];
     for (const f of files) {
       const rows = this.parseCSV(await f.text());
@@ -506,6 +573,25 @@ const Importer = {
            và có <b>509 dòng</b> mà ba cột tiền không khớp nhau. Vì vậy tôi lấy con số chắc chắn nhất là
            <b>Thanh toán</b> làm doanh thu, còn số nợ gốc giữ nguyên trong ghi chú từng lần điều trị.</div>`;
     }
+    if (kind === 'items') {
+      const r = this.buildItems(rows);
+      pending = {kind, ...r};
+      const xong = r.items.filter(t => t.status === 'Hoàn tất' && Tooth.rangCua(t).length);
+      const nhom = {};
+      r.items.forEach(t => nhom[t.group] = (nhom[t.group] || 0) + 1);
+      body = row('info', `Đọc được <b>${r.items.length}</b> hạng mục điều trị từ ${rows.length} dòng`)
+        + row('info', `Tổng tiền các hạng mục: <b>${money(r.tong)}</b>`)
+        + row('info', `Theo nhóm: ${Object.entries(nhom).sort((a,b)=>b[1]-a[1]).map(([k,v])=>h(k)+' ('+v+')').join(' · ')}`)
+        + (xong.length ? row('info', `<b>${xong.length}</b> hạng mục đã hoàn tất có ghi số răng — sơ đồ <b>Sau điều trị</b> sẽ vẽ được`)
+                       : row('warn', 'Chưa hạng mục nào vừa "Hoàn tất" vừa có số răng — sơ đồ Sau điều trị sẽ trống'))
+        + (r.dotMoi.length ? row('info', `Tự mở <b>${r.dotMoi.length}</b> đợt điều trị mới`) : '')
+        + (r.created.length ? row('info', `Tự tạo <b>${r.created.length}</b> nhân viên: ${h(r.created.join(', '))}`) : '')
+        + (r.noName ? row('warn', `<b>${r.noName}</b> dòng thiếu tên dịch vụ nên bỏ qua`) : '')
+        + (r.missing.length ? row('warn', `<b>${r.missing.length}</b> mã khách chưa có hồ sơ nên bỏ qua: ${h(r.missing.slice(0,8).join(', '))}${r.missing.length>8?'…':''}`) : '')
+        + `<div class="note-block" style="margin-top:10px">Hạng mục là <b>cái sinh ra công nợ</b>: phần mềm lấy tổng hạng mục
+           trừ tổng phiếu thu ra số khách còn nợ. Nếu bạn đã nhập bảng <b>Lịch sử điều trị</b> cho cùng những khách này
+           thì ở đó đã có sẵn một hạng mục "Công nợ chuyển từ sổ cũ" — nên xóa nó đi, không thì cộng dồn hai lần.</div>`;
+    }
     if (kind === 'appointments') {
       const r = this.buildAppointments(rows);
       pending = {kind, ...r};
@@ -543,6 +629,11 @@ const Importer = {
           .sort((a, b) => String(a.date).localeCompare(String(b.date)));
       });
       p.receipts.forEach(r => { r.no = 'PT-' + (++db.seq.receipt); db.receipts.push(r); });
+    } else if (p.kind === 'items') {
+      if (mode === 'replace') db.treatments = [];
+      if (!db.episodes) db.episodes = [];
+      db.episodes = db.episodes.concat(p.dotMoi || []);
+      db.treatments = db.treatments.concat(p.items);
     } else if (p.kind === 'appointments') {
       if (mode === 'replace') db.appointments = [];
       db.appointments = db.appointments.concat(p.appointments);
