@@ -272,6 +272,7 @@ td.r,th.r{text-align:right}
 .legend i.lg-ts{background:transparent;border:2px solid var(--accent-ink)}
 .legend i.lg-tl{background:transparent;border:2px dashed var(--warn)}
 .legend i.lg-im{background:repeating-linear-gradient(180deg,var(--accent) 0 2px,transparent 2px 4px)}
+.legend i.lg-nc{background:transparent;border:2px solid var(--accent-ink);border-bottom:none}
 .legend i.lg-mat{background:transparent;border:1.5px dashed var(--muted);position:relative}
 .legend i.lg-lodo{background:transparent;border:2px solid var(--danger);border-radius:50%}
 .legend i.lg-sung{background:var(--warn);border-radius:50% 50% 0 0}

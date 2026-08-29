@@ -101,6 +101,7 @@ const TOOTH_STATES = [
   ['crownTS', 'Răng sứ toàn sứ'],
   ['thaolap', 'Răng tháo lắp'],
   ['implant', 'Implant'],
+  ['pontic',  'Nhịp cầu (răng giả trên cầu)'],
   ['missing', 'Mất răng'],
 ];
 /* Dịch vụ cơ bản phòng khám làm thường xuyên. Bản cài cũ thiếu món nào thì tự thêm
@@ -1027,6 +1028,7 @@ const Cust = {
     filled:  ['Trám sâu răng phía trong — nâng cao','Răng toàn sứ Zirconia','Endocrown','Inlay / Onlay Emax'],
     crownKL: ['Gắn lại răng sứ kim loại','Răng toàn sứ Zirconia','Răng toàn sứ Cercon'],
     crownTS: ['Gắn lại răng toàn sứ','Răng toàn sứ Cercon','Răng toàn sứ Lava'],
+    pontic:  ['Gắn lại răng sứ kim loại','Gắn lại răng toàn sứ','Trụ Implant Hàn Quốc','Răng toàn sứ Zirconia'],
     missing: ['Trụ Implant Hàn Quốc','Trụ Implant Pháp','Răng tháo lắp nhựa — Nhật',
               'Hàm khung hợp kim Titan','Răng toàn sứ Zirconia'],
     thaolap: ['Răng tháo lắp nhựa — Nhật','Hàm khung hợp kim Titan','Đệm hàm','Thêm móc','Vá hàm nứt, vỡ'],
@@ -1039,6 +1041,7 @@ const Cust = {
     filled:  ['K02.8','K02.1','K02.9'],
     crownKL: ['K08.1','K02.5','K03.7'],
     crownTS: ['K08.1','K02.5','K03.7'],
+    pontic:  ['K08.1','Z97.2','K08.2'],
     missing: ['K08.1','K08.2','K08.3'],
     thaolap: ['Z97.2','Z46.3','K08.1'],
     implant: ['K08.1','K08.2'],
@@ -1251,7 +1254,12 @@ const Cust = {
       const kq = Tooth.ketQua(t.name); if (!kq) return;
       Tooth.rangCua(t).forEach(n => {
         const r = moi[n] || (moi[n] = {s: 'ok', mat: [], note: ''});
-        if (kq.s) r.s = kq.s;
+        /* Răng đã nhổ mà nay nằm trong một cầu răng sứ thì đó là NHỊP CẦU —
+           có thân răng sứ nhưng không có chân răng. Ghi 'răng sứ' vào chỗ này
+           là sai, vì nhìn sơ đồ sẽ tưởng răng thật còn nguyên. */
+        if (kq.s === 'crownTS' || kq.s === 'crownKL') {
+          r.s = (r.s === 'missing' || r.s === 'pontic') ? 'pontic' : kq.s;
+        } else if (kq.s) r.s = kq.s;
         /* Nội nha xử lý đúng cái ổ nhiễm trùng, nên lỗ dò và sưng coi như đã lành.
            Còn tồn tại thật thì bác sĩ tick lại tay. */
         if (kq.nn) { r.nn = true; r.loDo = false; r.sung = false; }
@@ -3651,6 +3659,10 @@ const Tooth = {
     if (t.s === 'crownTS')  g.push(`<rect x="2" y="2" width="28" height="28" rx="4" fill="none" stroke="var(--accent-ink)" stroke-width="2.5"/>`);
     if (t.s === 'thaolap')  g.push(`<rect x="2" y="2" width="28" height="28" rx="4" fill="none" stroke="var(--warn)" stroke-width="2.5" stroke-dasharray="4 3"/>`);
     if (t.s === 'implant')  g.push(`<path d="M16 4v24" stroke="var(--accent)" stroke-width="3"/><path d="M10 10h12M10 15h12M10 20h12M10 25h12" stroke="var(--accent)" stroke-width="2"/>`);
+    /* Nhịp cầu: thân răng sứ KHÔNG có chân, treo giữa hai răng trụ. Vẽ thân răng
+       hở đáy, thêm hai mấu nối sang hai bên và vạch nướu bên dưới để thấy rõ
+       nó chỉ tì lên nướu chứ không cắm xuống xương. */
+    if (t.s === 'pontic')   g.push(`<rect x="5" y="3" width="22" height="21" rx="4" fill="none" stroke="var(--accent-ink)" stroke-width="2.5"/><path d="M1 13h4M27 13h4" stroke="var(--accent-ink)" stroke-width="3.5" stroke-linecap="round"/><path d="M7 29h18" stroke="var(--accent-ink)" stroke-width="2" stroke-linecap="round" opacity=".75"/>`);
     /* Lỗ dò và sưng đáy hành lang là DẤU HIỆU quan sát được, không phải cách điều trị,
        nên đánh dấu được cùng lúc với bất kỳ tình trạng nào của răng. */
     if (t.loDo) g.push(`<circle cx="27" cy="5" r="3.6" fill="var(--surface)" stroke="var(--danger)" stroke-width="1.8"/><circle cx="27" cy="5" r="1.4" fill="var(--danger)"/>`);
@@ -3744,6 +3756,7 @@ const Tooth = {
       <span><i class="lg-ts"></i>Răng sứ toàn sứ</span>
       <span><i class="lg-tl"></i>Răng tháo lắp</span>
       <span><i class="lg-im"></i>Implant</span>
+      <span><i class="lg-nc"></i>Nhịp cầu</span>
       <span><i class="lg-mat"></i>Mất răng</span>
       <span><i class="lg-lodo"></i>Lỗ dò</span>
       <span><i class="lg-sung"></i>Sưng đáy hành lang</span>
