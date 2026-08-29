@@ -1018,6 +1018,7 @@ const Cust = {
       </div>
       <div class="f full" id="oNoiNha" style="display:${!kh && TT_CO_NOI_NHA.includes(t.s)?'':'none'}"><div class="check-row">
         <label><input type="checkbox" name="nn"${t.nn?' checked':''}> Răng đã nội nha (điều trị tủy)</label></div></div>
+      ${Cust.oHamKhung(c, lop, [n], t.s)}
       <div class="f full" style="display:${kh?'none':''}"><label>Dấu hiệu quanh chóp</label><div class="check-row">
         <label><input type="checkbox" name="loDo"${t.loDo?' checked':''}> Lỗ dò</label>
         <label><input type="checkbox" name="sung"${t.sung?' checked':''}> Sưng đáy hành lang</label></div></div>
@@ -1031,6 +1032,36 @@ const Cust = {
         <button class="btn primary">Lưu</button></div>
     </form>`);
   },
+  /* Hàm khung là chuyện của CẢ HÀM, không phải của một cái răng — nhưng chỉ hỏi
+     khi răng đang được đánh dấu là răng tháo lắp, vì ngoài lúc đó ra hỏi cũng vô nghĩa.
+     Tick vào thì ghi cho đúng cái hàm chứa răng đó. */
+  khoaHK(lop){ return {teethKH: 'hamKhungKH', teethST: 'hamKhungST'}[lop] || 'hamKhung'; },
+  oHamKhung(c, lop, ds, sHienTai){
+    const k = this.khoaHK(lop), hk = c[k] || {};
+    const tren = ds.some(n => Tooth.hamTren(n)), duoi = ds.some(n => !Tooth.hamTren(n));
+    const dang = (tren && hk.tren) || (duoi && hk.duoi);
+    const ten = [tren && 'hàm trên', duoi && 'hàm dưới'].filter(Boolean).join(' và ');
+    return `<div class="f full" id="oHamKhung" style="display:${sHienTai === 'thaolap' ? '' : 'none'}">
+      <label>Hàm khung tháo lắp</label>
+      <div class="check-row">
+        <label><input type="radio" name="hk" value="0"${dang?'':' checked'}> Không có hàm khung</label>
+        <label><input type="radio" name="hk" value="1"${dang?' checked':''}> Có hàm khung ${h(ten)}</label>
+      </div>
+      <input name="hkNote" value="${h(hk.note||'')}" placeholder="Ghi chú: khung Titan, móc răng 34-44…" style="margin-top:6px">
+      <div class="combo-hint">Ghi cho <b>cả ${h(ten)}</b> chứ không riêng răng này — hàm khung vốn là một khối.</div></div>`;
+  },
+  luuHamKhung(f, c, lop, ds){
+    const o = f.querySelector('[name="hk"]:checked');
+    if (!o) return;                                   /* tình trạng không phải tháo lắp */
+    const k = this.khoaHK(lop);
+    const hk = c[k] || (c[k] = {});
+    const co = o.value === '1';
+    if (ds.some(n => Tooth.hamTren(n))) hk.tren = co;
+    if (ds.some(n => !Tooth.hamTren(n))) hk.duoi = co;
+    hk.note = ((f.querySelector('[name="hkNote"]') || {}).value || '').trim();
+    if (!hk.tren && !hk.duoi && !hk.note) delete c[k];
+  },
+
   /* Răng đang ở tình trạng này thì thường làm những dịch vụ nào — chỉ là gợi ý,
      gõ tự do vẫn được. Khớp theo TÌNH TRẠNG HIỆN TẠI của răng. */
   DV_THEO_KH: {
@@ -1121,6 +1152,9 @@ const Cust = {
     }
     /* Mất răng, implant, tháo lắp thì không có tủy để nội nha — giấu luôn ô tick,
        và bỏ dấu đã tick kẻo lưu lại một thông tin vô lý. */
+    /* Chỉ răng tháo lắp mới hỏi hàm khung */
+    const hk = document.getElementById('oHamKhung');
+    if (hk) hk.style.display = (v === 'thaolap') ? '' : 'none';
     const nn = document.getElementById('oNoiNha');
     if (nn && !keHoach) {
       const duoc = TT_CO_NOI_NHA.includes(v);
@@ -1149,6 +1183,7 @@ const Cust = {
       /* Đánh dấu "sửa tay" để lần dựng lại sơ đồ sau điều trị không ghi đè */
       if (lop === 'teethST') c[lop][n].tay = 1;
     }
+    this.luuHamKhung(f, c, lop, [n]);
     save(); App.closeModal(); App.render();
     App.toast('Đã lưu răng ' + n
       + (lop === 'teethKH' ? ' (kế hoạch) ✓' : lop === 'teethST' ? ' (sau điều trị) ✓' : ' ✓'));
@@ -1304,6 +1339,69 @@ const Cust = {
     App.state.rangChon = ds; App.render();
   },
   /* Lập một hạng mục điều trị chung cho tất cả răng đang chọn */
+  /* Bước 1 — ghi một tình trạng cho cả nhóm răng. Mất nhiều răng liền nhau,
+     cao răng cả hàm, sâu nhiều răng cùng một mặt… đánh từng cái thì lâu mà dễ sót. */
+  khamNhieu(){
+    const c = custById(App.state.custSel);
+    const ds = (App.state.rangChon || []).slice().sort((a,b)=>a-b);
+    if (!ds.length) { App.toast('Chưa chọn răng nào'); return; }
+    /* Nếu cả nhóm đang cùng một tình trạng thì mở sẵn tình trạng đó cho dễ sửa */
+    const dangCo = [...new Set(ds.map(n => ((c.teeth||{})[n]||{}).s || 'ok'))];
+    const s0 = dangCo.length === 1 ? dangCo[0] : 'ok';
+    App.modal('Ghi tình trạng cho ' + ds.length + ' răng', `
+    <form class="form-grid" onsubmit="Cust.khamNhieuLuu(event)">
+      <div class="note-block full">Sẽ ghi <b>cùng một tình trạng</b> cho các răng:
+        <b>${ds.map(n=>'R'+n).join(', ')}</b>.
+        ${dangCo.length > 1 ? '<br>Các răng này đang có tình trạng khác nhau — lưu xong sẽ thành giống nhau hết.' : ''}</div>
+      <div class="f full"><label>Tình trạng</label>
+        <select name="s" onchange="Cust.toothMatHien(this.value)">
+          ${TOOTH_STATES.map(([k,l])=>`<option value="${k}"${s0===k?' selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="f full" id="oMat" style="display:${(s0==='caries'||s0==='filled')?'':'none'}">
+        <label>Mặt răng (áp cho mọi răng đã chọn)</label>
+        <div class="check-row">${TOOTH_SURF.map(([k,l])=>
+          `<label><input type="checkbox" name="mat" value="${k}"> ${h(l)}</label>`).join('')}</div>
+        <div class="combo-hint">Bỏ trống thì chỉ ghi tình trạng, không tô mặt nào.</div></div>
+      <div class="f full" id="oNoiNha" style="display:${TT_CO_NOI_NHA.includes(s0)?'':'none'}"><div class="check-row">
+        <label><input type="checkbox" name="nn"> Đã nội nha</label></div></div>
+      <div class="f full"><label>Dấu hiệu quanh chóp</label><div class="check-row">
+        <label><input type="checkbox" name="loDo"> Lỗ dò</label>
+        <label><input type="checkbox" name="sung"> Sưng đáy hành lang</label></div></div>
+      ${Cust.oHamKhung(c, 'teeth', ds, s0)}
+      <div class="f full"><label>Ghi chú</label>
+        <input name="note" placeholder="Vd: cao răng nhiều, nướu sưng đỏ…"></div>
+      <div class="f full"><div class="check-row">
+        <label><input type="checkbox" name="giuGhiChu" checked> Giữ ghi chú cũ của những răng đã có</label></div></div>
+      <div class="form-actions full">
+        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+        <button class="btn primary">Ghi cho ${ds.length} răng</button></div>
+    </form>`);
+  },
+  khamNhieuLuu(ev){
+    ev.preventDefault();
+    const f = ev.target;
+    const c = custById(App.state.custSel);
+    const ds = (App.state.rangChon || []).slice().sort((a,b)=>a-b);
+    const d = Object.fromEntries(new FormData(f).entries());
+    const mat = (d.s === 'caries' || d.s === 'filled')
+      ? [...f.querySelectorAll('[name="mat"]:checked')].map(x => x.value) : [];
+    const nn = !!f.querySelector('[name="nn"]:checked') && TT_CO_NOI_NHA.includes(d.s);
+    const loDo = !!f.querySelector('[name="loDo"]:checked');
+    const sung = !!f.querySelector('[name="sung"]:checked');
+    const giu = !!f.querySelector('[name="giuGhiChu"]:checked');
+    if (!c.teeth) c.teeth = {};
+    ds.forEach(n => {
+      const cu = c.teeth[n] || {};
+      const note = (d.note || '').trim() || (giu ? (cu.note || '') : '');
+      if (d.s === 'ok' && !nn && !loDo && !sung && !mat.length && !note) delete c.teeth[n];
+      else c.teeth[n] = {s: d.s, mat, nn, loDo, sung, note};
+    });
+    this.luuHamKhung(f, c, 'teeth', ds);
+    c._up = Date.now();
+    App.state.rangChon = null;
+    save(); App.closeModal(); App.render();
+    App.toast('Đã ghi tình trạng cho ' + ds.length + ' răng ✓');
+  },
+
   keHoachNhieu(){
     const c = custById(App.state.custSel);
     const ds = (App.state.rangChon || []).slice().sort((a,b)=>a-b);
@@ -1673,7 +1771,6 @@ SCREENS.customers = () => {
       return `<div class="card mb">
       <div class="card-h"><h2>Sơ đồ răng</h2>
         <span class="hint">${sauDT ? 'nhấn vào răng để xem lịch sử điều trị của răng đó' : 'nhấn vào răng để ghi tình trạng'}</span><span class="spacer"></span>
-        <button class="btn small" onclick="Cust.hamKhung('${lop}')">Hàm khung</button>
         ${keHoach ? `<button class="btn small" onclick="Cust.chepSangKH()">Chép lại từ hiện trạng</button>
           ${coKH?`<button class="btn small danger" onclick="Cust.xoaKH()">Xóa kế hoạch</button>`:''}` : ''}
         ${sauDT ? `<button class="btn small primary" onclick="Cust.dungST()">Dựng lại từ hạng mục đã hoàn tất</button>
@@ -1687,7 +1784,10 @@ SCREENS.customers = () => {
 
         ${lop === 'teeth' ? `<div class="note-block mb">Bấm vào từng răng để ghi <b>tình trạng lúc mới đến khám</b>:
           sâu mặt nào, đã trám, răng sứ, mất răng, lỗ dò… Đây là sơ đồ gốc, hai bước sau đều dựa vào nó
-          và không sửa ngược lại nó.</div>` : ''}
+          và không sửa ngược lại nó.
+          ${App.state.rangChon ? '' : `<br>Nhiều răng <b>cùng một tình trạng</b> (mất nhiều răng, cao răng cả hàm)?
+            Bấm <button type="button" class="link-btn" onclick="Cust.batChonNhieu()">Chọn nhiều răng</button>
+            rồi quét qua các răng đó, ghi một lần cho cả nhóm.`}</div>` : ''}
         ${keHoach ? `<div class="note-block mb">Bấm vào răng cần làm: ô <b>Tình trạng hiện tại</b> đã lấy sẵn từ bước 1,
           bạn chỉ cần chọn <b>chẩn đoán</b> và <b>dịch vụ sẽ làm</b>.
           ${App.state.rangChon ? '' : `<br>Làm <b>cùng một dịch vụ cho nhiều răng</b> (cầu răng, niềng, tháo lắp)?
@@ -1701,7 +1801,9 @@ SCREENS.customers = () => {
           Đang <b>chọn nhiều răng</b> — bấm vào từng răng để chọn hoặc bỏ chọn.
           Đã chọn <b>${App.state.rangChon.length} răng</b>${App.state.rangChon.length?': '+App.state.rangChon.slice().sort((a,b)=>a-b).map(n=>'R'+n).join(', '):''}.
           <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
-            <button class="btn small primary" ${App.state.rangChon.length?'':'disabled'} onclick="Cust.keHoachNhieu()">Thêm dịch vụ cho ${App.state.rangChon.length} răng</button>
+            <button class="btn small primary" ${App.state.rangChon.length?'':'disabled'}
+              onclick="${keHoach ? 'Cust.keHoachNhieu()' : 'Cust.khamNhieu()'}">${
+              keHoach ? 'Thêm dịch vụ cho' : 'Ghi tình trạng cho'} ${App.state.rangChon.length} răng</button>
             <button class="btn small" onclick="Cust.batChonNhieu()">Thoát chọn nhiều</button></div></div>` : ''}
         ${Tooth.hamHTML(c, lop)}
         ${Tooth.tomTatHTML(c, lop)}
@@ -1737,7 +1839,9 @@ SCREENS.customers = () => {
         <div class="qt-chan">
           ${iNay > 0 ? `<button class="btn small" onclick="Cust.doiLopRang('${BUOC[iNay-1].k}')">← Bước ${BUOC[iNay-1].so}: ${BUOC[iNay-1].ten}</button>` : '<span></span>'}
           <span class="spacer"></span>
-          ${iNay === 0 ? `<button class="btn primary" onclick="Cust.doiLopRang('teethKH')">Xong khám — sang bước 2: lên kế hoạch →</button>` : ''}
+          ${iNay === 0 ? `<button class="btn ${App.state.rangChon?'':'primary'}" onclick="Cust.batChonNhieu()">
+              ${App.state.rangChon ? 'Thoát chọn nhiều răng' : 'Chọn nhiều răng cùng lúc'}</button>
+            <button class="btn primary" onclick="Cust.doiLopRang('teethKH')">Xong khám — sang bước 2: lên kế hoạch →</button>` : ''}
           ${iNay === 1 ? `<button class="btn ${App.state.rangChon?'':'primary'}" onclick="Cust.batChonNhieu()">
               ${App.state.rangChon ? 'Thoát chọn nhiều răng' : 'Chọn nhiều răng cùng lúc'}</button>
             <button class="btn primary" onclick="Cust.doiLopRang('teethST')">Xong kế hoạch — sang bước 3 →</button>` : ''}
