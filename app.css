@@ -279,6 +279,18 @@ td.r,th.r{text-align:right}
 /* Đang chọn nhiều răng cùng lúc */
 .tooth.dang-chon{border-color:var(--accent);border-width:2.5px;background:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 .tooth.dang-chon .tooth-no{color:var(--accent-contrast);font-weight:800}
+/* Ở tab Điều trị, màu viền răng nói về TIẾN ĐỘ chứ không phải bệnh lý */
+.tooth.tt-chua{border-color:var(--warn);background:var(--warn-soft)}
+.tooth.tt-chua .tooth-no{color:var(--warn)}
+.tooth.tt-dang{border-color:var(--info);background:var(--info-soft)}
+.tooth.tt-dang .tooth-no{color:var(--info)}
+.tooth.tt-xong{border-color:var(--ok);background:var(--ok-soft)}
+.tooth.tt-xong .tooth-no{color:var(--ok)}
+.tooth.tt-bao{border-style:dashed;border-color:var(--muted)}
+.legend i.lg-warn{background:var(--warn-soft);border:2px solid var(--warn)}
+.legend i.lg-info{background:var(--info-soft);border:2px solid var(--info)}
+.legend i.lg-ok{background:var(--ok-soft);border:2px solid var(--ok)}
+.legend i.lg-mutedp{background:transparent;border:2px dashed var(--muted)}
 .tooth-svg{position:relative;width:32px;height:40px;display:block}
 .tooth-svg svg{position:absolute;inset:0}
 .tooth-svg .tooth-ov{pointer-events:none}

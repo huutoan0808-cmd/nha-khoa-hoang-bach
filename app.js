@@ -126,6 +126,8 @@ const DV_CO_BAN = [
 
 /* Chỉ những tình trạng này mới còn thân răng để nói tới chuyện nội nha.
    Mất răng / implant / răng tháo lắp thì không có tủy mà điều trị. */
+const trangThaiMau = s => s === 'Hoàn tất' ? 'ok' : s === 'Đang điều trị' ? 'info'
+  : s === 'Chưa điều trị' ? 'warn' : 'mutedp';
 const TT_CO_NOI_NHA = ['caries', 'filled', 'crownKL', 'crownTS'];
 
 /* 6 mặt răng. k = mã lưu, l = tên đầy đủ, z = vùng vẽ trên sơ đồ */
@@ -138,7 +140,14 @@ const TOOTH_SURF = [
   ['C',  'Cổ răng',   'co'],
 ];
 const APPT_STATUS = ['Chờ xác nhận','Đã xác nhận','Đang điều trị','Hoàn tất','Hủy'];
-const TREAT_STATUS = ['Báo giá','Chờ điều trị','Đang điều trị','Hoàn tất'];
+const TREAT_STATUS = ['Báo giá','Chưa điều trị','Đang điều trị','Hoàn tất'];
+/* Ba trạng thái của TIẾN TRÌNH làm răng — "Báo giá" đứng ngoài vì đó là lúc chưa
+   chốt, chưa tính vào công nợ. Bấm vào răng ở tab Điều trị thì chỉ thấy ba cái này. */
+const TIEN_DO = [
+  ['Chưa điều trị', 'warn'],
+  ['Đang điều trị', 'info'],
+  ['Hoàn tất',      'ok'],
+];
 const PAY_METHODS = ['Tiền mặt','Chuyển khoản','Quẹt thẻ'];
 
 /* ================= Dữ liệu ================= */
@@ -238,6 +247,8 @@ function migrate() {
   }
   /* Quy trình công đoạn: lần đầu thì nạp bảng gốc của phòng khám. Đã có rồi thì chỉ
      bổ sung quy trình mới, KHÔNG đè lên tỷ lệ quản lý đã chỉnh. */
+  /* Trước đây gọi là "Chờ điều trị" — phòng khám quen nói "Chưa điều trị" */
+  (db.treatments || []).forEach(t => { if (t.status === 'Chờ điều trị') t.status = 'Chưa điều trị'; });
   if (!db.quyTrinh) db.quyTrinh = [];
   /* Bảng giá gia công lab: lần đầu nạp bảng mặc định, sau đó để quản lý tự sửa */
   if (!db.giaLab) db.giaLab = GiaLab.MAC_DINH.map(x => Object.assign({id: uid()}, x));
@@ -1086,7 +1097,7 @@ const Cust = {
     const ep = Dot.dangChon(c);
     const t = {id: uid(), customerId: c.id, episodeId: ep ? ep.id : '',
       name: dv ? dv.name : ten, group: dv ? dv.group : 'Khác', serviceId: dv ? dv.id : '',
-      price: dv ? (dv.price || 0) : 0, tooth: String(n), status: 'Báo giá',
+      price: dv ? (dv.price || 0) : 0, tooth: String(n), status: 'Chưa điều trị',
       doctorId: (ep && ep.doctorId) || '', assistantId: '', date: todayISO(), cd: []};
     db.treatments.push(t);
     save(); App.render();
@@ -1331,7 +1342,7 @@ const Cust = {
       name: dv ? dv.name : ten, group: dv ? dv.group : 'Khác', serviceId: dv ? dv.id : '',
       donGia, sl: ds.length, giamPct: pct, giamTien: giam,
       price: Treat.thanhTien(donGia, ds.length, pct, giam),
-      tooth: ds.join(', '), status: 'Báo giá',
+      tooth: ds.join(', '), status: 'Chưa điều trị',
       doctorId: (ep && ep.doctorId) || '', assistantId: '', date: todayISO(), cd: []});
     if (d.veSoDo) {
       if (!c.teethKH) c.teethKH = {};
@@ -2021,8 +2032,146 @@ const Treat = {
     const c = db.customers.find(x => x.code === code);
     if (c) Treat.setCust(c.id);
   },
+  /* ================= Sơ đồ tiến trình điều trị =================
+     Cùng một bộ răng, nhưng ở tab Điều trị thì màu răng nói về TIẾN ĐỘ chứ không
+     phải bệnh lý: răng nào chưa làm, đang làm, đã xong. Bấm vào răng là đổi được
+     trạng thái ngay, không phải mở từng hạng mục. */
+  rangCua(t){ return Tooth.rangCua(t); },
+  /* Mỗi răng đang ở đâu trong tiến trình — răng có nhiều hạng mục thì lấy cái
+     "trễ" nhất, vì răng chỉ xong khi mọi việc trên nó đã xong. */
+  tienDoRang(cid){
+    const m = {};
+    const bac = {'Báo giá': 0, 'Chưa điều trị': 1, 'Đang điều trị': 2, 'Hoàn tất': 3};
+    db.treatments.filter(t => t.customerId === cid).forEach(t => {
+      this.rangCua(t).forEach(n => {
+        if (!m[n] || bac[t.status] < bac[m[n]]) m[n] = t.status;
+      });
+    });
+    return m;
+  },
+  mucCuaRang(cid, n){
+    return db.treatments.filter(t => t.customerId === cid && this.rangCua(t).indexOf(+n) >= 0);
+  },
+  soDoHTML(c){
+    const td = this.tienDoRang(c.id);
+    const chon = App.state.rangTri || null;
+    const hang = ds => ds.map(n => {
+      const st = td[n];
+      const lop = st === 'Hoàn tất' ? 'tt-xong' : st === 'Đang điều trị' ? 'tt-dang'
+                : st === 'Chưa điều trị' ? 'tt-chua' : st === 'Báo giá' ? 'tt-bao' : '';
+      const muc = st ? this.mucCuaRang(c.id, n) : [];
+      const mo = muc.length ? muc.map(t => t.name).join(', ') + ' — ' + st : 'chưa có dịch vụ nào';
+      return `<button class="tooth ${lop} ${(chon||[]).includes(n)?'dang-chon':''}"
+        onclick="Treat.rangClick(${n})" title="Răng ${n}: ${h(mo)}">
+        <span class="tooth-svg">${Tooth.svg(n, (c.teethST||c.teeth||{})[n])}${Tooth.deLen(n, (c.teethST||c.teeth||{})[n])}</span>
+        <span class="tooth-no num">${n}</span></button>`;
+    }).join('');
+    const dem = {};
+    Object.values(td).forEach(x => dem[x] = (dem[x] || 0) + 1);
+    return `<div class="arch-lb"><span>Hàm trên · phải bệnh nhân</span><span>trái bệnh nhân</span></div>
+      <div class="arch" style="margin-bottom:10px">${hang(TEETH_UP.slice(0,8))}<span class="gap-mid"></span>${hang(TEETH_UP.slice(8))}</div>
+      <div class="arch">${hang(TEETH_DN.slice(0,8))}<span class="gap-mid"></span>${hang(TEETH_DN.slice(8))}</div>
+      <div class="arch-lb"><span>Hàm dưới · phải bệnh nhân</span><span>trái bệnh nhân</span></div>
+      <div class="legend" style="margin-top:12px">
+        ${TIEN_DO.map(([t, k]) => `<span><i class="lg-${k}"></i>${t}${dem[t]?' ('+dem[t]+')':''}</span>`).join('')}
+        <span><i class="lg-mutedp"></i>Báo giá${dem['Báo giá']?' ('+dem['Báo giá']+')':''}</span>
+      </div>`;
+  },
+  batChonNhieu(){
+    App.state.rangTri = App.state.rangTri ? null : [];
+    App.render();
+  },
+  rangClick(n){
+    const cid = App.state.treatCust;
+    if (App.state.rangTri) {
+      const ds = App.state.rangTri;
+      const i = ds.indexOf(n);
+      if (i >= 0) ds.splice(i, 1); else ds.push(n);
+      App.render(); return;
+    }
+    const c = custById(cid);
+    const muc = this.mucCuaRang(cid, n);
+    const kh = (c.teethKH || {})[n];
+    App.modal('Răng ' + n + ' — tiến trình điều trị', `
+      ${muc.length ? `<div class="card mb"><div class="card-h"><h2>${muc.length} dịch vụ trên răng ${n}</h2></div>
+        <div class="card-b">${muc.map(t => `<div class="ho-so-file">
+          <div class="hsf-than"><div class="hsf-dau"><b>${h(t.name)}</b>
+            <span class="pill ${trangThaiMau(t.status)}">${h(t.status)}</span></div>
+            <div class="hsf-mo">${money(t.price)}${t.tooth?' · R'+h(t.tooth):''}
+              ${(staffById(t.doctorId)||{}).name ? ' · '+h((staffById(t.doctorId)||{}).name) : ''}</div>
+            <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
+              ${TIEN_DO.map(([tt, k]) => `<button class="btn small ${t.status===tt?'primary':''}"
+                onclick="Treat.datTrangThai('${t.id}','${tt}')">${tt}</button>`).join('')}</div>
+          </div>
+          <div class="hsf-nut"><button class="btn small" onclick="Treat.itemForm('${t.id}')">Sửa</button></div>
+        </div>`).join('')}</div></div>`
+        : `<div class="note-block mb">Răng ${n} chưa có dịch vụ nào trong tiến trình điều trị.
+            ${kh && kh.dichVu ? `Sơ đồ kế hoạch đang ghi: <b>${h(kh.dichVu)}</b>.` : ''}</div>`}
+      <div class="form-actions">
+        <button class="btn primary" onclick="Treat.themChoRang('${n}')">${IC.plus} Thêm dịch vụ cho răng ${n}</button>
+        <span class="spacer"></span>
+        <button class="btn" onclick="App.closeModal()">Đóng</button></div>`);
+  },
+  datTrangThai(id, tt){
+    const t = db.treatments.find(x => x.id === id); if (!t) return;
+    t.status = tt;
+    /* Xong việc thì ghi luôn ngày, để sơ đồ "Sau điều trị" và báo cáo có mốc đúng */
+    if (tt === 'Hoàn tất' && !t.date) t.date = todayISO();
+    save(); App.render();
+    App.toast('Răng ' + (t.tooth || '') + ': ' + t.name + ' → ' + tt);
+    const n = this.rangCua(t)[0];
+    if (n) this.rangClick(n);
+  },
+  themChoRang(rang){
+    App.closeModal();
+    setTimeout(() => {
+      this.itemForm();
+      const f = document.querySelector('#modalBody form');
+      const o = f && f.querySelector('[name="tooth"]');
+      if (o) { o.value = rang; if (typeof Treat.tinhLai === 'function') Treat.tinhLai(); }
+    }, 60);
+  },
+  /* Đổi trạng thái hàng loạt cho những răng đang chọn */
+  nhieuRangForm(){
+    const ds = (App.state.rangTri || []).slice().sort((a,b)=>a-b);
+    if (!ds.length) { App.toast('Chưa chọn răng nào'); return; }
+    const cid = App.state.treatCust;
+    const muc = [...new Set(ds.flatMap(n => this.mucCuaRang(cid, n).map(t => t.id)))]
+      .map(id => db.treatments.find(t => t.id === id));
+    App.modal('Tiến trình cho ' + ds.length + ' răng', `
+      <div class="note-block mb">Đang chọn: <b>${ds.map(n=>'R'+n).join(', ')}</b>.
+        ${muc.length ? `Có <b>${muc.length}</b> dịch vụ nằm trên những răng này.`
+                     : 'Chưa dịch vụ nào nằm trên những răng này — bấm "Thêm dịch vụ" để lập một hạng mục chung.'}</div>
+      ${muc.length ? `<div class="f full"><label>Đổi trạng thái cả ${muc.length} dịch vụ thành</label>
+        <div class="form-actions" style="justify-content:flex-start">
+          ${TIEN_DO.map(([tt]) => `<button class="btn" onclick="Treat.datNhieu('${tt}')">${tt}</button>`).join('')}
+        </div></div>
+        <div class="card mb"><div class="card-b">${muc.map(t => `<div class="alert-line">
+          <span class="alert-ico ${trangThaiMau(t.status)==='ok'?'info':'warn'}">•</span>
+          <div>${h(t.name)} <span class="sub-line">R${h(t.tooth)}</span>
+            <span class="pill ${trangThaiMau(t.status)}">${h(t.status)}</span></div></div>`).join('')}</div></div>` : ''}
+      <div class="form-actions">
+        <button class="btn primary" onclick="Treat.themChoRang('${ds.join(', ')}')">${IC.plus} Thêm dịch vụ cho ${ds.length} răng</button>
+        <span class="spacer"></span>
+        <button class="btn" onclick="App.closeModal()">Đóng</button></div>`);
+  },
+  datNhieu(tt){
+    const ds = (App.state.rangTri || []);
+    const cid = App.state.treatCust;
+    const ids = [...new Set(ds.flatMap(n => this.mucCuaRang(cid, n).map(t => t.id)))];
+    ids.forEach(id => {
+      const t = db.treatments.find(x => x.id === id); if (!t) return;
+      t.status = tt;
+      if (tt === 'Hoàn tất' && !t.date) t.date = todayISO();
+    });
+    save(); App.closeModal(); App.render();
+    App.toast('Đã đặt ' + ids.length + ' dịch vụ thành "' + tt + '" ✓');
+  },
+
   itemForm(id){
-    const t = id ? db.treatments.find(x=>x.id===id) : {status:'Báo giá', date:todayISO()};
+    /* Thêm mới thì mặc định "Chưa điều trị" — dịch vụ đã ghi cho răng là đã chốt làm.
+       Ai chỉ muốn báo giá thăm dò thì đổi lại trong ô Trạng thái. */
+    const t = id ? db.treatments.find(x=>x.id===id) : {status:'Chưa điều trị', date:todayISO()};
     App.modal(id?'Sửa hạng mục điều trị':'Thêm hạng mục điều trị', `
     <form class="form-grid" onsubmit="Treat.itemSave(event,'${id||''}')">
       <div class="f full"><label>Dịch vụ</label>
@@ -2233,7 +2382,7 @@ SCREENS.treatment = () => {
   const rxs = db.rx.filter(r=>r.customerId===cid).sort((a,b)=>a.date<b.date?1:-1);
 
   const itemRows = items.map(t => {
-    const st = t.status==='Hoàn tất'?'ok':t.status==='Đang điều trị'?'info':t.status==='Chờ điều trị'?'warn':'mutedp';
+    const st = trangThaiMau(t.status);
     const phu = staffById(t.assistantId);
     const q = QT.cua(t), xong = (t.cd||[]).length;
     return `<tr class="clickable" onclick="Treat.itemForm('${t.id}')"><td><b>${h(t.name)}</b><br><span class="sub-line">${h(t.group)}</span></td>
@@ -2282,6 +2431,23 @@ SCREENS.treatment = () => {
     <div class="card kpi"><div class="k-label">Đã thanh toán</div><div class="k-value num" style="color:var(--ok)">${money(paid)}</div><div class="k-note">${total?Math.min(100,Math.round(paid/total*100)):0}% kế hoạch</div></div>
     <div class="card kpi"><div class="k-label">Còn lại</div><div class="k-value num" ${debt?'style="color:var(--danger)"':''}>${money(debt)}</div><div class="k-note">${debt?'nhắc khách theo lịch trả góp':'không còn công nợ'}</div></div>
   </div>
+  <div class="card mb"><div class="card-h"><h2>Sơ đồ tiến trình điều trị</h2>
+    <span class="hint">bấm vào răng để đổi trạng thái · màu răng nói về tiến độ, không phải bệnh lý</span>
+    <span class="spacer"></span>
+    <button class="btn small ${App.state.rangTri?'primary':''}" onclick="Treat.batChonNhieu()">
+      ${App.state.rangTri ? 'Xong chọn nhiều răng' : 'Chọn nhiều răng'}</button></div>
+    <div class="card-b">
+      ${App.state.rangTri ? `<div class="note-block mb" style="border-color:var(--accent)">
+        Đang <b>chọn nhiều răng</b> — bấm vào từng răng để chọn hoặc bỏ chọn.
+        Đã chọn <b>${App.state.rangTri.length} răng</b>${App.state.rangTri.length?': '+App.state.rangTri.slice().sort((a,b)=>a-b).map(n=>'R'+n).join(', '):''}.
+        <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
+          <button class="btn small primary" ${App.state.rangTri.length?'':'disabled'} onclick="Treat.nhieuRangForm()">Đặt tiến trình cho ${App.state.rangTri.length} răng</button>
+          <button class="btn small" onclick="Treat.batChonNhieu()">Thoát chọn nhiều</button></div></div>`
+        : `<div class="note-block mb">Dịch vụ vừa gắn cho một răng mà chưa làm gì thì mặc định là
+           <b>Chưa điều trị</b>. Bấm vào răng để chuyển sang <b>Đang điều trị</b> rồi <b>Hoàn tất</b>.
+           Răng nào hoàn tất sẽ tự hiện lên sơ đồ <b>Sau điều trị</b> ở tab Khách hàng.</div>`}
+      ${Treat.soDoHTML(c)}
+    </div></div>
   <div class="card mb"><div class="card-h"><h2>Kế hoạch điều trị — ${h(c.name)}</h2><span class="spacer"></span>
     <button class="btn small" onclick="Svc.bang()">Bảng giá · sửa giá dịch vụ</button>
     <button class="btn small" onclick="Treat.itemForm()">${IC.plus} Thêm hạng mục</button></div>
