@@ -1636,34 +1636,61 @@ SCREENS.customers = () => {
       const keHoach = lop === 'teethKH', sauDT = lop === 'teethST';
       const xongCount = (db.treatments||[]).filter(t => t.customerId === c.id
         && t.status === 'Hoàn tất' && Tooth.rangCua(t).length).length;
+      /* Ba bước của một ca điều trị, đi theo đúng thứ tự công việc thật ở ghế:
+         khám ghi hiện trạng -> bàn với khách rồi vạch kế hoạch -> làm xong thì
+         chốt lại tình trạng mới. Trước đây ba cái này là ba tab ngang hàng nên
+         không ai biết nên bắt đầu từ đâu. */
+      const soHT = Object.keys(c.teeth || {}).filter(n => Tooth.moTa(n, c.teeth[n]) !== 'Bình thường').length;
+      const khoKH = c.teethKH || {};
+      const soKH = Object.keys(khoKH).filter(n => khoKH[n] && khoKH[n].dichVu).length;
+      const tienKH = Object.keys(khoKH).filter(n => khoKH[n] && khoKH[n].dichVu).reduce((t, n) => {
+        const dv = (db.services || []).find(x => Combo.norm(x.name || '') === Combo.norm(khoKH[n].dichVu));
+        return t + (dv ? (dv.price || 0) : 0);
+      }, 0);
+      const soST = Object.keys(c.teethST || {}).filter(n => Tooth.moTa(n, c.teethST[n]) !== 'Bình thường').length;
+
+      const BUOC = [
+        {k: 'teeth',   so: 1, ten: 'Khám tình trạng ban đầu',
+         mo: soHT ? soHT + ' răng đã ghi' : 'chưa ghi răng nào', xong: soHT > 0},
+        {k: 'teethKH', so: 2, ten: 'Lên kế hoạch điều trị',
+         mo: soKH ? soKH + ' răng · ' + money(tienKH) : 'chưa có kế hoạch', xong: soKH > 0},
+        {k: 'teethST', so: 3, ten: 'Tình trạng sau điều trị',
+         mo: soST ? soST + ' răng đã xong' : 'chưa có gì', xong: soST > 0},
+      ];
+      const iNay = BUOC.findIndex(b => b.k === lop);
+
       return `<div class="card mb">
       <div class="card-h"><h2>Sơ đồ răng</h2>
-        <span class="hint">${sauDT ? 'nhấn vào răng để xem lịch sử điều trị của răng đó' : 'nhấn vào răng để cập nhật tình trạng'}</span><span class="spacer"></span>
+        <span class="hint">${sauDT ? 'nhấn vào răng để xem lịch sử điều trị của răng đó' : 'nhấn vào răng để ghi tình trạng'}</span><span class="spacer"></span>
         <button class="btn small" onclick="Cust.hamKhung('${lop}')">Hàm khung</button>
-        ${keHoach ? `<button class="btn small ${App.state.rangChon?'primary':''}" onclick="Cust.batChonNhieu()">
-            ${App.state.rangChon ? 'Xong chọn nhiều răng' : 'Chọn nhiều răng'}</button>
-          <button class="btn small" onclick="Cust.chepSangKH()">Chép lại từ hiện trạng</button>
+        ${keHoach ? `<button class="btn small" onclick="Cust.chepSangKH()">Chép lại từ hiện trạng</button>
           ${coKH?`<button class="btn small danger" onclick="Cust.xoaKH()">Xóa kế hoạch</button>`:''}` : ''}
         ${sauDT ? `<button class="btn small primary" onclick="Cust.dungST()">Dựng lại từ hạng mục đã hoàn tất</button>
           ${coST?`<button class="btn small danger" onclick="Cust.xoaST()">Xóa sơ đồ</button>`:''}` : ''}</div>
       <div class="card-b">
-        <div class="subtabs">
-          <button class="subtab ${lop==='teeth'?'active':''}" onclick="Cust.doiLopRang('teeth')">Trước điều trị</button>
-          <button class="subtab ${keHoach?'active':''}" onclick="Cust.doiLopRang('teethKH')">Kế hoạch điều trị${coKH?' ✓':''}</button>
-          <button class="subtab ${sauDT?'active':''}" onclick="Cust.doiLopRang('teethST')">Sau điều trị${coST?' ✓':''}</button>
-        </div>
+        <div class="quy-trinh">${BUOC.map((b, i) => `${i ? '<span class="qt-noi"></span>' : ''}
+          <button class="buoc ${b.k === lop ? 'dang' : ''} ${b.xong ? 'xong' : ''}" onclick="Cust.doiLopRang('${b.k}')">
+            <span class="buoc-so">${b.xong && b.k !== lop ? '✓' : b.so}</span>
+            <span class="buoc-chu"><b>${b.ten}</b><span class="buoc-mo">${h(b.mo)}</span></span>
+          </button>`).join('')}</div>
+
+        ${lop === 'teeth' ? `<div class="note-block mb">Bấm vào từng răng để ghi <b>tình trạng lúc mới đến khám</b>:
+          sâu mặt nào, đã trám, răng sứ, mất răng, lỗ dò… Đây là sơ đồ gốc, hai bước sau đều dựa vào nó
+          và không sửa ngược lại nó.</div>` : ''}
+        ${keHoach ? `<div class="note-block mb">Bấm vào răng cần làm: ô <b>Tình trạng hiện tại</b> đã lấy sẵn từ bước 1,
+          bạn chỉ cần chọn <b>chẩn đoán</b> và <b>dịch vụ sẽ làm</b>.
+          ${App.state.rangChon ? '' : `<br>Làm <b>cùng một dịch vụ cho nhiều răng</b> (cầu răng, niềng, tháo lắp)?
+            Bấm <button type="button" class="link-btn" onclick="Cust.batChonNhieu()">Chọn nhiều răng</button>
+            rồi quét qua các răng đó, phần mềm gộp thành một hạng mục có số lượng.`}</div>` : ''}
         ${sauDT ? `<div class="note-block mb">Sơ đồ này ghi <b>tình trạng răng sau khi đã điều trị</b>.
           Bấm <b>Dựng lại từ hạng mục đã hoàn tất</b> để phần mềm tự vẽ theo những dịch vụ đã xong
           (${xongCount} hạng mục có ghi số răng), rồi bấm vào từng răng để xem <b>lịch sử điều trị</b> và sửa lại nếu cần.
           Răng đã sửa tay thì lần dựng sau không bị ghi đè.</div>` : ''}
-        ${keHoach ? `<div class="note-block mb">Bấm vào răng cần làm: ô <b>Tình trạng hiện tại</b> đã lấy sẵn từ sơ đồ trước điều trị,
-          bạn chỉ cần chọn <b>dịch vụ sẽ làm</b>. Răng nào đã có kế hoạch thì <b>viền nhấn</b>.
-          Sơ đồ "Trước điều trị" không bị ảnh hưởng.</div>` : ''}
         ${App.state.rangChon ? `<div class="note-block mb" style="border-color:var(--accent)">
           Đang <b>chọn nhiều răng</b> — bấm vào từng răng để chọn hoặc bỏ chọn.
           Đã chọn <b>${App.state.rangChon.length} răng</b>${App.state.rangChon.length?': '+App.state.rangChon.slice().sort((a,b)=>a-b).map(n=>'R'+n).join(', '):''}.
           <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
-            <button class="btn small primary" onclick="Cust.keHoachNhieu()">Lập kế hoạch cho ${App.state.rangChon.length} răng</button>
+            <button class="btn small primary" ${App.state.rangChon.length?'':'disabled'} onclick="Cust.keHoachNhieu()">Thêm dịch vụ cho ${App.state.rangChon.length} răng</button>
             <button class="btn small" onclick="Cust.batChonNhieu()">Thoát chọn nhiều</button></div></div>` : ''}
         ${Tooth.hamHTML(c, lop)}
         ${Tooth.tomTatHTML(c, lop)}
@@ -1696,6 +1723,15 @@ SCREENS.customers = () => {
             <br><br><span class="sub-line">${co.length} răng đã được điều trị · bấm vào răng để xem chi tiết.</span></div>`;
         })() : ''}
         ${Tooth.chuThichHTML()}
+        <div class="qt-chan">
+          ${iNay > 0 ? `<button class="btn small" onclick="Cust.doiLopRang('${BUOC[iNay-1].k}')">← Bước ${BUOC[iNay-1].so}: ${BUOC[iNay-1].ten}</button>` : '<span></span>'}
+          <span class="spacer"></span>
+          ${iNay === 0 ? `<button class="btn primary" onclick="Cust.doiLopRang('teethKH')">Xong khám — sang bước 2: lên kế hoạch →</button>` : ''}
+          ${iNay === 1 ? `<button class="btn ${App.state.rangChon?'':'primary'}" onclick="Cust.batChonNhieu()">
+              ${App.state.rangChon ? 'Thoát chọn nhiều răng' : 'Chọn nhiều răng cùng lúc'}</button>
+            <button class="btn primary" onclick="Cust.doiLopRang('teethST')">Xong kế hoạch — sang bước 3 →</button>` : ''}
+          ${iNay === 2 ? `<button class="btn primary" onclick="App.go('treatment')">Sang tab Điều trị để thu tiền →</button>` : ''}
+        </div>
       </div>
     </div>`;
     })()}

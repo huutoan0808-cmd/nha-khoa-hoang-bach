@@ -223,6 +223,24 @@ td.r,th.r{text-align:right}
 .modal-b{padding:16px 18px 18px}
 
 /* Tab con */
+/* Dải 3 bước của sơ đồ răng: khám -> kế hoạch -> sau điều trị */
+.quy-trinh{display:flex;align-items:stretch;gap:0;margin-bottom:14px;flex-wrap:wrap}
+.qt-noi{flex:none;align-self:center;width:18px;height:2px;background:var(--line);margin:0 2px}
+.buoc{flex:1;min-width:190px;display:flex;align-items:center;gap:10px;text-align:left;
+  padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.buoc:hover{background:var(--surface2)}
+.buoc-so{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
+  font-weight:700;font-size:13px;background:var(--surface2);color:var(--muted)}
+.buoc-chu{min-width:0}
+.buoc-chu b{display:block;font-size:13.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.buoc-mo{display:block;font-size:11.5px;color:var(--muted)}
+.buoc.xong .buoc-so{background:var(--ok-soft);color:var(--ok)}
+.buoc.dang{border-color:var(--accent);background:var(--accent-soft)}
+.buoc.dang .buoc-so{background:var(--accent);color:var(--accent-contrast)}
+.buoc.dang .buoc-chu b{color:var(--accent-ink)}
+.qt-chan{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
+@media (max-width:720px){.qt-noi{display:none}.buoc{min-width:100%}}
+
 .subtabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--line);overflow-x:auto}
 .subtab{flex:none;padding:9px 13px;font-weight:600;font-size:13.5px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
 .subtab:hover{color:var(--ink2)}
