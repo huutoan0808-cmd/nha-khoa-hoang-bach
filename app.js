@@ -95,13 +95,13 @@ const TEETH_DN = [48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38];
    thì mất thông tin. Các mặt sâu/trám để trong mảng `mat`. */
 const TOOTH_STATES = [
   ['ok',      'Bình thường'],
-  ['caries',  'Sâu răng'],
+  ['sauNong', 'Sâu ngà nông'],
+  ['sauSau',  'Sâu ngà sâu'],
+  ['sauTuy',  'Sâu vỡ lớn đến tủy'],
   ['filled',  'Đã trám'],
-  ['crownKL', 'Răng sứ kim loại'],
-  ['crownTS', 'Răng sứ toàn sứ'],
+  ['crown',   'Răng sứ'],
   ['thaolap', 'Răng tháo lắp'],
   ['implant', 'Implant'],
-  ['pontic',  'Nhịp cầu (răng giả trên cầu)'],
   ['missing', 'Mất răng'],
 ];
 /* Dịch vụ cơ bản phòng khám làm thường xuyên. Bản cài cũ thiếu món nào thì tự thêm
@@ -128,7 +128,41 @@ const DV_CO_BAN = [
    Mất răng / implant / răng tháo lắp thì không có tủy mà điều trị. */
 const trangThaiMau = s => s === 'Hoàn tất' ? 'ok' : s === 'Đang điều trị' ? 'info'
   : s === 'Chưa điều trị' ? 'warn' : 'mutedp';
-const TT_CO_NOI_NHA = ['caries', 'filled', 'crownKL', 'crownTS'];
+/* 'crown' chỉ là mục để CHỌN trong ô tình trạng; lưu xuống vẫn là crownKL hoặc
+   crownTS như cũ, nên sơ đồ, bản in và hồ sơ đã nhập không phải đổi gì. */
+const SU_LOAI = [['crownKL', 'Kim loại'], ['crownTS', 'Toàn sứ']];
+/* Một cái răng sứ trong miệng luôn ở một trong hai vai: nó là RĂNG TRỤ (răng thật
+   được mài rồi bọc) hay là NHỊP CẦU (răng giả treo giữa hai trụ, bên dưới không có
+   chân răng). Hỏi riêng thay vì bắt chọn trong danh sách tình trạng, vì hai chuyện
+   này độc lập: nhịp cầu cũng có loại kim loại hay toàn sứ như thường. */
+const SU_VAI = [['tru', 'Răng trụ (răng thật bọc sứ)'], ['nhipcau', 'Nhịp cầu (răng giả treo)']];
+const laSu = s => s === 'crown' || s === 'crownKL' || s === 'crownTS';
+const sChon = s => laSu(s) ? 'crown' : s;          /* giá trị hiện trong ô chọn */
+
+/* Ba mức sâu răng — dùng ở chỗ nào chỉ cần biết "răng này đang sâu" */
+const TT_SAU = ['sauNong', 'sauSau', 'sauTuy', 'caries'];
+/* Chọn được mặt răng: sâu ngà nông, sâu ngà sâu, đã trám. Răng vỡ lớn đến tủy thì
+   mô răng gần như không còn, đánh dấu từng mặt không còn ý nghĩa. */
+const TT_CO_MAT = ['sauNong', 'sauSau', 'filled', 'caries'];
+/* Lỗ dò và sưng đáy hành lang là dấu nhiễm trùng vùng chóp — chỉ hỏi ở răng đã hở
+   tủy và ở răng sứ (răng sứ đã chữa tủy vẫn có thể tái nhiễm). */
+const TT_CO_CHOP = ['sauTuy', 'crown', 'crownKL', 'crownTS'];
+const TT_CO_NOI_NHA = ['sauNong', 'sauSau', 'filled', 'crown', 'crownKL', 'crownTS', 'caries'];
+/* Hồ sơ cũ ghi 'caries' (sâu răng chưa phân độ). Không tự gán bừa một mức nào —
+   giữ nguyên, chỉ cho hiện lại trong ô chọn của đúng cái răng đó, để lỡ mở ra
+   lưu lại thì không bị nhảy về "Bình thường". */
+const TT_CU = {caries: 'Sâu răng (hồ sơ cũ, chưa phân độ)'};
+const oTinhTrang = (sNay, them) => {
+  const v = sChon(sNay);
+  return `<select name="s"${them || ''}>${TOOTH_STATES
+    .concat(TT_CU[v] ? [[v, TT_CU[v]]] : [])
+    .map(([k, l]) => `<option value="${k}"${v === k ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
+};
+const oLoaiSu = (sNay, tNay) => `<div class="f full" id="oLoaiSu" style="display:${laSu(sNay) ? '' : 'none'}">
+  <label>Loại răng sứ</label><div class="check-row">${SU_LOAI.map(([k, l]) =>
+    `<label><input type="radio" name="loaiSu" value="${k}"${(sNay === k || (!laSu(sNay) && k === 'crownTS')) ? ' checked' : ''}> ${l}</label>`).join('')}</div>
+  <label style="margin-top:8px">Vai trò trên cung hàm</label><div class="check-row">${SU_VAI.map(([k, l]) =>
+    `<label><input type="radio" name="vaiSu" value="${k}"${((tNay && tNay.nhipCau ? 'nhipcau' : 'tru') === k) ? ' checked' : ''}> ${l}</label>`).join('')}</div></div>`;
 
 /* 6 mặt răng. k = mã lưu, l = tên đầy đủ, z = vùng vẽ trên sơ đồ */
 const TOOTH_SURF = [
@@ -247,6 +281,13 @@ function migrate() {
   }
   /* Quy trình công đoạn: lần đầu thì nạp bảng gốc của phòng khám. Đã có rồi thì chỉ
      bổ sung quy trình mới, KHÔNG đè lên tỷ lệ quản lý đã chỉnh. */
+  /* "Nhịp cầu" trước là một tình trạng riêng, nay là VAI TRÒ của răng sứ. Bản cũ
+     không ghi rõ sứ loại gì nên tạm để toàn sứ — sửa lại tay nếu là kim loại. */
+  (db.customers || []).forEach(c => ['teeth','teethKH','teethST'].forEach(lop => {
+    Object.values(c[lop] || {}).forEach(t => {
+      if (t && t.s === 'pontic') { t.s = 'crownTS'; t.nhipCau = true; }
+    });
+  }));
   /* Trước đây gọi là "Chờ điều trị" — phòng khám quen nói "Chưa điều trị" */
   (db.treatments || []).forEach(t => { if (t.status === 'Chờ điều trị') t.status = 'Chưa điều trị'; });
   if (!db.quyTrinh) db.quyTrinh = [];
@@ -999,8 +1040,8 @@ const Cust = {
         ${hienTai ? `<br>Sơ đồ trước điều trị đang ghi: <b>${h(Tooth.moTa(n, hienTai))}</b>` : ''}</div>` : ''}
     <form class="form-grid" onsubmit="Cust.toothSave(event,${n},'${lop}')">
       <div class="f full"><label>${st ? 'Tình trạng sau điều trị' : 'Tình trạng hiện tại'}</label>
-        <select name="s" onchange="Cust.toothMatHien(this.value)">
-          ${TOOTH_STATES.map(([k,l])=>`<option value="${k}"${t.s===k?' selected':''}>${l}</option>`).join('')}</select></div>
+        ${oTinhTrang(t.s, ' onchange="Cust.toothMatHien(this.value)"')}</div>
+      ${oLoaiSu(t.s, t)}
       ${kh ? `<div class="f full"><label>Chẩn đoán</label>
         ${Combo.html('cbRangDX','chanDoan', icdName(t.chanDoan||'')||'', Cust.icdHopVoi(t.s, hienTai),
           'Gõ tên bệnh hoặc mã ICD', null, 'Mã hợp với tình trạng răng được xếp lên đầu; gõ để tra cả bảng ICD.')}</div>
@@ -1011,15 +1052,19 @@ const Cust = {
         <div class="check-row" id="dvGoiY" data-rang="${n}">${Cust.dvHopVoi(t.s, hienTai).map(x =>
           `<button type="button" class="btn small" onclick="Combo.pick('cbRangDV',this.dataset.v)" data-v="${h(x)}">${h(x)}</button>`).join('')
           || '<span class="sub-line">Chọn kế hoạch ở ô trên để thấy gợi ý.</span>'}</div></div>` : ''}
-      <div class="f full" id="oMat" style="display:${!kh && (t.s==='caries'||t.s==='filled')?'':'none'}">
+      <div class="f full" id="oMat" style="display:${!kh && TT_CO_MAT.includes(t.s)?'':'none'}">
         <label>Mặt răng (chọn được nhiều mặt)</label>
         <div class="check-row">${TOOTH_SURF.map(([k,l])=>
           `<label><input type="checkbox" name="mat" value="${k}"${mat.includes(k)?' checked':''}> ${h(l)}</label>`).join('')}</div>
       </div>
       <div class="f full" id="oNoiNha" style="display:${!kh && TT_CO_NOI_NHA.includes(t.s)?'':'none'}"><div class="check-row">
         <label><input type="checkbox" name="nn"${t.nn?' checked':''}> Răng đã nội nha (điều trị tủy)</label></div></div>
+      <div class="f full" id="oChanRang" style="display:${t.s === 'thaolap' ? '' : 'none'}">
+        <label>Nền hàm</label><div class="check-row">
+        <label><input type="checkbox" name="chanRang"${t.chanRang?' checked':''}> Còn chân răng dưới hàm tháo lắp</label></div>
+        <div class="combo-hint">Bỏ trống nghĩa là vùng này đã nhổ sạch, hàm tì thẳng lên sống hàm.</div></div>
       ${Cust.oHamKhung(c, lop, [n], t.s)}
-      <div class="f full" style="display:${kh?'none':''}"><label>Dấu hiệu quanh chóp</label><div class="check-row">
+      <div class="f full" id="oChop" style="display:${!kh && TT_CO_CHOP.includes(t.s)?'':'none'}"><label>Dấu hiệu quanh chóp</label><div class="check-row">
         <label><input type="checkbox" name="loDo"${t.loDo?' checked':''}> Lỗ dò</label>
         <label><input type="checkbox" name="sung"${t.sung?' checked':''}> Sưng đáy hành lang</label></div></div>
       <div class="f full" style="display:${kh?'none':''}"><label>Ghi chú</label><input name="note" value="${h(t.note||'')}" placeholder="Vd: sâu ngà sâu, còn ê buốt…"></div>
@@ -1065,6 +1110,13 @@ const Cust = {
   /* Răng đang ở tình trạng này thì thường làm những dịch vụ nào — chỉ là gợi ý,
      gõ tự do vẫn được. Khớp theo TÌNH TRẠNG HIỆN TẠI của răng. */
   DV_THEO_KH: {
+    sauNong: ['Trám sâu răng phía trong — tiêu chuẩn','Trám răng cửa — tiêu chuẩn',
+              'Trám cổ răng','Trám răng sữa'],
+    sauSau:  ['Trám sâu răng phía trong — nâng cao','Che tủy gián tiếp','Che tủy trực tiếp',
+              'Nội nha răng cối lớn — gói cơ bản','Trám sâu răng phía trong — tiêu chuẩn'],
+    sauTuy:  ['Nội nha răng cối lớn — gói cơ bản','Nội nha răng cối nhỏ','Nội nha răng cửa',
+              'Răng toàn sứ Zirconia','Endocrown','Nhổ răng vĩnh viễn — 2 chân'],
+    crown:   ['Gắn lại răng sứ kim loại','Gắn lại răng toàn sứ','Răng toàn sứ Zirconia','Nội nha lại'],
     caries:  ['Trám sâu răng phía trong — tiêu chuẩn','Trám răng cửa — tiêu chuẩn',
               'Nội nha răng cối lớn — gói cơ bản','Răng toàn sứ Zirconia','Nhổ răng vĩnh viễn — 2 chân'],
     filled:  ['Trám sâu răng phía trong — nâng cao','Răng toàn sứ Zirconia','Endocrown','Inlay / Onlay Emax'],
@@ -1079,6 +1131,10 @@ const Cust = {
   },
   /* Mã ICD hay dùng cho từng tình trạng răng — xếp lên đầu ô chẩn đoán của răng đó */
   ICD_THEO_TT: {
+    sauNong: ['K02.1','K02.0','K02.9','K02.8'],
+    sauSau:  ['K02.1','K02.5','K04.0','K02.9'],
+    sauTuy:  ['K02.5','K04.0','K04.1','K04.5','K04.6','K04.7'],
+    crown:   ['K08.1','K02.5','K03.7','K04.5'],
     caries:  ['K02.1','K02.0','K02.5','K02.9','K02.8'],
     filled:  ['K02.8','K02.1','K02.9'],
     crownKL: ['K08.1','K02.5','K03.7'],
@@ -1095,7 +1151,7 @@ const Cust = {
     if (t.loDo) uu.unshift('K04.6');
     if (t.sung) uu.unshift('K04.7');
     if (t.nn)   uu.unshift('K04.5');
-    if (tt === 'caries' && (t.loDo || t.sung)) uu.unshift('K04.1');
+    if (TT_SAU.includes(tt) && (t.loDo || t.sung)) uu.unshift('K04.1');
     const het = icdOptions();
     const daCo = [];
     const dau = uu.filter(m => { if (daCo.indexOf(m) >= 0) return false; daCo.push(m); return true; })
@@ -1109,7 +1165,7 @@ const Cust = {
   dvHopVoi(tt, rangHT){
     const ds = (this.DV_THEO_KH[tt] || []).slice();
     const t = rangHT || {};
-    if ((tt === 'caries' || tt === 'filled') && (t.loDo || t.sung || t.nn)) {
+    if ((TT_SAU.includes(tt) || tt === 'filled' || laSu(tt)) && (t.loDo || t.sung || t.nn)) {
       ds.unshift('Điều trị tủy lại', 'Nội nha răng cối lớn — gói cơ bản');
     }
     /* Chỉ giữ những dịch vụ thật sự có trong bảng giá */
@@ -1140,7 +1196,24 @@ const Cust = {
   toothMatHien(v){
     const keHoach = (App.state.lopRang === 'teethKH');
     const o = document.getElementById('oMat');
-    if (o && !keHoach) o.style.display = (v === 'caries' || v === 'filled') ? '' : 'none';
+    if (o && !keHoach) o.style.display = TT_CO_MAT.includes(v) ? '' : 'none';
+    /* Chọn "Răng sứ" thì mới hỏi kim loại hay toàn sứ */
+    const ls = document.getElementById('oLoaiSu');
+    if (ls) ls.style.display = laSu(v) ? '' : 'none';
+    /* Hàm tháo lắp: hỏi thêm dưới đó còn chân răng hay đã nhổ sạch */
+    const cr = document.getElementById('oChanRang');
+    if (cr) {
+      cr.style.display = (v === 'thaolap') ? '' : 'none';
+      if (v !== 'thaolap') cr.querySelectorAll('input').forEach(x => x.checked = false);
+    }
+    /* Lỗ dò / sưng đáy hành lang chỉ có nghĩa ở răng hở tủy và răng sứ — giấu đi thì
+       bỏ luôn dấu tick, kẻo lưu lại dấu hiệu của tình trạng cũ. */
+    const chop = document.getElementById('oChop');
+    if (chop && !keHoach) {
+      const duoc = TT_CO_CHOP.includes(v);
+      chop.style.display = duoc ? '' : 'none';
+      if (!duoc) chop.querySelectorAll('input').forEach(x => x.checked = false);
+    }
     /* Trên sơ đồ kế hoạch: đổi kết quả mong muốn thì đổi luôn danh sách dịch vụ gợi ý */
     const gy = document.getElementById('dvGoiY');
     if (gy) {
@@ -1167,11 +1240,14 @@ const Cust = {
     ev.preventDefault();
     const f = ev.target;
     const d = Object.fromEntries(new FormData(f).entries());
-    const mat = (d.s === 'caries' || d.s === 'filled')
+    /* "Răng sứ" trong ô chọn -> lưu xuống là crownKL hay crownTS tùy loại đã tick */
+    if (d.s === 'crown') d.s = ((f.querySelector('[name="loaiSu"]:checked') || {}).value) || 'crownTS';
+    const mat = TT_CO_MAT.includes(d.s)
       ? [...f.querySelectorAll('[name="mat"]:checked')].map(x => x.value) : [];
     const nn = !!f.querySelector('[name="nn"]:checked') && TT_CO_NOI_NHA.includes(d.s);
-    const loDo = !!f.querySelector('[name="loDo"]:checked');
-    const sung = !!f.querySelector('[name="sung"]:checked');
+    const coChop = TT_CO_CHOP.includes(d.s);
+    const loDo = coChop && !!f.querySelector('[name="loDo"]:checked');
+    const sung = coChop && !!f.querySelector('[name="sung"]:checked');
     const c = custById(App.state.custSel);
     if (!c[lop]) c[lop] = {};
     if (d.s === 'ok' && !nn && !loDo && !sung && !mat.length && !d.note
@@ -1179,6 +1255,8 @@ const Cust = {
     else {
       const cu = c[lop][n] || {};
       c[lop][n] = {s:d.s, mat, nn, loDo, sung, note:d.note, dichVu:(d.dichVu||'').trim(),
+        chanRang: d.s === 'thaolap' && !!f.querySelector('[name="chanRang"]:checked'),
+        nhipCau: laSu(d.s) && ((f.querySelector('[name="vaiSu"]:checked')||{}).value === 'nhipcau'),
         chanDoan: icdCode((d.chanDoan||'').trim()), dv: cu.dv || []};
       /* Đánh dấu "sửa tay" để lần dựng lại sơ đồ sau điều trị không ghi đè */
       if (lop === 'teethST') c[lop][n].tay = 1;
@@ -1237,6 +1315,43 @@ const Cust = {
     save(); App.render(); App.toast('Đã xóa sơ đồ kế hoạch');
   },
   doiLopRang(k){ App.state.lopRang = k; App.state.rangChon = null; App.render(); },
+
+  /* ---------- Tình trạng mô nha chu ----------
+     Vôi răng, vết dính, viêm nướu, viêm nha chu là chuyện của CẢ MIỆNG chứ không
+     của một cái răng — đánh dấu vào từng răng thì vừa mất công vừa sai bản chất.
+     Nên để riêng một ô ngoài sơ đồ, ghi một lần cho cả hàm. */
+  NHA_CHU: ['Vôi răng', 'Vết dính', 'Viêm nướu', 'Viêm nha chu'],
+  khoaNC(lop){ return lop === 'teethST' ? 'nhaChuST' : 'nhaChu'; },
+  khoiNhaChu(c, lop){
+    const k = this.khoaNC(lop), nc = c[k] || {};
+    const ds = nc.ds || [];
+    return `<div class="f full" style="margin-top:14px"><label>Tình trạng mô nha chu
+        <span class="sub-line">${lop === 'teethST' ? 'sau điều trị' : 'lúc khám'} · ghi cho cả hai hàm</span></label>
+      <div class="check-row">${this.NHA_CHU.map(x => `<label>
+        <input type="checkbox" ${ds.includes(x)?'checked':''} value="${h(x)}"
+          onchange="Cust.luuNhaChu('${lop}')"> ${h(x)}</label>`).join('')}
+        <label style="flex:1;min-width:180px"><input type="hidden">
+          <input id="ncNote" value="${h(nc.note||'')}" placeholder="Ghi chú: túi nha chu 5mm, chảy máu khi thăm khám…"
+            onchange="Cust.luuNhaChu('${lop}')"></label></div></div>`;
+  },
+  luuNhaChu(lop){
+    const c = custById(App.state.custSel); if (!c) return;
+    const box = document.querySelector('#mainArea .check-row');
+    const o = document.getElementById('ncNote');
+    const wrap = o ? o.closest('.check-row') : null;
+    if (!wrap) return;
+    const ds = [...wrap.querySelectorAll('input[type="checkbox"]:checked')].map(x => x.value);
+    const note = (o.value || '').trim();
+    const k = this.khoaNC(lop);
+    if (!ds.length && !note) delete c[k];
+    else c[k] = {ds, note};
+    c._up = Date.now(); save();
+    App.toast('Đã ghi tình trạng mô nha chu ✓');
+  },
+  moTaNhaChu(c, lop){
+    const nc = c[this.khoaNC(lop || 'teeth')] || {};
+    return [(nc.ds || []).join(', '), nc.note].filter(Boolean).join(' — ');
+  },
 
   /* ---------- Lịch sử điều trị của MỘT răng ----------
      Gom từ hạng mục điều trị có ghi số răng đó, cộng thêm những dòng diễn biến
@@ -1304,8 +1419,9 @@ const Cust = {
            có thân răng sứ nhưng không có chân răng. Ghi 'răng sứ' vào chỗ này
            là sai, vì nhìn sơ đồ sẽ tưởng răng thật còn nguyên. */
         if (kq.s === 'crownTS' || kq.s === 'crownKL') {
-          r.s = (r.s === 'missing' || r.s === 'pontic') ? 'pontic' : kq.s;
-        } else if (kq.s) r.s = kq.s;
+          r.nhipCau = (r.s === 'missing' || r.s === 'pontic' || !!r.nhipCau);
+          r.s = kq.s;
+        } else if (kq.s) { r.s = kq.s; if (kq.s !== 'missing') r.nhipCau = false; }
         /* Nội nha xử lý đúng cái ổ nhiễm trùng, nên lỗ dò và sưng coi như đã lành.
            Còn tồn tại thật thì bác sĩ tick lại tay. */
         if (kq.nn) { r.nn = true; r.loDo = false; r.sung = false; }
@@ -1347,25 +1463,29 @@ const Cust = {
     if (!ds.length) { App.toast('Chưa chọn răng nào'); return; }
     /* Nếu cả nhóm đang cùng một tình trạng thì mở sẵn tình trạng đó cho dễ sửa */
     const dangCo = [...new Set(ds.map(n => ((c.teeth||{})[n]||{}).s || 'ok'))];
-    const s0 = dangCo.length === 1 ? dangCo[0] : 'ok';
+    const s0 = dangCo.length === 1 ? dangCo[0]
+             : (dangCo.every(laSu) ? 'crownTS' : 'ok');
     App.modal('Ghi tình trạng cho ' + ds.length + ' răng', `
     <form class="form-grid" onsubmit="Cust.khamNhieuLuu(event)">
       <div class="note-block full">Sẽ ghi <b>cùng một tình trạng</b> cho các răng:
         <b>${ds.map(n=>'R'+n).join(', ')}</b>.
         ${dangCo.length > 1 ? '<br>Các răng này đang có tình trạng khác nhau — lưu xong sẽ thành giống nhau hết.' : ''}</div>
       <div class="f full"><label>Tình trạng</label>
-        <select name="s" onchange="Cust.toothMatHien(this.value)">
-          ${TOOTH_STATES.map(([k,l])=>`<option value="${k}"${s0===k?' selected':''}>${l}</option>`).join('')}</select></div>
-      <div class="f full" id="oMat" style="display:${(s0==='caries'||s0==='filled')?'':'none'}">
+        ${oTinhTrang(s0, ' onchange="Cust.toothMatHien(this.value)"')}</div>
+      ${oLoaiSu(s0, null)}
+      <div class="f full" id="oMat" style="display:${TT_CO_MAT.includes(s0)?'':'none'}">
         <label>Mặt răng (áp cho mọi răng đã chọn)</label>
         <div class="check-row">${TOOTH_SURF.map(([k,l])=>
           `<label><input type="checkbox" name="mat" value="${k}"> ${h(l)}</label>`).join('')}</div>
         <div class="combo-hint">Bỏ trống thì chỉ ghi tình trạng, không tô mặt nào.</div></div>
       <div class="f full" id="oNoiNha" style="display:${TT_CO_NOI_NHA.includes(s0)?'':'none'}"><div class="check-row">
         <label><input type="checkbox" name="nn"> Đã nội nha</label></div></div>
-      <div class="f full"><label>Dấu hiệu quanh chóp</label><div class="check-row">
+      <div class="f full" id="oChop" style="display:${TT_CO_CHOP.includes(s0)?'':'none'}"><label>Dấu hiệu quanh chóp</label><div class="check-row">
         <label><input type="checkbox" name="loDo"> Lỗ dò</label>
         <label><input type="checkbox" name="sung"> Sưng đáy hành lang</label></div></div>
+      <div class="f full" id="oChanRang" style="display:${s0 === 'thaolap' ? '' : 'none'}">
+        <label>Nền hàm</label><div class="check-row">
+        <label><input type="checkbox" name="chanRang"> Còn chân răng dưới hàm tháo lắp</label></div></div>
       ${Cust.oHamKhung(c, 'teeth', ds, s0)}
       <div class="f full"><label>Ghi chú</label>
         <input name="note" placeholder="Vd: cao răng nhiều, nướu sưng đỏ…"></div>
@@ -1382,18 +1502,22 @@ const Cust = {
     const c = custById(App.state.custSel);
     const ds = (App.state.rangChon || []).slice().sort((a,b)=>a-b);
     const d = Object.fromEntries(new FormData(f).entries());
-    const mat = (d.s === 'caries' || d.s === 'filled')
+    if (d.s === 'crown') d.s = ((f.querySelector('[name="loaiSu"]:checked') || {}).value) || 'crownTS';
+    const mat = TT_CO_MAT.includes(d.s)
       ? [...f.querySelectorAll('[name="mat"]:checked')].map(x => x.value) : [];
     const nn = !!f.querySelector('[name="nn"]:checked') && TT_CO_NOI_NHA.includes(d.s);
-    const loDo = !!f.querySelector('[name="loDo"]:checked');
-    const sung = !!f.querySelector('[name="sung"]:checked');
+    const coChop = TT_CO_CHOP.includes(d.s);
+    const loDo = coChop && !!f.querySelector('[name="loDo"]:checked');
+    const sung = coChop && !!f.querySelector('[name="sung"]:checked');
     const giu = !!f.querySelector('[name="giuGhiChu"]:checked');
     if (!c.teeth) c.teeth = {};
     ds.forEach(n => {
       const cu = c.teeth[n] || {};
       const note = (d.note || '').trim() || (giu ? (cu.note || '') : '');
       if (d.s === 'ok' && !nn && !loDo && !sung && !mat.length && !note) delete c.teeth[n];
-      else c.teeth[n] = {s: d.s, mat, nn, loDo, sung, note};
+      else c.teeth[n] = {s: d.s, mat, nn, loDo, sung, note,
+        chanRang: d.s === 'thaolap' && !!f.querySelector('[name="chanRang"]:checked'),
+        nhipCau: laSu(d.s) && ((f.querySelector('[name="vaiSu"]:checked')||{}).value === 'nhipcau')};
     });
     this.luuHamKhung(f, c, 'teeth', ds);
     c._up = Date.now();
@@ -1806,6 +1930,7 @@ SCREENS.customers = () => {
               keHoach ? 'Thêm dịch vụ cho' : 'Ghi tình trạng cho'} ${App.state.rangChon.length} răng</button>
             <button class="btn small" onclick="Cust.batChonNhieu()">Thoát chọn nhiều</button></div></div>` : ''}
         ${Tooth.hamHTML(c, lop)}
+        ${keHoach ? '' : Cust.khoiNhaChu(c, lop)}
         ${Tooth.tomTatHTML(c, lop)}
         ${keHoach ? (() => {
           const kho = c.teethKH || {};
@@ -3620,7 +3745,10 @@ Object.assign(HoSo, {
       &nbsp;&nbsp;Trong miệng: ${this.o(ok(g('trongMieng')),'Bình thường')} &nbsp; ${this.o(!ok(g('trongMieng')),'Bất thường:')} ${this.gach(ok(g('trongMieng'))?'':g('trongMieng'),42)}<br>
       3. Các xét nghiệm, cận lâm sàng cần làm: ${this.o(ok(g('canLamSang')),'Không')} &nbsp; ${this.o(!ok(g('canLamSang')),'Có, ghi rõ:')} ${this.gach(ok(g('canLamSang'))?'':g('canLamSang'),38)}<br>
       4. Tóm tắt bệnh án: ${this.gach(g('tomTat'),62)}</p>
-    <p><b>SƠ ĐỒ RĂNG</b><br>Trước điều trị: ${ht || this.cham(70)}
+    <p><b>SƠ ĐỒ RĂNG</b><br>${(() => {
+        const nc = Cust.moTaNhaChu(c, 'teeth');
+        return nc ? 'Mô nha chu: ' + h(nc) + '<br>' : '';
+      })()}Trước điều trị: ${ht || this.cham(70)}
       ${(() => {
         const kho = c.teethKH || {};
         const ds = Object.keys(kho).map(Number).filter(n => !isNaN(n) && kho[n] && kho[n].dichVu).sort((a,b)=>a-b);
@@ -3961,14 +4089,16 @@ const Tooth = {
     if (!t) return '';
     const g = [];
     if (t.s === 'missing')  g.push(`<line x1="3" y1="3" x2="29" y2="29" stroke="var(--muted)" stroke-width="2.5"/><line x1="29" y1="3" x2="3" y2="29" stroke="var(--muted)" stroke-width="2.5"/>`);
-    if (t.s === 'crownKL')  g.push(`<rect x="2" y="2" width="28" height="28" rx="4" fill="none" stroke="var(--ink2)" stroke-width="2.5"/><path d="M4 10h24M4 16h24M4 22h24" stroke="var(--ink2)" stroke-width="1.4" opacity=".5"/>`);
-    if (t.s === 'crownTS')  g.push(`<rect x="2" y="2" width="28" height="28" rx="4" fill="none" stroke="var(--accent-ink)" stroke-width="2.5"/>`);
+    if (t.s === 'crownKL' && !t.nhipCau) g.push(`<rect x="2" y="2" width="28" height="28" rx="4" fill="none" stroke="var(--ink2)" stroke-width="2.5"/><path d="M4 10h24M4 16h24M4 22h24" stroke="var(--ink2)" stroke-width="1.4" opacity=".5"/>`);
+    if (t.s === 'crownTS' && !t.nhipCau) g.push(`<rect x="2" y="2" width="28" height="28" rx="4" fill="none" stroke="var(--accent-ink)" stroke-width="2.5"/>`);
     if (t.s === 'thaolap')  g.push(`<rect x="2" y="2" width="28" height="28" rx="4" fill="none" stroke="var(--warn)" stroke-width="2.5" stroke-dasharray="4 3"/>`);
+    /* Còn chân răng nằm dưới hàm tháo lắp — vạch ngắn ở vùng chân răng */
+    if (t.s === 'thaolap' && t.chanRang) g.push(`<path d="M16 20v9" stroke="var(--warn)" stroke-width="3" stroke-linecap="round"/>`);
     if (t.s === 'implant')  g.push(`<path d="M16 4v24" stroke="var(--accent)" stroke-width="3"/><path d="M10 10h12M10 15h12M10 20h12M10 25h12" stroke="var(--accent)" stroke-width="2"/>`);
     /* Nhịp cầu: thân răng sứ KHÔNG có chân, treo giữa hai răng trụ. Vẽ thân răng
        hở đáy, thêm hai mấu nối sang hai bên và vạch nướu bên dưới để thấy rõ
        nó chỉ tì lên nướu chứ không cắm xuống xương. */
-    if (t.s === 'pontic')   g.push(`<rect x="5" y="3" width="22" height="21" rx="4" fill="none" stroke="var(--accent-ink)" stroke-width="2.5"/><path d="M1 13h4M27 13h4" stroke="var(--accent-ink)" stroke-width="3.5" stroke-linecap="round"/><path d="M7 29h18" stroke="var(--accent-ink)" stroke-width="2" stroke-linecap="round" opacity=".75"/>`);
+    if (t.s === 'pontic' || (laSu(t.s) && t.nhipCau)) g.push(`<rect x="5" y="3" width="22" height="21" rx="4" fill="none" stroke="var(--accent-ink)" stroke-width="2.5"/><path d="M1 13h4M27 13h4" stroke="var(--accent-ink)" stroke-width="3.5" stroke-linecap="round"/><path d="M7 29h18" stroke="var(--accent-ink)" stroke-width="2" stroke-linecap="round" opacity=".75"/>`);
     /* Lỗ dò và sưng đáy hành lang là DẤU HIỆU quan sát được, không phải cách điều trị,
        nên đánh dấu được cùng lúc với bất kỳ tình trạng nào của răng. */
     if (t.loDo) g.push(`<circle cx="27" cy="5" r="3.6" fill="var(--surface)" stroke="var(--danger)" stroke-width="1.8"/><circle cx="27" cy="5" r="1.4" fill="var(--danger)"/>`);
@@ -3983,8 +4113,10 @@ const Tooth = {
     const p = [];
     const ten = (TOOTH_STATES.find(x=>x[0]===t.s)||[])[1];
     if (t.s && t.s !== 'ok') p.push(ten);
-    if ((t.mat||[]).length) p.push((t.s === 'filled' ? 'trám ' : 'sâu ') + t.mat.map(k=>this.tenMat(k).replace(/^Mặt /,'').toLowerCase()).join(', '));
+    if ((t.mat||[]).length) p.push((t.s === 'filled' ? 'trám mặt ' : 'mặt ') + t.mat.map(k=>this.tenMat(k).replace(/^Mặt /,'').toLowerCase()).join(', '));
     if (t.nn && TT_CO_NOI_NHA.includes(t.s)) p.push('đã nội nha');
+    if (t.chanRang && t.s === 'thaolap') p.push('còn chân răng');
+    if (laSu(t.s)) p.push(t.nhipCau ? 'nhịp cầu' : 'răng trụ');
     if (t.loDo) p.push('lỗ dò');
     if (t.sung) p.push('sưng đáy hành lang');
     if (t.note) p.push(t.note);
@@ -4062,7 +4194,7 @@ const Tooth = {
       <span><i class="lg-ts"></i>Răng sứ toàn sứ</span>
       <span><i class="lg-tl"></i>Răng tháo lắp</span>
       <span><i class="lg-im"></i>Implant</span>
-      <span><i class="lg-nc"></i>Nhịp cầu</span>
+      <span><i class="lg-nc"></i>Nhịp cầu (răng sứ treo)</span>
       <span><i class="lg-mat"></i>Mất răng</span>
       <span><i class="lg-lodo"></i>Lỗ dò</span>
       <span><i class="lg-sung"></i>Sưng đáy hành lang</span>
