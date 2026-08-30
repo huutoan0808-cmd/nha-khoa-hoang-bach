@@ -619,7 +619,7 @@ const App = {
         <div style="margin-top:12px"><span class="pill ${stt.k}">${h(stt.t)}</span></div>
       </div></div>
       <div class="form-actions" style="justify-content:flex-start;flex-wrap:wrap">
-        <button class="btn" onclick="Svc.bang()">Bảng giá dịch vụ</button>
+        <button class="btn" onclick="App.closeModal();App.go('settings')">Cài đặt</button>
         ${!chuaDangNhap ? `<button class="btn" onclick="App.closeModal();App.syncNow()">Đồng bộ ngay</button>
         <button class="btn" onclick="App.passwordForm()">Đổi mật khẩu</button>` : ''}
         ${Cloud.configured() && !Cloud.loggedIn() ? `<button class="btn primary" onclick="App.closeModal();Att.loginForm()">Đăng nhập</button>` : ''}
@@ -2444,8 +2444,8 @@ const Treat = {
           Svc.goiY(1),
           'Gõ tên dịch vụ, vd: implant, tram, cao voi', Treat.onServicePick,
           'Gõ không dấu cũng ra. Dịch vụ mới thì cứ gõ rồi tự điền giá.')}
-        <div class="combo-hint">Sửa tên, loại hoặc giá dịch vụ ở
-          <button type="button" class="link-btn" onclick="Svc.bang()">Bảng giá dịch vụ</button>.</div></div>
+        <div class="combo-hint">Sửa tên, loại hoặc giá dịch vụ trong
+          <b>Cài đặt → Bảng giá dịch vụ</b>.</div></div>
       <input type="hidden" name="group" value="${h(t.group||'')}">
       <div class="f full"><label>Răng / vị trí</label>
         <input name="tooth" value="${h(t.tooth||'')}" placeholder="Vd: 36, 37, 46 — cách nhau bằng dấu phẩy" oninput="Treat.tinhLai()">
@@ -2714,7 +2714,6 @@ SCREENS.treatment = () => {
       ${Treat.soDoHTML(c)}
     </div></div>
   <div class="card mb"><div class="card-h"><h2>Kế hoạch điều trị — ${h(c.name)}</h2><span class="spacer"></span>
-    <button class="btn small" onclick="Svc.bang()">Bảng giá · sửa giá dịch vụ</button>
     <button class="btn small" onclick="Treat.itemForm()">${IC.plus} Thêm hạng mục</button></div>
     <div class="tbl-wrap"><table><thead><tr><th>Hạng mục</th><th>Răng</th><th>Bác sĩ · người phụ</th><th>Trạng thái</th><th class="r">Đơn giá</th><th>Công đoạn</th></tr></thead><tbody>${itemRows}</tbody></table></div></div>
   <div class="card mb"><div class="card-h"><h2>Quá trình điều trị</h2><span class="hint">bấm vào một dòng để sửa</span><span class="spacer"></span>
