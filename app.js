@@ -487,6 +487,14 @@ const App = {
   cur:'dashboard',
   state:{calDate:todayISO(), custSel:'c1', custQ:'', treatCust:'c1', hrTab:'payroll', invQ:'', rp:{type:'month', y:(new Date()).getFullYear(), m:(new Date()).getMonth()+1, q:Math.floor((new Date()).getMonth()/3)+1}, toothSel:null},
 
+  /* Cả phần mềm chỉ có MỘT khách đang xem. Trước đây tab Khách hàng giữ custSel còn
+     tab Điều trị giữ treatCust riêng, nên chọn khách bên này rồi bấm sang bên kia là
+     nó hiện người đầu danh sách. Mọi chỗ chọn khách đều đi qua đây. */
+  chonKhach(id){
+    if (!id) return;
+    this.state.custSel = id;
+    this.state.treatCust = id;
+  },
   go(id){
     if (!Perm.tabs().includes(id)) { App.toast('Bạn không có quyền vào mục này'); return; }
     this.cur = id; this.closeSheet(); this.render(); window.scrollTo({top:0});
@@ -1007,12 +1015,12 @@ const Cust = {
       db.seq.cust++;
       const c = Object.assign({id:uid(), code: d.code || ('KH-'+db.seq.cust), createdAt: d.createdAt || todayISO(),
         teeth:{}, record:{dienBien:[], vanDe:[]}}, d);
-      db.customers.unshift(c); App.state.custSel = c.id; App.toast('Đã thêm khách hàng ✓');
+      db.customers.unshift(c); App.chonKhach(c.id); App.toast('Đã thêm khách hàng ✓');
     }
     save(); App.closeModal(); App.render();
   },
   pick(id){
-    App.state.custSel = id; App.render();
+    App.chonKhach(id); App.render();
     /* Nhảy thẳng, KHÔNG cuộn mượt: danh sách vài trăm khách thì quãng cuộn cả chục
        nghìn pixel, cuộn mượt vừa lâu vừa chạy lố qua chỗ cần. */
     const el = $('#custDetail');
@@ -1025,7 +1033,7 @@ const Cust = {
   moHoSo(id){
     const c = custById(id);
     if (!c) { App.toast('Không tìm thấy hồ sơ khách này'); return; }
-    App.state.custSel = id;
+    App.chonKhach(id);
     /* Ô tìm kiếm còn chữ cũ có thể đang lọc mất người này khỏi danh sách */
     const q = Combo.norm(App.state.custQ || '');
     const khop = !q || Combo.norm(c.name).includes(q) || Combo.norm(c.code || '').includes(q)
@@ -1221,7 +1229,7 @@ const Cust = {
     db.treatments.push(t);
     save(); App.render();
     App.toast('Đã thêm "' + t.name + '" cho răng ' + n + ' vào kế hoạch điều trị ✓');
-    App.state.treatCust = c.id;
+    App.chonKhach(c.id);
     setTimeout(() => Treat.itemForm(t.id), 60);
   },
 
@@ -1836,7 +1844,7 @@ const Cust = {
     db.rx = db.rx.filter(x=>x.customerId!==id);
     db.appointments = db.appointments.filter(x=>x.customerId!==id);
     db.labs = db.labs.filter(x=>x.customerId!==id);
-    if (App.state.custSel===id) App.state.custSel = db.customers[0] && db.customers[0].id;
+    if (App.state.custSel === id) App.chonKhach(db.customers[0] && db.customers[0].id);
     save(); App.render(); App.toast('Đã xóa hồ sơ');
   },
 };
@@ -1889,7 +1897,7 @@ SCREENS.customers = () => {
     <div class="card mb" id="custDetail">
       <div class="card-h"><h2>Hồ sơ: ${h(c.name)}</h2><span class="hint">${h(c.code)}</span><span class="spacer"></span>
         <button class="btn small" onclick="Cust.form('${c.id}')">Sửa hồ sơ</button>
-        <button class="btn small" onclick="App.state.treatCust='${c.id}';App.go('treatment')">Điều trị & thu tiền →</button>
+        <button class="btn small" onclick="App.chonKhach('${c.id}');App.go('treatment')">Điều trị &amp; thu tiền →</button>
         ${Perm.only('xoa', `<button class="btn small danger" onclick="Cust.del('${c.id}')">Xóa</button>`)}</div>
       <div class="card-b">
         <div class="form-grid" style="gap:8px 16px">
@@ -2281,7 +2289,7 @@ SCREENS.calendar = () => {
 
 /* ---------- Điều trị & thanh toán ---------- */
 const Treat = {
-  setCust(id){ App.state.treatCust = id; App.render(); },
+  setCust(id){ App.chonKhach(id); App.render(); },
   onCustPick(v){
     const code = String(v).split('·').pop().trim();
     const c = db.customers.find(x => x.code === code);
@@ -2625,8 +2633,8 @@ const Treat = {
 };
 
 SCREENS.treatment = () => {
-  const cid = App.state.treatCust || (db.customers[0] && db.customers[0].id);
-  App.state.treatCust = cid;
+  const cid = App.state.treatCust || App.state.custSel || (db.customers[0] && db.customers[0].id);
+  App.chonKhach(cid);
   const c = custById(cid);
   if (!c) return '<div class="page-head"><h1>Điều trị & thanh toán</h1><div class="sub">Chưa có khách hàng — thêm ở tab Khách hàng.</div></div>';
   const items = db.treatments.filter(t=>t.customerId===cid);
