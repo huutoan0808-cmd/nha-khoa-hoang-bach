@@ -1934,9 +1934,9 @@ SCREENS.customers = () => {
       const soST = Object.keys(c.teethST || {}).filter(n => Tooth.moTa(n, c.teethST[n]) !== 'Bình thường').length;
 
       const BUOC = [
-        {k: 'teeth',   so: 1, ten: 'Khám tình trạng ban đầu',
+        {k: 'teeth',   so: 1, ten: 'Tình trạng ban đầu',
          mo: soHT ? soHT + ' răng đã ghi' : 'chưa ghi răng nào', xong: soHT > 0},
-        {k: 'teethKH', so: 2, ten: 'Lên kế hoạch điều trị',
+        {k: 'teethKH', so: 2, ten: 'Kế hoạch điều trị',
          mo: soKH ? soKH + ' răng · ' + money(tienKH) : 'chưa có kế hoạch', xong: soKH > 0},
         {k: 'teethST', so: 3, ten: 'Tình trạng sau điều trị',
          mo: soST ? soST + ' răng đã xong' : 'chưa có gì', xong: soST > 0},
