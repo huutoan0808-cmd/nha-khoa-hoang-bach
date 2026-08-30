@@ -1890,11 +1890,11 @@ SCREENS.customers = () => {
         {k: 'teethST', so: 3, ten: 'Tình trạng sau điều trị',
          mo: soST ? soST + ' răng đã xong' : 'chưa có gì', xong: soST > 0},
       ];
-      const iNay = BUOC.findIndex(b => b.k === lop);
-
       return `<div class="card mb">
       <div class="card-h"><h2>Sơ đồ răng</h2>
         <span class="hint">${sauDT ? 'nhấn vào răng để xem lịch sử điều trị của răng đó' : 'nhấn vào răng để ghi tình trạng'}</span><span class="spacer"></span>
+        ${sauDT ? '' : `<button class="btn small ${App.state.rangChon?'primary':''}" onclick="Cust.batChonNhieu()">
+            ${App.state.rangChon ? 'Xong chọn nhiều răng' : 'Chọn nhiều răng cùng lúc'}</button>`}
         ${keHoach ? `<button class="btn small" onclick="Cust.chepSangKH()">Chép lại từ hiện trạng</button>
           ${coKH?`<button class="btn small danger" onclick="Cust.xoaKH()">Xóa kế hoạch</button>`:''}` : ''}
         ${sauDT ? `<button class="btn small primary" onclick="Cust.dungST()">Dựng lại từ hạng mục đã hoàn tất</button>
@@ -1909,14 +1909,10 @@ SCREENS.customers = () => {
         ${lop === 'teeth' ? `<div class="note-block mb">Bấm vào từng răng để ghi <b>tình trạng lúc mới đến khám</b>:
           sâu mặt nào, đã trám, răng sứ, mất răng, lỗ dò… Đây là sơ đồ gốc, hai bước sau đều dựa vào nó
           và không sửa ngược lại nó.
-          ${App.state.rangChon ? '' : `<br>Nhiều răng <b>cùng một tình trạng</b> (mất nhiều răng, cao răng cả hàm)?
-            Bấm <button type="button" class="link-btn" onclick="Cust.batChonNhieu()">Chọn nhiều răng</button>
-            rồi quét qua các răng đó, ghi một lần cho cả nhóm.`}</div>` : ''}
+          ${App.state.rangChon ? '' : '<br>Nhiều răng <b>cùng một tình trạng</b> (mất nhiều răng, cao răng cả hàm) thì bấm <b>Chọn nhiều răng cùng lúc</b> ở góc trên.'}</div>` : ''}
         ${keHoach ? `<div class="note-block mb">Bấm vào răng cần làm: ô <b>Tình trạng hiện tại</b> đã lấy sẵn từ bước 1,
           bạn chỉ cần chọn <b>chẩn đoán</b> và <b>dịch vụ sẽ làm</b>.
-          ${App.state.rangChon ? '' : `<br>Làm <b>cùng một dịch vụ cho nhiều răng</b> (cầu răng, niềng, tháo lắp)?
-            Bấm <button type="button" class="link-btn" onclick="Cust.batChonNhieu()">Chọn nhiều răng</button>
-            rồi quét qua các răng đó, phần mềm gộp thành một hạng mục có số lượng.`}</div>` : ''}
+          ${App.state.rangChon ? '' : '<br>Làm <b>cùng một dịch vụ cho nhiều răng</b> (cầu răng, niềng, tháo lắp) thì bấm <b>Chọn nhiều răng cùng lúc</b> ở góc trên — phần mềm gộp thành một hạng mục có số lượng.'}</div>` : ''}
         ${sauDT ? `<div class="note-block mb">Sơ đồ này ghi <b>tình trạng răng sau khi đã điều trị</b>.
           Bấm <b>Dựng lại từ hạng mục đã hoàn tất</b> để phần mềm tự vẽ theo những dịch vụ đã xong
           (${xongCount} hạng mục có ghi số răng), rồi bấm vào từng răng để xem <b>lịch sử điều trị</b> và sửa lại nếu cần.
@@ -1961,17 +1957,6 @@ SCREENS.customers = () => {
             <br><br><span class="sub-line">${co.length} răng đã được điều trị · bấm vào răng để xem chi tiết.</span></div>`;
         })() : ''}
         ${Tooth.chuThichHTML()}
-        <div class="qt-chan">
-          ${iNay > 0 ? `<button class="btn small" onclick="Cust.doiLopRang('${BUOC[iNay-1].k}')">← Bước ${BUOC[iNay-1].so}: ${BUOC[iNay-1].ten}</button>` : '<span></span>'}
-          <span class="spacer"></span>
-          ${iNay === 0 ? `<button class="btn ${App.state.rangChon?'':'primary'}" onclick="Cust.batChonNhieu()">
-              ${App.state.rangChon ? 'Thoát chọn nhiều răng' : 'Chọn nhiều răng cùng lúc'}</button>
-            <button class="btn primary" onclick="Cust.doiLopRang('teethKH')">Xong khám — sang bước 2: lên kế hoạch →</button>` : ''}
-          ${iNay === 1 ? `<button class="btn ${App.state.rangChon?'':'primary'}" onclick="Cust.batChonNhieu()">
-              ${App.state.rangChon ? 'Thoát chọn nhiều răng' : 'Chọn nhiều răng cùng lúc'}</button>
-            <button class="btn primary" onclick="Cust.doiLopRang('teethST')">Xong kế hoạch — sang bước 3 →</button>` : ''}
-          ${iNay === 2 ? `<button class="btn primary" onclick="App.go('treatment')">Sang tab Điều trị để thu tiền →</button>` : ''}
-        </div>
       </div>
     </div>`;
     })()}

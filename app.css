@@ -247,7 +247,6 @@ td.r,th.r{text-align:right}
 .buoc.dang{border-color:var(--accent);background:var(--accent-soft)}
 .buoc.dang .buoc-so{background:var(--accent);color:var(--accent-contrast)}
 .buoc.dang .buoc-chu b{color:var(--accent-ink)}
-.qt-chan{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
 @media (max-width:720px){.qt-noi{display:none}.buoc{min-width:100%}}
 
 .subtabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--line);overflow-x:auto}
