@@ -1785,20 +1785,23 @@ const Cust = {
             ? 'Chỉ hiện những dịch vụ <b>chưa hoàn tất</b>. Chọn xong thì đợt điều trị, bác sĩ và mẫu điền nhanh bên dưới tự bám theo dịch vụ đó.'
             : 'Khách này chưa có dịch vụ nào đang làm dở — thêm hạng mục ở tab <b>Điều trị</b> trước.'}</div></div>`;
       })()}
-      <div class="f"><label>Ngày</label><input type="date" name="date" value="${h((v&&v.date)||todayISO())}" required></div>
+      <div class="f"><label>Ngày</label><input type="date" name="date" value="${h((v&&v.date)||todayISO())}" required>
+        <div class="combo-hint">Mặc định hôm nay — ghi bù cho buổi trước thì đổi sang ngày khác.</div></div>
       <div class="f"><label>Bác sĩ thực hiện</label><select name="doctorId">
         <option value="">— chưa ghi —</option>
         ${db.staff.filter(s=>s.active!==false).map(s=>`<option value="${s.id}"${v&&v.doctorId===s.id?' selected':''}>${h(s.name)}${s.role?' · '+h(s.role):''}</option>`).join('')}</select></div>
       <div class="f"><label>Người phụ (trợ thủ)</label><select name="assistantId">
         <option value="">— không có —</option>
         ${db.staff.filter(s=>s.active!==false).map(s=>`<option value="${s.id}"${v&&v.assistantId===s.id?' selected':''}>${h(s.name)}${s.role?' · '+h(s.role):''}</option>`).join('')}</select></div>
-      <div class="f full"><label>Điền nhanh theo mẫu phòng khám</label>
-        <select id="mauBuoiSel" onchange="Cust.mauBuoi(this)">
-          ${Cust.optMauBuoi(Cust.tenDVCua(v) || HoSo.lyDoDang(c))}</select>
-        <div class="combo-hint">Câu chữ lấy đúng từ mẫu "Phiếu theo dõi điều trị" của phòng khám — chọn xong sửa lại tùy ý.</div></div>
-      <div class="f full"><label>Thuộc đợt điều trị</label><select name="episodeId">
-        <option value="">— không gắn đợt nào —</option>
-        ${Dot.cua(c.id).map(e=>`<option value="${e.id}"${(v?v.episodeId:(Dot.dangChon(c)||{}).id)===e.id?' selected':''}>${h(e.ten||'(chưa đặt tên)')} — ${fmtD(e.tuNgay)}</option>`).join('')}</select></div>
+      ${(() => {
+        /* Đợt điều trị đi theo dịch vụ chứ không chọn riêng — một dịch vụ chỉ nằm trong
+           đúng một đợt, cho chọn tay chỉ tạo cơ hội gắn lệch. */
+        const t0 = v && v.treatmentId ? db.treatments.find(x => x.id === v.treatmentId) : null;
+        const e0 = t0 && t0.episodeId ? (db.episodes || []).find(e => e.id === t0.episodeId) : null;
+        return `<div class="f full"><label>Thuộc đợt điều trị</label>
+          <div id="oDot" class="tooth-info" style="margin-top:0">${Cust.moTaDot(e0)}</div>
+          <input type="hidden" name="episodeId" value="${h(e0 ? e0.id : '')}"></div>`;
+      })()}
       <div class="f full"><label>Công đoạn đã làm trong buổi này</label>
         <div id="oCongDoan">${Cust.khoiCongDoan(v && v.treatmentId ? db.treatments.find(x => x.id === v.treatmentId) : null, v)}</div>
         <div class="combo-hint">Tick công đoạn nào thì công đoạn đó được ghi là <b>đã làm</b> trong hạng mục điều trị,
@@ -1828,45 +1831,26 @@ const Cust = {
         ${h(b.t)}${da ? (cua.has(b.b) ? '' : ' ✓') : ''}</label>`;
     }).join('')}</div>`;
   },
-  /* Tên dịch vụ mà một dòng diễn biến đang gắn vào */
-  tenDVCua(v){
-    const t = v && v.treatmentId ? db.treatments.find(x => x.id === v.treatmentId) : null;
-    return t ? t.name : '';
+  moTaDot(e){
+    return e ? `<b>${h(e.ten || '(chưa đặt tên)')}</b> — mở ${fmtD(e.tuNgay)}${e.status ? ' · ' + h(e.status) : ''}`
+             : '<span class="sub-line">Chọn dịch vụ ở trên — đợt điều trị sẽ hiện theo dịch vụ đó.</span>';
   },
-  optMauBuoi(ten){
-    const ds = GY.buoiCho(ten || '');
-    return '<option value="">— chọn buổi điều trị theo mẫu —</option>'
-      + (ds.map((b, i) => `<option value="${i}">${h(b.ten)}${b.l ? ' · ' + h(b.l) : ''}</option>`).join('')
-         || '<option value="" disabled>Chọn dịch vụ ở trên để thấy mẫu</option>');
-  },
-  /* Đổi dịch vụ thì đợt điều trị, bác sĩ, người phụ và danh sách mẫu đều bám theo */
+  /* Đổi dịch vụ thì đợt điều trị, bác sĩ, người phụ và công đoạn đều bám theo */
   doiDichVuDienBien(){
     const f = document.querySelector('#modalBody form'); if (!f) return;
     const id = (f.querySelector('[name="treatmentId"]') || {}).value;
     const t = db.treatments.find(x => x.id === id);
     const dat = (n, val) => { const o = f.querySelector(`[name="${n}"]`); if (o && val) o.value = val; };
     if (t) {
-      dat('episodeId', t.episodeId);
       if (!(f.querySelector('[name="doctorId"]') || {}).value) dat('doctorId', t.doctorId);
       if (!(f.querySelector('[name="assistantId"]') || {}).value) dat('assistantId', t.assistantId);
     }
-    const sel = document.getElementById('mauBuoiSel');
-    if (sel) sel.innerHTML = this.optMauBuoi(t ? t.name : '');
+    /* Đợt điều trị bám theo dịch vụ */
+    const e = t && t.episodeId ? (db.episodes || []).find(x => x.id === t.episodeId) : null;
+    const oe = f.querySelector('[name="episodeId"]'); if (oe) oe.value = e ? e.id : '';
+    const hd = document.getElementById('oDot'); if (hd) hd.innerHTML = this.moTaDot(e);
     const cd = document.getElementById('oCongDoan');
     if (cd) cd.innerHTML = this.khoiCongDoan(t || null, null);
-  },
-  /* Chọn một buổi trong mẫu -> đổ thẳng vào ba ô diễn biến / chỉ định / dặn dò */
-  mauBuoi(sel){
-    const c = this.aiDangXem(); if (!c || sel.value === '') return;
-    const f0 = sel.closest('form');
-    const id = f0 ? ((f0.querySelector('[name="treatmentId"]') || {}).value) : '';
-    const t = db.treatments.find(x => x.id === id);
-    const b = GY.buoiCho(t ? t.name : HoSo.lyDoDang(c))[+sel.value]; if (!b) return;
-    const f = sel.closest('form'); if (!f) return;
-    const dat = (n, v) => { const o = f.querySelector(`[name="${n}"]`); if (o && v) o.value = v; };
-    dat('db', b.db); dat('xt', b.cd); dat('dan', b.dan);
-    sel.value = '';
-    App.toast('Đã điền theo mẫu — sửa lại tùy ý');
   },
   visitSave(ev, vid, cid){
     ev.preventDefault();
