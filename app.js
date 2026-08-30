@@ -95,14 +95,14 @@ const TEETH_DN = [48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38];
    thì mất thông tin. Các mặt sâu/trám để trong mảng `mat`. */
 const TOOTH_STATES = [
   ['ok',      'Bình thường'],
-  ['sauNong', 'Sâu ngà nông'],
-  ['sauSau',  'Sâu ngà sâu'],
-  ['sauTuy',  'Sâu vỡ lớn đến tủy'],
+  ['sau',     'Sâu răng'],
   ['filled',  'Đã trám'],
+  ['noinha',  'Đã nội nha'],
   ['crown',   'Răng sứ'],
   ['thaolap', 'Răng tháo lắp'],
   ['implant', 'Implant'],
   ['missing', 'Mất răng'],
+  ['chanrang','Chân răng'],
 ];
 /* Dịch vụ cơ bản phòng khám làm thường xuyên. Bản cài cũ thiếu món nào thì tự thêm
    với giá 0 để quản lý điền — KHÔNG đụng vào giá của những món đã có. */
@@ -130,32 +130,57 @@ const trangThaiMau = s => s === 'Hoàn tất' ? 'ok' : s === 'Đang điều tr�
   : s === 'Chưa điều trị' ? 'warn' : 'mutedp';
 /* 'crown' chỉ là mục để CHỌN trong ô tình trạng; lưu xuống vẫn là crownKL hoặc
    crownTS như cũ, nên sơ đồ, bản in và hồ sơ đã nhập không phải đổi gì. */
+/* "Sâu răng" là một mục lớn; nông hay sâu hay đã vỡ đến tủy là mức độ bên trong,
+   hỏi riêng cho gọn danh sách. Lưu xuống vẫn là sauNong / sauSau / sauTuy. */
+const SAU_MUC = [
+  ['sauNong', 'Sâu ngà nông'],
+  ['sauSau',  'Sâu ngà sâu'],
+  ['sauTuy',  'Sâu đến tủy'],
+];
+const oMucSau = sNay => {
+  const ds = SAU_MUC.concat(sNay === 'caries' ? [['caries', 'Chưa phân độ (hồ sơ cũ)']] : []);
+  return `<div class="f full" id="oMucSau" style="display:${laSau(sNay) ? '' : 'none'}">
+    <label>Mức độ sâu</label><div class="check-row">${ds.map(([k, l]) =>
+      `<label><input type="radio" name="mucSau" value="${k}"${(sNay === k || (!laSau(sNay) && k === 'sauNong')) ? ' checked' : ''}
+        onchange="Cust.doiMucSau()"> ${l}</label>`).join('')}</div></div>`;
+};
+
 const SU_LOAI = [['crownKL', 'Kim loại'], ['crownTS', 'Toàn sứ']];
 /* Một cái răng sứ trong miệng luôn ở một trong hai vai: nó là RĂNG TRỤ (răng thật
    được mài rồi bọc) hay là NHỊP CẦU (răng giả treo giữa hai trụ, bên dưới không có
    chân răng). Hỏi riêng thay vì bắt chọn trong danh sách tình trạng, vì hai chuyện
    này độc lập: nhịp cầu cũng có loại kim loại hay toàn sứ như thường. */
 const SU_VAI = [['tru', 'Răng trụ (răng thật bọc sứ)'], ['nhipcau', 'Nhịp cầu (răng giả treo)']];
+/* TOOTH_STATES chỉ chứa MỤC LỚN. Tên đầy đủ của từng giá trị lưu xuống nằm ở đây —
+   thiếu bảng này thì câu mô tả của răng sâu hay răng sứ bị rỗng. */
+const TEN_TT = {
+  ok: 'Bình thường', filled: 'Đã trám', noinha: 'Đã nội nha', thaolap: 'Răng tháo lắp',
+  implant: 'Implant', missing: 'Mất răng', chanrang: 'Chân răng',
+  sauNong: 'Sâu ngà nông', sauSau: 'Sâu ngà sâu', sauTuy: 'Sâu đến tủy',
+  crownKL: 'Răng sứ kim loại', crownTS: 'Răng sứ toàn sứ',
+  caries: 'Sâu răng', pontic: 'Nhịp cầu',
+};
 const laSu = s => s === 'crown' || s === 'crownKL' || s === 'crownTS';
-const sChon = s => laSu(s) ? 'crown' : s;          /* giá trị hiện trong ô chọn */
+const laSau = s => s === 'sau' || s === 'sauNong' || s === 'sauSau' || s === 'sauTuy' || s === 'caries';
+/* Giá trị hiện trong ô chọn mục lớn — mọi mức sâu gom về 'sau', mọi loại sứ về 'crown' */
+const sChon = s => laSu(s) ? 'crown' : (laSau(s) ? 'sau' : s);
 
 /* Ba mức sâu răng — dùng ở chỗ nào chỉ cần biết "răng này đang sâu" */
-const TT_SAU = ['sauNong', 'sauSau', 'sauTuy', 'caries'];
+const TT_SAU = ['sau', 'sauNong', 'sauSau', 'sauTuy', 'caries'];
 /* Chọn được mặt răng: sâu ngà nông, sâu ngà sâu, đã trám. Răng vỡ lớn đến tủy thì
    mô răng gần như không còn, đánh dấu từng mặt không còn ý nghĩa. */
 const TT_CO_MAT = ['sauNong', 'sauSau', 'filled', 'caries'];
+/* Chân răng còn sót và răng đã nội nha cũng có thể nhiễm trùng vùng chóp */
 /* Lỗ dò và sưng đáy hành lang là dấu nhiễm trùng vùng chóp — chỉ hỏi ở răng đã hở
    tủy và ở răng sứ (răng sứ đã chữa tủy vẫn có thể tái nhiễm). */
-const TT_CO_CHOP = ['sauTuy', 'crown', 'crownKL', 'crownTS'];
+const TT_CO_CHOP = ['sauTuy', 'noinha', 'chanrang', 'crown', 'crownKL', 'crownTS'];
 const TT_CO_NOI_NHA = ['sauNong', 'sauSau', 'filled', 'crown', 'crownKL', 'crownTS', 'caries'];
 /* Hồ sơ cũ ghi 'caries' (sâu răng chưa phân độ). Không tự gán bừa một mức nào —
    giữ nguyên, chỉ cho hiện lại trong ô chọn của đúng cái răng đó, để lỡ mở ra
    lưu lại thì không bị nhảy về "Bình thường". */
-const TT_CU = {caries: 'Sâu răng (hồ sơ cũ, chưa phân độ)'};
 const oTinhTrang = (sNay, them) => {
   const v = sChon(sNay);
   return `<select name="s"${them || ''}>${TOOTH_STATES
-    .concat(TT_CU[v] ? [[v, TT_CU[v]]] : [])
     .map(([k, l]) => `<option value="${k}"${v === k ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
 };
 const oLoaiSu = (sNay, tNay) => `<div class="f full" id="oLoaiSu" style="display:${laSu(sNay) ? '' : 'none'}">
@@ -1041,6 +1066,7 @@ const Cust = {
     <form class="form-grid" onsubmit="Cust.toothSave(event,${n},'${lop}')">
       <div class="f full"><label>${st ? 'Tình trạng sau điều trị' : 'Tình trạng hiện tại'}</label>
         ${oTinhTrang(t.s, ' onchange="Cust.toothMatHien(this.value)"')}</div>
+      ${oMucSau(t.s)}
       ${oLoaiSu(t.s, t)}
       ${kh ? `<div class="f full"><label>Chẩn đoán</label>
         ${Combo.html('cbRangDX','chanDoan', icdName(t.chanDoan||'')||'', Cust.icdHopVoi(t.s, hienTai),
@@ -1117,6 +1143,8 @@ const Cust = {
     sauTuy:  ['Nội nha răng cối lớn — gói cơ bản','Nội nha răng cối nhỏ','Nội nha răng cửa',
               'Răng toàn sứ Zirconia','Endocrown','Nhổ răng vĩnh viễn — 2 chân'],
     crown:   ['Gắn lại răng sứ kim loại','Gắn lại răng toàn sứ','Răng toàn sứ Zirconia','Nội nha lại'],
+    noinha:  ['Răng toàn sứ Zirconia','Endocrown','Trám sâu răng phía trong — nâng cao','Nội nha lại'],
+    chanrang:['Nhổ răng vĩnh viễn — 2 chân','Nhổ chân răng','Trụ Implant Hàn Quốc','Răng tháo lắp nhựa — Nhật'],
     caries:  ['Trám sâu răng phía trong — tiêu chuẩn','Trám răng cửa — tiêu chuẩn',
               'Nội nha răng cối lớn — gói cơ bản','Răng toàn sứ Zirconia','Nhổ răng vĩnh viễn — 2 chân'],
     filled:  ['Trám sâu răng phía trong — nâng cao','Răng toàn sứ Zirconia','Endocrown','Inlay / Onlay Emax'],
@@ -1135,6 +1163,8 @@ const Cust = {
     sauSau:  ['K02.1','K02.5','K04.0','K02.9'],
     sauTuy:  ['K02.5','K04.0','K04.1','K04.5','K04.6','K04.7'],
     crown:   ['K08.1','K02.5','K03.7','K04.5'],
+    noinha:  ['K04.5','K04.1','K03.7','K02.5'],
+    chanrang:['K08.3','K04.5','K04.6','K04.7'],
     caries:  ['K02.1','K02.0','K02.5','K02.9','K02.8'],
     filled:  ['K02.8','K02.1','K02.9'],
     crownKL: ['K08.1','K02.5','K03.7'],
@@ -1193,8 +1223,14 @@ const Cust = {
     setTimeout(() => Treat.itemForm(t.id), 60);
   },
 
+  /* Đổi mức sâu thì các ô bên dưới phải mở lại theo đúng mức đó */
+  doiMucSau(){ this.toothMatHien('sau'); },
   toothMatHien(v){
     const keHoach = (App.state.lopRang === 'teethKH');
+    const ms = document.getElementById('oMucSau');
+    if (ms) ms.style.display = laSau(v) ? '' : 'none';
+    /* 'sau' chỉ là mục lớn — ô nào được hỏi là do MỨC ĐỘ quyết định */
+    if (v === 'sau') v = ((document.querySelector('[name="mucSau"]:checked') || {}).value) || 'sauNong';
     const o = document.getElementById('oMat');
     if (o && !keHoach) o.style.display = TT_CO_MAT.includes(v) ? '' : 'none';
     /* Chọn "Răng sứ" thì mới hỏi kim loại hay toàn sứ */
@@ -1240,7 +1276,8 @@ const Cust = {
     ev.preventDefault();
     const f = ev.target;
     const d = Object.fromEntries(new FormData(f).entries());
-    /* "Răng sứ" trong ô chọn -> lưu xuống là crownKL hay crownTS tùy loại đã tick */
+    /* Mục lớn trong ô chọn -> lưu xuống mức/loại cụ thể đã tick */
+    if (d.s === 'sau') d.s = ((f.querySelector('[name="mucSau"]:checked') || {}).value) || 'sauNong';
     if (d.s === 'crown') d.s = ((f.querySelector('[name="loaiSu"]:checked') || {}).value) || 'crownTS';
     const mat = TT_CO_MAT.includes(d.s)
       ? [...f.querySelectorAll('[name="mat"]:checked')].map(x => x.value) : [];
@@ -1472,6 +1509,7 @@ const Cust = {
         ${dangCo.length > 1 ? '<br>Các răng này đang có tình trạng khác nhau — lưu xong sẽ thành giống nhau hết.' : ''}</div>
       <div class="f full"><label>Tình trạng</label>
         ${oTinhTrang(s0, ' onchange="Cust.toothMatHien(this.value)"')}</div>
+      ${oMucSau(s0)}
       ${oLoaiSu(s0, null)}
       <div class="f full" id="oMat" style="display:${TT_CO_MAT.includes(s0)?'':'none'}">
         <label>Mặt răng (áp cho mọi răng đã chọn)</label>
@@ -1502,6 +1540,7 @@ const Cust = {
     const c = custById(App.state.custSel);
     const ds = (App.state.rangChon || []).slice().sort((a,b)=>a-b);
     const d = Object.fromEntries(new FormData(f).entries());
+    if (d.s === 'sau') d.s = ((f.querySelector('[name="mucSau"]:checked') || {}).value) || 'sauNong';
     if (d.s === 'crown') d.s = ((f.querySelector('[name="loaiSu"]:checked') || {}).value) || 'crownTS';
     const mat = TT_CO_MAT.includes(d.s)
       ? [...f.querySelectorAll('[name="mat"]:checked')].map(x => x.value) : [];
@@ -4089,14 +4128,17 @@ const Tooth = {
     if (t.loDo) g.push(`<circle cx="27" cy="5" r="3.6" fill="var(--surface)" stroke="var(--danger)" stroke-width="1.8"/><circle cx="27" cy="5" r="1.4" fill="var(--danger)"/>`);
     if (t.sung) g.push(`<path d="M2 30 q5 -6 10 0 z" fill="var(--warn)" stroke="var(--warn)" stroke-width="1.2" stroke-linejoin="round"/>`);
     /* Nội nha: vạch dọc ở chân răng — chồng được lên cả răng sứ, đúng thực tế lâm sàng */
-    if (t.nn && TT_CO_NOI_NHA.includes(t.s)) g.push(`<path d="M16 6v20" stroke="var(--warn)" stroke-width="2.5" stroke-linecap="round"/><circle cx="16" cy="28" r="2.6" fill="var(--warn)"/>`);
+    if (t.s === 'noinha' || (t.nn && TT_CO_NOI_NHA.includes(t.s)))
+      g.push(`<path d="M16 6v20" stroke="var(--warn)" stroke-width="2.5" stroke-linecap="round"/><circle cx="16" cy="28" r="2.6" fill="var(--warn)"/>`);
+    /* Chân răng còn sót: chỉ còn phần chân, thân răng đã mất */
+    if (t.s === 'chanrang') g.push(`<path d="M11 14h10l-2 15h-6z" fill="var(--muted)" fill-opacity=".35" stroke="var(--ink2)" stroke-width="1.8" stroke-linejoin="round"/><path d="M6 12h20" stroke="var(--ink2)" stroke-width="2" stroke-dasharray="3 3"/>`);
     return g.length ? `<svg class="tooth-ov" viewBox="0 0 32 40" width="32" height="40" aria-hidden="true">${g.join('')}</svg>` : '';
   },
   /* Câu mô tả ngắn để hiện khi rê chuột và in ra bệnh án */
   moTa(n, t){
     if (!t || (t.s === 'ok' && !t.nn && !t.loDo && !t.sung && !(t.mat||[]).length && !t.note)) return 'Bình thường';
     const p = [];
-    const ten = (TOOTH_STATES.find(x=>x[0]===t.s)||[])[1];
+    const ten = TEN_TT[t.s] || (TOOTH_STATES.find(x => x[0] === t.s) || [])[1] || '';
     if (t.s && t.s !== 'ok') p.push(ten);
     if ((t.mat||[]).length) p.push((t.s === 'filled' ? 'trám mặt ' : 'mặt ') + t.mat.map(k=>this.tenMat(k).replace(/^Mặt /,'').toLowerCase()).join(', '));
     if (t.nn && TT_CO_NOI_NHA.includes(t.s)) p.push('đã nội nha');
@@ -4180,6 +4222,7 @@ const Tooth = {
       <span><i class="lg-tl"></i>Răng tháo lắp</span>
       <span><i class="lg-im"></i>Implant</span>
       <span><i class="lg-nc"></i>Nhịp cầu (răng sứ treo)</span>
+      <span><i class="lg-cr"></i>Chân răng còn sót</span>
       <span><i class="lg-mat"></i>Mất răng</span>
       <span><i class="lg-lodo"></i>Lỗ dò</span>
       <span><i class="lg-sung"></i>Sưng đáy hành lang</span>
