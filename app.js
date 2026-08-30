@@ -173,10 +173,12 @@ const TT_CO_MAT = ['sauNong', 'sauSau', 'filled', 'caries'];
 /* Chân răng còn sót và răng đã nội nha cũng có thể nhiễm trùng vùng chóp */
 /* Lỗ dò và sưng đáy hành lang là dấu nhiễm trùng vùng chóp — chỉ hỏi ở răng đã hở
    tủy và ở răng sứ (răng sứ đã chữa tủy vẫn có thể tái nhiễm). */
-const TT_CO_CHOP = ['sauTuy', 'noinha', 'chanrang', 'crown', 'crownKL', 'crownTS'];
-/* "Đã trám" chỉ ghi nhận trám mặt nào — răng vừa trám vừa chữa tủy thì chọn thẳng
-   mục lớn "Đã nội nha", khỏi hỏi hai lần cùng một chuyện. */
-const TT_CO_NOI_NHA = ['sauNong', 'sauSau', 'crown', 'crownKL', 'crownTS', 'caries'];
+const TT_CO_CHOP = ['sauNong', 'sauSau', 'sauTuy', 'caries',
+  'noinha', 'chanrang', 'crown', 'crownKL', 'crownTS'];
+/* Nội nha nay là một MỤC LỚN riêng, nên không hỏi lại ở răng sâu hay răng đã trám —
+   răng vừa sâu vừa đã chữa tủy thì chọn thẳng mục "Đã nội nha". Chỉ còn răng sứ giữ
+   ô này, vì "đã nội nha rồi bọc sứ" là chuyện thường ngày. */
+const TT_CO_NOI_NHA = ['crown', 'crownKL', 'crownTS'];
 /* Hồ sơ cũ ghi 'caries' (sâu răng chưa phân độ). Không tự gán bừa một mức nào —
    giữ nguyên, chỉ cho hiện lại trong ô chọn của đúng cái răng đó, để lỡ mở ra
    lưu lại thì không bị nhảy về "Bình thường". */
