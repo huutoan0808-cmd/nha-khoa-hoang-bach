@@ -252,7 +252,16 @@ function seed() {
 
 function load() {
   db = null;
-  try { const raw = localStorage.getItem(DB_KEY); if (raw) db = JSON.parse(raw); } catch(e){ db = null; }
+  let raw = '';
+  try { raw = localStorage.getItem(DB_KEY) || ''; } catch(e){}
+  /* Bản trên máy đang mã hóa: chưa mở khóa thì chưa có dữ liệu thật. Tuyệt đối
+     KHÔNG gọi save() ở nhánh này — save() sẽ ghi đè bản mã hóa bằng dữ liệu rỗng. */
+  if (typeof Mahoa !== 'undefined' && Mahoa.laGoi(raw)) {
+    db = seed(); migrate();
+    App.choMoKhoa = true;
+    return;
+  }
+  try { if (raw) db = JSON.parse(raw); } catch(e){ db = null; }
   if (!db || !Array.isArray(db.customers)) db = seed();
   migrate(); save();
 }
@@ -262,7 +271,9 @@ function save() {
   /* Ghi vết trước khi lưu: quet() so dữ liệu với bản chụp lần trước rồi thêm dòng
      vào db.vet, nên phải chạy trước khi đóng gói db xuống localStorage. */
   if (typeof Vet !== 'undefined') { try { Vet.quet(); } catch(e){} }
-  localStorage.setItem(DB_KEY, JSON.stringify(db));
+  const chuoi = JSON.stringify(db);
+  if (typeof Mahoa !== 'undefined' && Mahoa.bat()) { Mahoa.ghi(chuoi); return; }
+  localStorage.setItem(DB_KEY, chuoi);
 }
 /* Nâng cấp dữ liệu cũ về một ô địa chỉ duy nhất (số nhà + đường gộp chung) */
 function migrate() {
@@ -6917,6 +6928,8 @@ SCREENS.settings = () => {
         `<button class="btn small" onclick="Att.clinicQR()"${khoa}>Xem mã QR</button>`)}
       ${the('An toàn truy cập', KG.moTa(),
         `<button class="btn small primary" onclick="KG.hop()"${khoa}>Đặt giới hạn</button>`)}
+      ${the('Mã hóa dữ liệu lưu trên máy', Mahoa.moTa(),
+        `<button class="btn small" onclick="Mahoa.hop()"${khoa}>${Mahoa.bat() ? 'Xem, tắt' : 'Bật mã hóa'}</button>`)}
     </div></div>
 
   <div class="card mb"><div class="card-h"><h2>Đặt hẹn online</h2></div>
@@ -6929,6 +6942,8 @@ SCREENS.settings = () => {
     <div class="card-b">
       ${the('Đồng bộ đám mây', (() => { const st = Sync.status(); return `<span class="pill ${st.k}">${h(st.t)}</span>`; })(),
         `<button class="btn small" onclick="App.syncNow()">Đồng bộ ngay</button>`)}
+      ${the('Kho dữ liệu bệnh án', `${Sync.moTaKho()} ${Sync.pillKho()}`,
+        `<button class="btn small" onclick="Sync.sqlKho()"${khoa}>Xem cách tách kho</button>`)}
       ${the('Sao lưu tự động', `${SL.moTa()} ${SL.pill()}`,
         `<button class="btn small primary" onclick="SL.bang()">Mở sao lưu</button>`)}
       ${the('Nhập hồ sơ từ ảnh chụp phiếu giấy', 'Chụp phiếu điều trị cũ, trợ lý AI đọc thành bảng, dán vào đây',
@@ -7046,4 +7061,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 2500);
   /* Canh giờ và canh máy bỏ không */
   KG.khoiDong();
+  /* Dữ liệu trên máy đang mã hóa: thử mở bằng khóa còn trong tab, không được thì hỏi */
+  if (App.choMoKhoa) {
+    Mahoa.tuMo().then(ok => {
+      App.choMoKhoa = !ok;
+      if (!ok) { Mahoa.manHinhMo(); return; }
+      if (typeof Vet !== 'undefined') Vet.chup();
+      Sync.snapshot();
+      App.render();
+    });
+  }
 });
