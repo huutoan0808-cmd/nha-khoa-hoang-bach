@@ -177,8 +177,14 @@ const Sync = {
       this.stamp();
       /* KÉO VỀ TRƯỚC rồi mới đẩy lên. Nếu đẩy trước, máy nào còn dữ liệu cũ sẽ ghi đè
          lên dấu xóa trên đám mây, làm sống lại bản ghi đã xóa và sinh ra trùng lặp. */
-      const r = await this.pull();
+      /* Thay đổi kéo từ máy khác về KHÔNG phải do người ngồi máy này làm — máy kia đã
+         ghi vết rồi. Ngưng ghi trong lúc kéo, xong chụp lại từ đầu. */
+      if (typeof Vet !== 'undefined') Vet.ngung();
+      let r;
+      try { r = await this.pull(); }
+      finally { if (typeof Vet !== 'undefined') Vet.chay(); }
       await this.push();
+      if (typeof Vet !== 'undefined') { try { await Vet.day(); } catch(e){} }
       await this.syncMeta();
       const dup = this.fixDupReceipts();
       if (dup.length) { await this.push(); App.toast('Đã đánh lại ' + dup.length + ' số phiếu thu bị trùng: ' + dup.slice(0,3).join(', ')); }

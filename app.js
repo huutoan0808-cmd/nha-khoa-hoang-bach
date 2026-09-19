@@ -259,6 +259,9 @@ function load() {
 function save() {
   /* Bảng phân bổ tiền đã thu tính sẵn cho nhanh — dữ liệu đổi thì phải tính lại */
   if (typeof QT !== 'undefined') QT._thu = null;
+  /* Ghi vết trước khi lưu: quet() so dữ liệu với bản chụp lần trước rồi thêm dòng
+     vào db.vet, nên phải chạy trước khi đóng gói db xuống localStorage. */
+  if (typeof Vet !== 'undefined') { try { Vet.quet(); } catch(e){} }
   localStorage.setItem(DB_KEY, JSON.stringify(db));
 }
 /* Nâng cấp dữ liệu cũ về một ô địa chỉ duy nhất (số nhà + đường gộp chung) */
@@ -661,6 +664,12 @@ const App = {
     try { xong = !!(await Sync.run(true)); } catch(e){ xong = false; }
     /* Đẩy không được (mất mạng) thì GIỮ dữ liệu trên máy, đừng xóa kẻo mất phần vừa nhập */
     if (!xong && !confirm('Chưa đẩy được dữ liệu lên đám mây — có thể do mất mạng.\n\nVẫn đăng xuất? Phần vừa nhập sẽ được giữ lại trên máy, lần sau đăng nhập vào sẽ đẩy lên tiếp.')) return;
+    /* Đăng xuất có thể xóa sạch dữ liệu trên máy — đẩy nhật ký lên trước, nếu không
+       là mất vết của cả phiên làm việc. */
+    if (typeof Vet !== 'undefined') {
+      Vet.ghi('dangxuat', 'Đăng xuất khỏi ' + Vet.may());
+      try { await Vet.day(); } catch(e){}
+    }
     Cloud.logout();
     if (xong) { try { localStorage.removeItem(DB_KEY); } catch(e){} }
     /* Nạp lại trang, bỏ luôn phần #… trên địa chỉ để ra thẳng ô đăng nhập */
@@ -688,7 +697,17 @@ const App = {
   /* kho: 'A5' cho phiếu thu, mặc định A4 cho bệnh án và đơn thuốc.
      Khổ giấy phải đặt bằng @page, mà @page không nhận class, nên phải bơm một thẻ
      style riêng và đổi nội dung nó trước mỗi lần in. */
-  print(html, kho){
+  print(html, kho, nhan){
+    /* In hồ sơ bệnh án là thao tác phải truy vết được: giấy ra khỏi phòng khám thì
+       không thu hồi được nữa. Không có nhãn thì lấy tạm tiêu đề đầu tiên của phiếu. */
+    if (typeof Vet !== 'undefined') {
+      let t = nhan;
+      if (!t) {
+        const m = String(html).match(/<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>/i);
+        t = m ? m[1].replace(/<[^>]+>/g, '').trim().slice(0, 80) : 'Phiếu in';
+      }
+      try { Vet.ghi('in', t); } catch(e){}
+    }
     const a5 = kho === 'A5';
     $('#printArea').innerHTML = html;
     $('#printArea').className = a5 ? 'kho-a5' : '';
@@ -5519,6 +5538,8 @@ create policy p_rec   on records    for all to authenticated using (true) with c
       /* Phải kéo cả danh sách nhân viên về thì mới nhận ra người đăng nhập là ai */
       await Sync.run(true);
       await Att.sync();
+      /* Ghi vết sau khi đã kéo nhân viên về, lúc đó mới biết người đăng nhập là ai */
+      if (typeof Vet !== 'undefined') { Vet.chup(); Vet.ghi('dangnhap', 'Đăng nhập vào ' + Vet.may()); }
       App.render();
       App.toast('Xin chào ' + ((Att.myStaff() || {}).name || Cloud.who()));
     } catch(e){ App.toast('Đăng nhập không được: ' + e.message); }
@@ -6790,6 +6811,8 @@ SCREENS.settings = () => {
         `<button class="btn small" onclick="Importer.form()"${khoa}>Mở trình nhập</button>`)}
       ${the('Dọn trùng lặp', 'Gộp hồ sơ trùng mã và bỏ phiếu thu trùng số — không mất lịch sử điều trị',
         `<button class="btn small" onclick="App.dedupeForm()"${khoa}>Kiểm tra</button>`)}
+      ${the('Nhật ký lưu vết', `${(db.vet||[]).length} dòng · ai thêm, sửa, xóa hồ sơ nào, lúc nào — bắt buộc với bệnh án điện tử`,
+        `<button class="btn small primary" onclick="Vet.bang()">Mở nhật ký</button>`)}
     </div></div>
 
   ${q ? '' : '<div class="note-block" style="margin-top:12px">Bạn đang xem với quyền <b>' + h(Perm.label()) +
