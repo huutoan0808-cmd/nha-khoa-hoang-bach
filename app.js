@@ -6814,6 +6814,8 @@ SCREENS.settings = () => {
         `<button class="btn small" onclick="Att.accountsPanel()"${khoa}>Quản lý tài khoản</button>`)}
       ${the('Mã QR chấm công', 'Dán ở quầy để nhân viên quét ghi giờ vào — giờ ra',
         `<button class="btn small" onclick="Att.clinicQR()"${khoa}>Xem mã QR</button>`)}
+      ${the('An toàn truy cập', KG.moTa(),
+        `<button class="btn small primary" onclick="KG.hop()"${khoa}>Đặt giới hạn</button>`)}
     </div></div>
 
   <div class="card mb"><div class="card-h"><h2>Đặt hẹn online</h2></div>
@@ -6941,4 +6943,6 @@ document.addEventListener('DOMContentLoaded', () => {
     SL.docTT().then(() => { if (App.cur === 'settings') App.render(); })
       .then(() => SL.tuDong());
   }, 2500);
+  /* Canh giờ và canh máy bỏ không */
+  KG.khoiDong();
 });
