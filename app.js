@@ -1092,6 +1092,7 @@ const Cust = {
       <div class="f"><label>3. Giới tính</label><select name="gender"><option${c.gender==='Nam'?' selected':''}>Nam</option><option${c.gender==='Nữ'?' selected':''}>Nữ</option></select></div>
       ${f('4. Điện thoại','phone',c.phone,'09xx xxx xxx')}
       ${f('5. Nghề nghiệp','job',c.job)}
+      ${f('Nơi làm việc','noiLamViec',c.noiLamViec,'Mục 8 mẫu 16/BV-01')}
       ${f('6. Dân tộc','ethnic',c.ethnic||'Kinh')}
       ${f('7. Quốc tịch','nation',c.nation||'Việt Nam')}
       ${Cust.addrSelects(c)}
@@ -1102,10 +1103,13 @@ const Cust = {
         <div class="combo-hint">Hiện trong ngoặc sau địa chỉ mới. Xác nhận đúng rồi thì xóa trống ô này.</div></div>` : ''}
       <div class="f"><label>9. Đối tượng</label><select name="doiTuong">${['Thu phí','BHYT','Miễn','Khác'].map(o=>`<option${c.doiTuong===o?' selected':''}>${o}</option>`).join('')}</select></div>
       ${f('10. Số thẻ BHYT','bhyt',c.bhyt)}
+      ${f('BHYT giá trị đến ngày','bhytDen',c.bhytDen,'','date')}
       ${f('11. Số CCCD / Hộ chiếu / Định danh','cccd',c.cccd)}
       ${f('Nguồn khách','source',c.source,'Facebook / Giới thiệu / Walk-in...')}
       ${f('12. Thân nhân báo tin (họ tên, quan hệ)','kinName',c.kinName)}
       ${f('Điện thoại thân nhân','kinPhone',c.kinPhone)}
+      <div class="f full"><label>Địa chỉ thân nhân báo tin</label>
+        <input name="kinAddr" value="${h(c.kinAddr||'')}" placeholder="Mẫu 16/BV-01 mục 11 đòi cả địa chỉ, không chỉ tên và số điện thoại"></div>
       <div class="f full"><label>Dị ứng / lưu ý y khoa</label><input name="allergy" value="${h(c.allergy||'')}" placeholder="Vd: dị ứng Penicillin, tăng huyết áp..."></div>
       <div class="form-actions full"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">${id?'Lưu thay đổi':'Thêm khách hàng'}</button></div>
     </form>`);
@@ -3889,7 +3893,9 @@ Object.assign(HoSo, {
       ['9. Đối tượng', c.doiTuong],
       ['10. Số thẻ BHYT', c.bhyt],
       ['11. Số căn cước', c.cccd],
-      ['12. Thân nhân báo tin', c.kinName ? c.kinName + (c.kinPhone ? ' · ' + c.kinPhone : '') : ''],
+      ['12. Thân nhân báo tin', c.kinName ? c.kinName + (c.kinPhone ? ' · ' + c.kinPhone : '')
+        + (c.kinAddr ? ' · ' + c.kinAddr : '') : ''],
+      ['13. Nơi làm việc', c.noiLamViec],
     ];
     const thieu = A.filter(x => !x[1]).length;
     return `<div class="f full"><label>A. Thông tin chung
@@ -3952,6 +3958,34 @@ Object.assign(HoSo, {
     ${this.tickDong('tkDan','danDo', GY.danCho(g('lyDo', ep.lyDo || r.lyDo)), g('danDo'),
       'Hướng điều trị và dặn dò tiếp theo', 'In ở cuối <b>Phiếu theo dõi điều trị</b> (tờ số 3).')}
     ${this.khoiThoiGian(c)}
+    <div class="note-block full">Những ô dưới đây có trong mẫu <b>16/BV-01</b> của Bộ Y tế mà bộ giấy cũ
+      của phòng khám không có. Không bắt buộc điền, nhưng có thì bản in đủ mục.</div>
+    <div class="f"><label>Đến khám bệnh lúc</label>
+      <input type="time" name="gioKham" value="${h(g('gioKham'))}">
+      <div class="combo-hint">Mục 12 của mẫu — giờ, phút.</div></div>
+    <div class="f"><label>Nơi giới thiệu</label>
+      <select name="noiGioiThieuLoai">${['Tự đến','Y tế'].map(o =>
+        `<option${g('noiGioiThieuLoai','Tự đến')===o?' selected':''}>${o}</option>`).join('')}</select></div>
+    <div class="f full"><label>Chẩn đoán và xử lý của nơi giới thiệu</label>
+      <input name="noiGioiThieu" value="${h(g('noiGioiThieu'))}" placeholder="Bỏ trống nếu khách tự đến">
+      <div class="combo-hint">Mục 13 của mẫu.</div></div>
+    <div class="f full"><label>Mô tả tổn thương khi vào viện</label>
+      <textarea name="tonThuong" rows="2" placeholder="Vd: sưng nề vùng má trái, hạn chế há miệng 2cm">${h(g('tonThuong'))}</textarea>
+      <div class="combo-hint">Mẫu của Bộ để ô hình vẽ. Sơ đồ răng của phần mềm lo phần răng;
+        ô này để mô tả tổn thương phần mềm, xương hàm, ngoài mặt.</div></div>
+    <div class="f full"><label>Phân loại khe hở môi – vòm miệng</label>
+      <select name="kheHo">${['Không có','1,4 - Khe hở môi','2,5 - Khe hở xương ổ răng',
+        '3,6 - Khe hở cung hàm','7,8 - Khe hở vòm miệng cứng','9 - Khe hở vòm miệng mềm'].map(o =>
+        `<option${g('kheHo','Không có')===o?' selected':''}>${o}</option>`).join('')}</select>
+      <div class="combo-hint">Chỉ dùng cho ca dị tật bẩm sinh. Bình thường để <b>Không có</b>.</div></div>
+    <div class="f full"><label>Đã xử lý của tuyến dưới</label>
+      <input name="xuLyTuyenDuoi" value="${h(g('xuLyTuyenDuoi'))}" placeholder="Bỏ trống nếu chưa nơi nào xử lý"></div>
+    <div class="f full"><label>Tình trạng người bệnh khi kết thúc điều trị</label>
+      <textarea name="tinhTrangRa" rows="2" placeholder="Vd: hết đau, ăn nhai tốt, vết thương liền">${h(g('tinhTrangRa'))}</textarea></div>
+    ${this.tickDS('hoSoPhim', ['X-quang','CT Scanner','Siêu âm','Xét nghiệm','Ảnh lâm sàng','Khác'],
+      g('hoSoPhim') || [], 'Hồ sơ, phim, ảnh kèm theo')}
+    <div class="f"><label>Tổng số tờ</label><input name="hoSoPhimSo" value="${h(g('hoSoPhimSo'))}" placeholder="Vd: 3"></div>
+    <div class="f"></div>
     <div class="note-block full">Mục VI <b>Quá trình điều trị</b> và <b>Sơ đồ răng</b> tự lấy từ hồ sơ, không cần nhập lại ở đây.</div>`;
   },
   p_ba18(c, ep){
@@ -3969,19 +4003,24 @@ Object.assign(HoSo, {
     const ok = v => !v || /^(không|bình thường)$/i.test(v);
     const ht = this.soDoChu(c,'teeth'), kh = this.soDoChu(c,'teethKH'), st = this.soDoChu(c,'teethST');
     return `
-    ${this.dau(c, 'BỆNH ÁN NGOẠI TRÚ<br>RĂNG HÀM MẶT', 'MS: BA-18')}
+    ${this.dau(c, 'BỆNH ÁN NGOẠI TRÚ<br>CHUYÊN KHOA RĂNG HÀM MẶT', 'MS: 16/BV-01')}
     <h2>A. THÔNG TIN CHUNG</h2>
     <table class="no-border">
       <tr><td style="width:22%">1. Họ và tên:</td><td colspan="3"><b>${h((c.name||'').toUpperCase())}</b></td></tr>
       <tr><td>2. Ngày sinh:</td><td style="width:30%">${c.dob?fmtD(c.dob):'……/……/………'} — Tuổi: ${this.gach(this.tuoi(c),4)}</td>
           <td style="width:16%">3. Giới tính:</td><td>${this.o(c.gender==='Nam','Nam')} &nbsp; ${this.o(c.gender==='Nữ','Nữ')}</td></tr>
       <tr><td>4. Điện thoại:</td><td>${this.gach(c.phone,18)}</td><td>5. Nghề nghiệp:</td><td>${this.gach(g('job',c.job),22)}</td></tr>
+      <tr><td>Nơi làm việc:</td><td colspan="3">${this.gach(c.noiLamViec,60)}</td></tr>
       <tr><td>6. Dân tộc:</td><td>${this.gach(g('danToc',c.danToc),14)}</td><td>7. Quốc tịch:</td><td>${this.gach(g('quocTich','Việt Nam'),14)}</td></tr>
       <tr><td>8. Địa chỉ:</td><td colspan="3">${this.gach(fullAddr(c),90)}</td></tr>
       <tr><td>9. Đối tượng:</td><td colspan="3">${this.o(c.doiTuong==='BHYT','BHYT')} &nbsp; ${this.o(!c.doiTuong||c.doiTuong==='Thu phí','Thu phí')} &nbsp; ${this.o(c.doiTuong==='Miễn','Miễn')} &nbsp; ${this.o(c.doiTuong==='Khác','Khác')}</td></tr>
-      <tr><td>10. Số thẻ BHYT:</td><td colspan="3">${this.gach(c.bhyt,40)}</td></tr>
+      <tr><td>10. Số thẻ BHYT:</td><td>${this.gach(c.bhyt,24)}</td><td>Giá trị đến:</td><td>${this.gach(c.bhytDen?fmtD(c.bhytDen):'',14)}</td></tr>
       <tr><td>11. Số Căn cước:</td><td colspan="3">${this.gach(c.cccd,40)}</td></tr>
       <tr><td>12. Thân nhân báo tin:</td><td colspan="3">${this.gach(c.kinName,32)} — Điện thoại: ${this.gach(c.kinPhone,18)}</td></tr>
+      <tr><td>Địa chỉ thân nhân:</td><td colspan="3">${this.gach(c.kinAddr,70)}</td></tr>
+      <tr><td>13. Đến khám lúc:</td><td>${this.gach(g('gioKham'),8)} ngày ${this.gach(fmtD(g('tuNgay', this.ngayDau(c))),14)}</td>
+          <td>Nơi giới thiệu:</td><td>${this.o(g('noiGioiThieuLoai','Tự đến')==='Y tế','Y tế')} &nbsp; ${this.o(g('noiGioiThieuLoai','Tự đến')==='Tự đến','Tự đến')}</td></tr>
+      ${g('noiGioiThieu') ? `<tr><td>Chẩn đoán, xử lý của nơi giới thiệu:</td><td colspan="3">${h(g('noiGioiThieu'))}</td></tr>` : ''}
     </table>
     <h2>B. THÔNG TIN KHÁM BỆNH</h2>
     <p><b>I. LÝ DO VÀO VIỆN, VẤN ĐỀ SỨC KHỎE:</b> ${this.gach(g('lyDo', ep.lyDo || r.lyDo), 76)}</p>
@@ -3999,7 +4038,10 @@ Object.assign(HoSo, {
       &nbsp;&nbsp;Ngoài miệng: ${this.o(ok(g('ngoaiMieng')),'Bình thường')} &nbsp; ${this.o(!ok(g('ngoaiMieng')),'Bất thường:')} ${this.gach(ok(g('ngoaiMieng'))?'':g('ngoaiMieng'),42)}<br>
       &nbsp;&nbsp;Trong miệng: ${this.o(ok(g('trongMieng')),'Bình thường')} &nbsp; ${this.o(!ok(g('trongMieng')),'Bất thường:')} ${this.gach(ok(g('trongMieng'))?'':g('trongMieng'),42)}<br>
       3. Các xét nghiệm, cận lâm sàng cần làm: ${this.o(ok(g('canLamSang')),'Không')} &nbsp; ${this.o(!ok(g('canLamSang')),'Có, ghi rõ:')} ${this.gach(ok(g('canLamSang'))?'':g('canLamSang'),38)}<br>
-      4. Tóm tắt bệnh án: ${this.gach(g('tomTat'),62)}</p>
+      4. Mô tả tổn thương khi vào viện: ${this.gach(g('tonThuong'),52)}<br>
+      ${g('kheHo') && g('kheHo') !== 'Không có' ? 'Phân loại khe hở môi – vòm miệng: <b>' + h(g('kheHo')) + '</b><br>' : ''}
+      5. Đã xử lý của tuyến dưới: ${this.gach(g('xuLyTuyenDuoi'),56)}<br>
+      6. Tóm tắt bệnh án: ${this.gach(g('tomTat'),62)}</p>
     <p><b>SƠ ĐỒ RĂNG</b><br>${(() => {
         const nc = Cust.moTaNhaChu(c, 'teeth');
         return nc ? 'Mô nha chu: ' + h(nc) + '<br>' : '';
@@ -4022,7 +4064,14 @@ Object.assign(HoSo, {
     <p><b>V. KẾ HOẠCH ĐIỀU TRỊ</b><br>${h(g('keHoach', ep.keHoach || r.keHoach)).replace(/\n/g,'<br>') || this.cham(100)+'<br>'+this.cham(100)}</p>
     <h2>VI. QUÁ TRÌNH ĐIỀU TRỊ</h2>
     <table><tr><th style="width:78px">Ngày</th><th>Diễn biến bệnh</th><th>Xử trí</th><th style="width:96px">Đợt điều trị</th></tr>${rows}</table>
-    <p style="margin-top:8px"><b>VII. THỜI GIAN ĐIỀU TRỊ</b><br>Điều trị từ ngày ${tuN} đến ngày ${denN}</p>
+    <p style="margin-top:8px"><b>VII. THỜI GIAN ĐIỀU TRỊ</b><br>Điều trị ngoại trú từ ngày ${tuN} đến ngày ${denN}<br>
+      Tình trạng người bệnh khi kết thúc điều trị: ${this.gach(g('tinhTrangRa'),52)}</p>
+    ${(() => {
+      const ds = g('hoSoPhim') || [];
+      if (!ds.length && !g('hoSoPhimSo')) return '';
+      return `<p><b>HỒ SƠ, PHIM, ẢNH KÈM THEO:</b> ${h([].concat(ds).join(', '))}` +
+        (g('hoSoPhimSo') ? ' — tổng số tờ: ' + h(g('hoSoPhimSo')) : '') + '</p>';
+    })()}
     ${(() => {
       const ngay = g('ngayKy', g('denNgay', this.ngayCuoi(c) || this.ngayDau(c)));
       return `<div class="sign">

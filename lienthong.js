@@ -82,7 +82,7 @@ const LT = {
     if (r.tienSuBanThan) tienSu.push({thongtin_ma:'', thongtin_noidung: r.tienSuBanThan, thongtin_giatri:'1', thongtin_ghichu:''});
     if (c.allergy)       tienSu.push({thongtin_ma:'', thongtin_noidung:'Dị ứng: ' + c.allergy, thongtin_giatri:'1', thongtin_ghichu:''});
     return {
-      loaiba: 'BA-18',
+      loaiba: '16/BV-01',          /* ma bieu mau benh an ngoai tru RHM, Phu luc XXVIII TT 32/2023 */
       sovaovien: this.soVaoVien(c, ep),
       soba: this.s(c.soHS || c.code),
       soluutru: this.s(c.code),
@@ -97,23 +97,23 @@ const LT = {
       ngaysinh: this.ngay(c.dob),
       tuoi: this.tuoi(c),
       gioitinh: this.s(c.gender),
-      nghenghiep: this.s(c.job), nghenghiep_ma: '',
-      dantoc: this.s(c.danToc), dantoc_ma: '',
-      ngoaikieu: this.s(c.quocTich), ngoaikieu_ma: '',
-      tungaybhyt: '', denngaybhyt: '', mabhyt: this.s(c.bhyt), noidangkykcbbd: '',
-      diachi: [c.addr, c.ward, c.province].filter(Boolean).join(', '),
-      sonha: this.s(c.addr), thonpho: '',
+      nghenghiep: this.s(r.job || c.job), nghenghiep_ma: '',
+      dantoc: this.s(r.danToc || c.ethnic || c.danToc), dantoc_ma: '',
+      ngoaikieu: this.s(r.quocTich || c.nation || c.quocTich), ngoaikieu_ma: '',
+      tungaybhyt: '', denngaybhyt: this.ngay(c.bhytDen), mabhyt: this.s(c.bhyt), noidangkykcbbd: '',
+      diachi: this.s(typeof fullAddr === 'function' ? fullAddr(c) : ''),
+      sonha: this.s(c.street || c.addr), thonpho: '',
       xaphuong: this.s(c.ward), quanhuyen: '', quanhuyen_ma: '',
       tinhthanh: this.s(c.province), tinhthanh_ma: this.maTinh(c.province),
-      noilamviec: '',
+      noilamviec: this.s(c.noiLamViec),
       sodienthoai: this.s(c.phone),
       nhommau: '', yeutorh: '',
       doituongbn_loai: this.s(c.doiTuong || 'Dịch vụ'),
       hotennguoithan: [c.kinRel, c.kinName].filter(Boolean).join(': '),
-      diachinguoithan: '',
+      diachinguoithan: this.s(c.kinAddr),
       sodienthoainguoithan: this.s(c.kinPhone),
       lydotiepnhan: this.s(r.lyDo),
-      noigioithieu_loai: 'Tự đến',
+      noigioithieu_loai: this.s(r.noiGioiThieuLoai || 'Tự đến'),
       tiensubenhtatcuabanthan: tienSu,
       tiensubenhtatcuagiadinh: this.s(r.tienSuGiaDinh),
     };
@@ -128,11 +128,11 @@ const LT = {
     const coQuan = k => ({dauchung_ma: {VNCODE:'', SNOMED:''}, dauchung: '', dauchung_ghichu: ''});
     return {
       sovaovien: this.soVaoVien(c, ep),
-      sophieu: 'BA18.' + this.s(c.code || c.id),
+      sophieu: 'BA.' + this.s(c.code || c.id),
       phongkham: this.s(db.clinic.name),
       maphongkham: this.s(db.clinic.maCSKCB),
       bacsikhambenh: this.ten(bs), mabacsikhambenh: this.s(bs),
-      chandoancuanoigioithieu: '',
+      chandoancuanoigioithieu: this.s(r.noiGioiThieu),
       chandoansobo: this.s(r.chanDoan),
       chandoanvaovien: this.s(r.chanDoan),
       khambenh_chandoanvaovienmaicd: this.maICD(r.chanDoan),
@@ -152,7 +152,7 @@ const LT = {
         taimuihong: coQuan(),
         ranghammat: {
           dauchung_ma: {VNCODE: '', SNOMED: ''},
-          dauchung: rangMieng,
+          dauchung: [rangMieng, r.tonThuong].filter(Boolean).join('; '),
           dauchung_ghichu: this.s(r.canLamSang),
         },
         noitiet_dinhduong_benhlikhac: coQuan(),
@@ -178,7 +178,7 @@ const LT = {
       tongsongaydieutri: String(new Set(db_.map(v => v.date)).size || ''),
       chandoan: this.s(r.chanDoan), chandoan_ma: this.maICD(r.chanDoan),
       chandoanvaovien: this.s(r.chanDoan), chandoanvaovien_ma: this.maICD(r.chanDoan),
-      chandoantuyenduoi: '', chandoantuyenduoi_ma: '',
+      chandoantuyenduoi: this.s(r.xuLyTuyenDuoi), chandoantuyenduoi_ma: '',
       maicd: this.maICD(r.chanDoan),
       tenicd: this.s(r.chanDoan),
       maicd_khac: this.maICD(r.chanDoanKem), tenicd_khac: this.s(r.chanDoanKem),
@@ -196,7 +196,7 @@ const LT = {
         thoidiem: this.gio(ep ? ep.tuNgay : c.createdAt),
       }] : [],
       tinhtrangravien: {
-        ketquadieutri: xong ? 'Khỏi' : '',
+        ketquadieutri: this.s(r.tinhTrangRa) || (xong ? 'Khỏi' : ''),
         loidanbacsi: this.s(r.danDo) || (db_.slice(-1)[0] || {}).dan || '',
       },
       /* Diễn biến từng buổi — phụ lục không có nhánh riêng cho phòng khám ngoại trú
