@@ -3398,6 +3398,7 @@ const HoSo = {
             ${d.ms ? `<span class="hs-ms">${h(d.ms)}</span>` : ''}
             ${daDien ? `<span class="pill ok">Đã lập${ngay?' '+fmtD(ngay):''}</span>` : `<span class="pill warn">Chưa lập</span>`}</div>
           <div class="hsf-mo">${h(this.tomTat(d.k, c, ep)) || 'Sẽ lấy dữ liệu sẵn có của khách'}</div>
+          ${typeof Ky !== 'undefined' ? Ky.dongTT(c, d.k) : ''}
         </div>
         <div class="hsf-nut">
           <button class="btn small primary" onclick="HoSo.dien('${d.k}')">${daDien?'Sửa':'Điền'}</button>
@@ -3420,6 +3421,21 @@ const HoSo = {
     const E = ep || {};
     const than = this['f_' + k];
     if (!than) { App.toast('Chưa có mẫu này'); return; }
+    /* Giấy tờ đã có chữ ký của nhân viên y tế thì khóa. Sửa lén sau khi ký là đúng
+       thứ mà quy định về truy vết muốn chặn — muốn sửa phải mở khóa và ghi lý do. */
+    if (typeof Ky !== 'undefined' && Ky.daKhoa(Ky.oGiay(c, k))) {
+      const o = Ky.oGiay(c, k);
+      App.modal(this.ten(k) + ' — đã ký', `
+        <div class="note-block warn-block"><b>Giấy tờ này đã được ký và đang khóa.</b>
+          ${Ky.cuaNhanVien(o).map(x => `<br>${h(x.ten)}${x.chucDanh ? ' — ' + h(x.chucDanh) : ''} ký lúc ${h(Ky.gio(x.luc))}.`).join('')}
+          <br><br>Muốn sửa nội dung thì mở khóa trước. Chữ ký cũ được giữ lại trong hồ sơ
+          và việc mở khóa được ghi vào nhật ký lưu vết.</div>
+        <div class="form-actions full">
+          <button class="btn" onclick="App.closeModal()">Đóng</button>
+          <button class="btn" onclick="Ky.hop('${k}')">Xem chữ ký</button>
+          <button class="btn primary" onclick="Ky.moKhoa('${k}')">Mở khóa để sửa</button></div>`);
+      return;
+    }
     const ds = Dot.cua(c.id);
     App.modal('Điền ' + this.ten(k) + ' — ' + c.name, `
       ${this.cuaKhach(k)
@@ -3495,7 +3511,10 @@ const HoSo = {
     if (!ep && !this.cuaKhach(k)) { App.toast('Mở một đợt điều trị trước đã'); Dot.form(); return; }
     const fn = this['p_' + k];
     if (!fn) { App.toast('Chưa có mẫu này'); return; }
-    App.print(fn.call(this, c, ep || {}));
+    /* In kèm khối chữ ký điện tử: bản giấy phải nói rõ ai đã ký bản điện tử và
+       mã kiểm tra, nếu không cầm tờ giấy ra ngoài là mất hết dấu vết ký. */
+    const kyHTML = (typeof Ky !== 'undefined') ? Ky.khoiIn(c, k) : '';
+    App.print(fn.call(this, c, ep || {}) + kyHTML, undefined, this.ten(k) + ' — ' + (c.name || ''));
   },
 
   /* Danh sách tick, dòng cuối để gõ tự do nếu không dòng nào ở trên hợp.

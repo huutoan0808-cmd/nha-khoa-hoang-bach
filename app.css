@@ -526,3 +526,20 @@ input,textarea,[contenteditable]{-webkit-spell-check:none}
   .bnav-item.active{color:var(--accent-ink)}
   #toast{bottom:96px}
 }
+
+/* ---------- Ký và xác nhận điện tử ---------- */
+.ky-dong{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
+.ky-anh{display:block;margin-top:6px;max-width:220px;background:#fff;border:1px solid var(--line);border-radius:6px}
+.nhom-tieu{font-size:13px;font-weight:700;color:var(--muted);margin:14px 0 6px}
+.warn-block{background:var(--warn-soft);color:var(--warn)}
+/* Bảng ký tay: cao thoải mái để ký bằng ngón tay, nền trắng cho dễ nhìn nét mực.
+   touch-action:none để lúc kéo ngón tay trang không cuộn theo. */
+.ky-bang{width:100%;height:170px;background:#fff;border:2px dashed var(--line);
+  border-radius:10px;touch-action:none;cursor:crosshair}
+/* Khối chữ ký trên bản in */
+.ky-in{margin-top:14px;padding-top:8px;border-top:1px solid #000;font-size:11px}
+.ky-in-tieu{font-weight:700;margin-bottom:4px}
+.ky-in-dong{margin-bottom:6px}
+.ky-in-anh{max-height:46px;display:block;margin:2px 0}
+.ky-in-bam{font-family:ui-monospace,Consolas,monospace;font-size:9px;color:#555;word-break:break-all}
+.ky-in-chu{margin-top:4px;font-style:italic;color:#555}
