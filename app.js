@@ -3409,6 +3409,7 @@ const HoSo = {
 
     return `<div class="card mb"><div class="card-h"><h2>Bệnh án điện tử</h2>
       <span class="hint">điền trên máy rồi in khổ A4</span>
+      <button class="btn small" onclick="PDF.hop('${c.id}')" title="Kết xuất toàn bộ hồ sơ ra một tệp PDF">Xuất PDF</button>
       <button class="btn small" onclick="LT.hop('${c.id}')" title="Xuất tệp XML/JSON theo chuẩn trao đổi của Bộ Y tế">Kết xuất liên thông</button></div>
       <div class="card-b">${this.DS.map(dong).join('')}</div></div>`;
   },
