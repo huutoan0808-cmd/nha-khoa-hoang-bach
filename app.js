@@ -6826,6 +6826,8 @@ SCREENS.settings = () => {
     <div class="card-b">
       ${the('Đồng bộ đám mây', (() => { const st = Sync.status(); return `<span class="pill ${st.k}">${h(st.t)}</span>`; })(),
         `<button class="btn small" onclick="App.syncNow()">Đồng bộ ngay</button>`)}
+      ${the('Sao lưu tự động', `${SL.moTa()} ${SL.pill()}`,
+        `<button class="btn small primary" onclick="SL.bang()">Mở sao lưu</button>`)}
       ${the('Nhập hồ sơ từ ảnh chụp phiếu giấy', 'Chụp phiếu điều trị cũ, trợ lý AI đọc thành bảng, dán vào đây',
         `<button class="btn small primary" onclick="Importer.anhForm()">Nhập từ ảnh chụp</button>`)}
       ${the('Nhập khách hàng từ Google Sheet', 'Dán bảng từ Sheet để nạp hàng loạt hồ sơ khách',
@@ -6933,4 +6935,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   /* Có kết nối sẵn thì lặng lẽ đồng bộ khi mở app */
   if (Cloud.configured() && Cloud.loggedIn()) setTimeout(() => { Sync.run(true).then(() => Att.sync()); }, 800);
+  /* Sao lưu: đọc trạng thái để vẽ đúng ô trong Cài đặt, rồi chụp bản của ngày hôm
+     nay nếu chưa có. Để chậm một nhịp cho màn hình hiện ra trước. */
+  setTimeout(() => {
+    SL.docTT().then(() => { if (App.cur === 'settings') App.render(); })
+      .then(() => SL.tuDong());
+  }, 2500);
 });
