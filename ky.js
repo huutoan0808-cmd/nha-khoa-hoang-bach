@@ -189,6 +189,7 @@ const Ky = {
 
   /* ---------- Tầng 1: nhân viên y tế ký bằng mật khẩu ---------- */
   formNhanVien(k){
+    if (Perm.chan('ky', 'ký hồ sơ bệnh án')) return;
     if (!Cloud.loggedIn()) { App.toast('Phải đăng nhập mới ký được — chữ ký phải gắn với một người cụ thể'); return; }
     const ng = this.nguoiKy();
     App.modal('Ký hồ sơ — ' + HoSo.ten(k), `
@@ -337,6 +338,7 @@ const Ky = {
 
   /* ---------- Mở khóa ---------- */
   moKhoa(k){
+    if (Perm.chan('mokhoa', 'mở khóa hồ sơ đã ký')) return;
     const c = custById(App.state.custSel); if (!c) return;
     const o = this.oGiay(c, k); if (!o) return;
     const ly = prompt('Mở khóa "' + HoSo.ten(k) + '" để sửa lại.\n\nGhi rõ lý do — lý do này vào nhật ký và không xóa được:');

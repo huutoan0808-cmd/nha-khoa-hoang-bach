@@ -104,6 +104,7 @@ const PDF = {
   /* Nhắc chọn đúng chỗ lưu. Trình duyệt không cho phần mềm tự chọn "Lưu thành PDF",
      nên phải nói rõ một lần; ai đã quen thì tắt nhắc. */
   hop(cid){
+    if (Perm.chan('ketxuat', 'kết xuất hồ sơ bệnh án')) return;
     const c = custById(cid || App.state.custSel);
     if (!c) { App.toast('Chưa chọn khách hàng'); return; }
     let tat = false;

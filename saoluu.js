@@ -172,6 +172,7 @@ const SL = {
 
   /* ---------- Hộp thoại ---------- */
   async bang(){
+    if (Perm.chan('saoluu', 'mở phần sao lưu, phục hồi')) return;
     await this.docTT();
     const ds = await this.ds();
     const co = n => (n / 1024 < 1024) ? Math.round(n/1024) + ' KB' : (n/1048576).toFixed(1) + ' MB';

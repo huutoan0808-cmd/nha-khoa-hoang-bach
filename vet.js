@@ -251,6 +251,7 @@ const Vet = {
 
   /* ---------- Khôi phục bản ghi đã xóa ---------- */
   khoiPhuc(vid){
+    if (Perm.chan('khoiphuc', 'khôi phục bản ghi đã xóa')) return;
     const v = (db.vet || []).find(x => x.id === vid);
     if (!v || v.act !== 'xoa' || !v.banSao) { App.toast('Dòng này không khôi phục được'); return; }
     if (!db[v.tbl]) db[v.tbl] = [];
@@ -274,7 +275,7 @@ const Vet = {
     const f = this.loc;
     let ds = (db.vet || []).slice();
     /* Nhân viên thường chỉ xem được việc mình làm; quản lý xem hết */
-    if (!Perm.can('caidat')) {
+    if (!Perm.can('nhatkyall')) {
       const me = (Cloud.who() || '').toLowerCase();
       ds = ds.filter(x => (x.email || '').toLowerCase() === me);
     }
@@ -314,7 +315,7 @@ const Vet = {
     App.modal('Nhật ký lưu vết', `
       <div class="note-block">Mọi thao tác thêm, sửa, xóa hồ sơ đều được ghi lại kèm người làm và thời điểm.
         Nhật ký <b>chỉ ghi thêm</b> — không ai xóa hay sửa được, kể cả quản lý.
-        ${Perm.can('caidat') ? '' : '<br>Bạn đang xem phần việc của chính mình.'}</div>
+        ${Perm.can('nhatkyall') ? '' : '<br>Bạn đang xem phần việc của chính mình.'}</div>
       <div class="form-grid" style="margin-top:10px">
         <div class="f"><label>Ngày</label>
           <input type="date" value="${h(f.ngay)}" onchange="Vet.datLoc('ngay',this.value)"></div>

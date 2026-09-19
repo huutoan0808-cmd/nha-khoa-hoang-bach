@@ -320,6 +320,7 @@ const LT = {
 
   /* ---------- Hộp thoại ---------- */
   hop(cid){
+    if (Perm.chan('ketxuat', 'kết xuất hồ sơ bệnh án')) return;
     const c = custById(cid || App.state.custSel);
     if (!c) { App.toast('Chưa chọn khách hàng'); return; }
     const ds = (typeof Dot !== 'undefined' ? Dot.cua(c.id) : []);
@@ -360,6 +361,7 @@ const LT = {
 
   /* Kết xuất hàng loạt: mỗi đợt điều trị một hồ sơ, gói chung vào một tệp JSON */
   taiTatCa(){
+    if (Perm.chan('ketxuat', 'kết xuất hồ sơ bệnh án')) return;
     const ra = [];
     (db.customers || []).forEach(c => {
       const ds = Dot.cua(c.id);

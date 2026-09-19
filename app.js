@@ -718,12 +718,41 @@ const App = {
   },
 };
 
-/* ================= PHÂN QUYỀN THEO VAI TRÒ ================= */
+/* ================= PHÂN QUYỀN THEO VAI TRÒ =================
+   Công văn hướng dẫn kỹ thuật của Bộ Y tế, mục III.1.1.c: phần mềm phải có chức năng
+   "cấu hình phân quyền xem, nhập mới, chỉnh sửa, hủy, khôi phục dữ liệu", và mục
+   III.1.1.g: "phân quyền người dùng theo từng vai trò công việc".
+
+   Danh sách tác vụ dưới đây trùng đúng bảng ở Điều 11 Quy chế hồ sơ bệnh án điện tử
+   của phòng khám. Mặc định là bảng trong quy chế; quản lý sửa lại được trong
+   Cài đặt, và mỗi lần sửa đều vào nhật ký lưu vết. */
+const QUYEN = [
+  ['xem',       'Xem hồ sơ bệnh án'],
+  ['suahoso',   'Lập, sửa bệnh án và phiếu điều trị'],
+  ['ky',        'Ký, xác nhận điện tử trên hồ sơ'],
+  ['mokhoa',    'Mở khóa hồ sơ đã ký để sửa'],
+  ['thu',       'Lập phiếu thu, thu tiền'],
+  ['xoa',       'Xóa bản ghi'],
+  ['khoiphuc',  'Khôi phục bản ghi đã xóa'],
+  ['ketxuat',   'Kết xuất hồ sơ ra XML, JSON, PDF'],
+  ['nhatkyall', 'Xem nhật ký lưu vết của toàn phòng khám'],
+  ['saoluu',    'Sao lưu, phục hồi dữ liệu'],
+  ['taikhoan',  'Tạo, khóa tài khoản; đặt phân quyền'],
+  ['caidat',    'Sửa bảng giá, quy trình, cài đặt chung'],
+  ['luong',     'Xem và tính lương, hoa hồng'],
+];
+/* Không cho bỏ hai quyền này của quản lý — bỏ là tự khóa mình ra ngoài, không ai
+   vào đặt lại được nữa. */
+const QUYEN_GIU = ['taikhoan', 'caidat'];
+const ROLE_MAC_DINH = {
+  quanly: ['xem','suahoso','ky','mokhoa','thu','xoa','khoiphuc','ketxuat','nhatkyall','saoluu','taikhoan','caidat','luong'],
+  bacsi:  ['xem','suahoso','ky','mokhoa','thu','ketxuat'],
+  trothu: ['xem'],
+  letan:  ['xem','thu'],
+};
 const ROLES = {
-  quanly: {label:'Quản lý',  can:['thu','luong','baocao','xoa','caidat','kho','nhansu']},
-  bacsi:  {label:'Bác sĩ',   can:['thu','kho']},
-  trothu: {label:'Trợ thủ',  can:['kho']},
-  letan:  {label:'Lễ tân',   can:['thu']},
+  quanly: {label:'Quản lý'}, bacsi: {label:'Bác sĩ'},
+  trothu: {label:'Trợ thủ'}, letan: {label:'Lễ tân'},
 };
 const ROLE_TABS = {
   quanly: ['dashboard','customers','calendar','treatment','inventory','hr','lab','reports','settings'],
@@ -759,10 +788,79 @@ const Perm = {
   /* Vai trò của một nhân viên bất kỳ — dùng để lọc danh sách bác sĩ, trợ thủ */
   roleOf(s){ return s ? (s.perm || guessRole(s.role)) : ''; },
   label(){ return (ROLES[this.role()] || ROLES.letan).label; },
-  can(x){ return (ROLES[this.role()] || ROLES.letan).can.includes(x); },
+  /* Bảng phân quyền đang áp dụng: bản quản lý đã sửa, không có thì lấy mặc định */
+  bang(){
+    const tu = ((db.clinic || {}).quyen) || {};
+    const ra = {};
+    Object.keys(ROLE_MAC_DINH).forEach(v => { ra[v] = (tu[v] || ROLE_MAC_DINH[v]).slice(); });
+    QUYEN_GIU.forEach(q => { if (!ra.quanly.includes(q)) ra.quanly.push(q); });
+    return ra;
+  },
+  cuaVai(v){ return this.bang()[v] || ROLE_MAC_DINH.letan; },
+  can(x){ return this.cuaVai(this.role()).includes(x); },
+  /* Chặn một tác vụ và nói rõ vì sao, thay vì im lặng không làm gì */
+  chan(x, viec){
+    if (this.can(x)) return false;
+    App.toast('Vai trò ' + this.label() + ' không được ' + (viec || 'làm việc này') + ' — hỏi quản lý');
+    return true;
+  },
   tabs(){ return ROLE_TABS[this.role()] || ROLE_TABS.letan; },
   /* Ẩn hẳn phần tử khỏi giao diện khi không đủ quyền */
   only(x, html){ return this.can(x) ? html : ''; },
+
+  /* ---------- Màn hình đặt phân quyền ---------- */
+  moTaBang(){
+    const b = this.bang();
+    return Object.keys(ROLES).map(v => ROLES[v].label + ' ' + b[v].length).join(' · ') +
+      (((db.clinic||{}).quyen) ? ' · đã sửa khác mặc định' : ' · đang theo mặc định của quy chế');
+  },
+  hopQuyen(){
+    if (this.chan('taikhoan', 'đặt phân quyền')) return;
+    const b = this.bang();
+    const vai = Object.keys(ROLES);
+    App.modal('Phân quyền theo vai trò', `
+      <div class="note-block">Bảng này đúng bằng bảng ở <b>Điều 11 Quy chế hồ sơ bệnh án điện tử</b> của phòng khám.
+        Sửa ở đây thì phải sửa cả quy chế cho khớp — khi Sở kiểm tra, hai thứ phải nói giống nhau.</div>
+      <form onsubmit="Perm.luuQuyen(event)">
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Tác vụ trên phần mềm</th>
+        ${vai.map(v => `<th style="text-align:center">${h(ROLES[v].label)}</th>`).join('')}</tr></thead>
+        <tbody>${QUYEN.map(([k, ten]) => `<tr><td>${h(ten)}</td>
+          ${vai.map(v => {
+            const giu = v === 'quanly' && QUYEN_GIU.includes(k);
+            return `<td style="text-align:center"><input type="checkbox" name="${v}" value="${k}"${
+              b[v].includes(k) ? ' checked' : ''}${giu ? ' disabled title="Quản lý luôn giữ quyền này"' : ''}></td>`;
+          }).join('')}</tr>`).join('')}</tbody></table></div>
+      <div class="combo-hint" style="margin-top:8px">Việc mở từng tab (Kho, Nhân sự, Báo cáo…) vẫn theo vai trò như cũ.
+        Bảng này quyết định các tác vụ trên hồ sơ bệnh án.</div>
+      <div class="form-actions full">
+        <button type="button" class="btn" onclick="Perm.datLai()">Đặt lại theo quy chế</button>
+        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+        <button class="btn primary">Lưu</button></div></form>`);
+  },
+  luuQuyen(ev){
+    ev.preventDefault();
+    const f = ev.target, moi = {};
+    Object.keys(ROLES).forEach(v => {
+      moi[v] = [...f.querySelectorAll(`input[name="${v}"]:checked`)].map(x => x.value);
+    });
+    QUYEN_GIU.forEach(q => { if (!moi.quanly.includes(q)) moi.quanly.push(q); });
+    db.clinic = db.clinic || {};
+    db.clinic.quyen = moi;
+    save();
+    if (typeof Vet !== 'undefined')
+      Vet.ghi('sua', 'Đổi bảng phân quyền — ' + Object.keys(ROLES).map(v =>
+        ROLES[v].label + ': ' + moi[v].length + ' quyền').join(', '));
+    App.closeModal(); App.render();
+    App.toast('Đã lưu phân quyền ✓ — nhớ sửa Điều 11 quy chế cho khớp');
+  },
+  datLai(){
+    if (!confirm('Đặt lại toàn bộ phân quyền về đúng bảng trong quy chế?')) return;
+    if (db.clinic) delete db.clinic.quyen;
+    save();
+    if (typeof Vet !== 'undefined') Vet.ghi('sua', 'Đặt lại phân quyền về mặc định theo quy chế');
+    App.render(); this.hopQuyen();
+    App.toast('Đã đặt lại ✓');
+  },
 };
 
 /* ================= Ô GÕ-ĐỂ-TÌM ================= */
@@ -3416,6 +3514,7 @@ const HoSo = {
 
   /* ---------- Hộp thoại điền ---------- */
   dien(k){
+    if (Perm.chan('suahoso', 'lập hoặc sửa hồ sơ bệnh án')) return;
     const c = custById(App.state.custSel); if (!c) { App.toast('Chưa chọn khách hàng'); return; }
     const ep = Dot.dangChon(c);
     /* Bệnh án ngoại trú là của khách nên lập được ngay, chưa cần đợt nào */
@@ -6812,6 +6911,8 @@ SCREENS.settings = () => {
         `<button class="btn small primary" onclick="HR.dsNhanVien()"${khoa}>Sửa nhân viên</button>`)}
       ${the('Tài khoản truy cập', 'Mời nhân viên, đặt quyền vào từng mục',
         `<button class="btn small" onclick="Att.accountsPanel()"${khoa}>Quản lý tài khoản</button>`)}
+      ${the('Phân quyền theo vai trò', Perm.moTaBang(),
+        `<button class="btn small primary" onclick="Perm.hopQuyen()"${khoa}>Đặt phân quyền</button>`)}
       ${the('Mã QR chấm công', 'Dán ở quầy để nhân viên quét ghi giờ vào — giờ ra',
         `<button class="btn small" onclick="Att.clinicQR()"${khoa}>Xem mã QR</button>`)}
       ${the('An toàn truy cập', KG.moTa(),
