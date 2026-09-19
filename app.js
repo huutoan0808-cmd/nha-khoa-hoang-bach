@@ -3408,7 +3408,8 @@ const HoSo = {
     };
 
     return `<div class="card mb"><div class="card-h"><h2>Bệnh án điện tử</h2>
-      <span class="hint">điền trên máy rồi in khổ A4</span></div>
+      <span class="hint">điền trên máy rồi in khổ A4</span>
+      <button class="btn small" onclick="LT.hop('${c.id}')" title="Xuất tệp XML/JSON theo chuẩn trao đổi của Bộ Y tế">Kết xuất liên thông</button></div>
       <div class="card-b">${this.DS.map(dong).join('')}</div></div>`;
   },
 
@@ -6832,6 +6833,9 @@ SCREENS.settings = () => {
         `<button class="btn small" onclick="App.dedupeForm()"${khoa}>Kiểm tra</button>`)}
       ${the('Nhật ký lưu vết', `${(db.vet||[]).length} dòng · ai thêm, sửa, xóa hồ sơ nào, lúc nào — bắt buộc với bệnh án điện tử`,
         `<button class="btn small primary" onclick="Vet.bang()">Mở nhật ký</button>`)}
+      ${the('Kết xuất liên thông hồ sơ bệnh án', 'Tệp XML hoặc JSON theo Phụ lục "Mô tả dữ liệu trao đổi hồ sơ bệnh án điện tử" của Bộ Y tế',
+        `<button class="btn small" onclick="LT.hop()">Một hồ sơ</button>
+         <button class="btn small" onclick="LT.taiTatCa()"${khoa}>Toàn bộ</button>`)}
     </div></div>
 
   ${q ? '' : '<div class="note-block" style="margin-top:12px">Bạn đang xem với quyền <b>' + h(Perm.label()) +
