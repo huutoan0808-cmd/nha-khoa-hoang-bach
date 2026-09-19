@@ -44,6 +44,17 @@ const LT = {
               : (c.code || c.id);
   },
   ten(id){ const s = staffById(id); return s ? s.name : ''; },
+  /* Mã tỉnh theo Quyết định 19/2025/QĐ-TTg. Sau sáp nhập 01/7/2025 cả nước còn 34
+     tỉnh thành và bỏ hẳn cấp huyện, nên ô quanhuyen_ma để trống là đúng chứ không
+     phải thiếu dữ liệu. */
+  maTinh(ten){
+    if (typeof TINH_MA === 'undefined' || !ten) return '';
+    const t = String(ten).trim();
+    if (TINH_MA[t]) return TINH_MA[t];
+    const k = Object.keys(TINH_MA).find(x => Combo.norm(x) === Combo.norm(t) ||
+      Combo.norm(x).endsWith(' ' + Combo.norm(t)) || Combo.norm(x) === 'tinh ' + Combo.norm(t));
+    return k ? TINH_MA[k] : '';
+  },
   /* Chỉ lấy ra mã ICD khi chuỗi thật sự có mã. Chẩn đoán gõ tay thì để trống mã,
      đừng nhét cả câu tiếng Việt vào ô maicd — bên nhận sẽ đọc sai. */
   maICD(v){
@@ -93,7 +104,7 @@ const LT = {
       diachi: [c.addr, c.ward, c.province].filter(Boolean).join(', '),
       sonha: this.s(c.addr), thonpho: '',
       xaphuong: this.s(c.ward), quanhuyen: '', quanhuyen_ma: '',
-      tinhthanh: this.s(c.province), tinhthanh_ma: '',
+      tinhthanh: this.s(c.province), tinhthanh_ma: this.maTinh(c.province),
       noilamviec: '',
       sodienthoai: this.s(c.phone),
       nhommau: '', yeutorh: '',
