@@ -1,7 +1,7 @@
 {
-  "name": "Nha Khoa Hoàng Bách - Thời Đại",
-  "short_name": "NK Hoàng Bách - Thời Đại",
-  "description": "Phần mềm quản lý phòng khám — C22 đường Lê Hồng Phong, phường Rạch Giá, tỉnh An Giang",
+  "name": "Nha Khoa Hoàng Bách - Gò Quao",
+  "short_name": "NK Hoàng Bách - Gò Quao",
+  "description": "Phần mềm quản lý phòng khám — Số 33 đường 3/2, Xã Gò Quao, An Giang",
   "lang": "vi",
   "start_url": ".",
   "scope": ".",

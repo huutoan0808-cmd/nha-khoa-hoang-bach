@@ -164,10 +164,10 @@ const Sync = {
     } else if (s.clinic && s.clinic !== mine) {
       try { db.clinic = Object.assign({}, db.clinic, JSON.parse(s.clinic)); } catch(e){}
     }
-    /* Bản trên đám mây còn mang mặc định Gò Quao thì sửa lại, và giữ "bản đã thấy" là
-       bản cũ để lần đồng bộ sau tự đẩy bản đã sửa lên cho các máy khác. */
+    /* Đám mây còn thông tin Thời Đại của bản 97 thì sửa về Gò Quao, và giữ "bản đã thấy"
+       là bản cũ để lần đồng bộ sau tự đẩy bản đã sửa lên cho các máy khác. */
     const truoc = JSON.stringify(db.clinic || {});
-    const doi = typeof chuanHoaPK === 'function' && chuanHoaPK();
+    const doi = typeof veGoQuao === 'function' && veGoQuao();
     this.clinicSeen = doi ? truoc : JSON.stringify(db.clinic || {});
 
     /* Bộ đếm mã KH / số phiếu thu: luôn lấy giá trị LỚN NHẤT giữa các máy

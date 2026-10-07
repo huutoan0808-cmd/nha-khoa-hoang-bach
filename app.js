@@ -1,4 +1,4 @@
-/* Nha Khoa Hoàng Bách - Thời Đại — ứng dụng quản lý phòng khám (v1, dữ liệu lưu trên thiết bị) */
+/* Nha Khoa Hoàng Bách - Gò Quao — ứng dụng quản lý phòng khám (v1, dữ liệu lưu trên thiết bị) */
 'use strict';
 
 /* ================= Tiện ích ================= */
@@ -239,9 +239,9 @@ function seed() {
   svc('Khác','Khám + tư vấn + chụp phim',150000); svc('Khác','Cắt chỉ / tái khám',0);
 
   return {ver: 1,
-    clinic: {name:PK_TD.name, legal:PK_TD.legal,
-             authority:'Sở Y tế An Giang', addr:PK_TD.addr,
-             phone:PK_TD.phone, taxCode:PK_TD.taxCode, maCSKCB:'', tenTD:1,
+    clinic: {name:'Nha Khoa Hoàng Bách - Gò Quao', legal:'Công ty TNHH Nha Khoa Hoàng Bách – Gò Quao',
+             authority:'Sở Y tế An Giang', addr:'Số 33 đường 3/2, Xã Gò Quao, An Giang',
+             phone:'0776 262 242', taxCode:'', maCSKCB:'',
              phone2:'0707 262 242',
              caSangVao:'07:00', caSangRa:'12:00', caChieuVao:'13:00', caChieuRa:'17:00',
              treCho:5, wifiIp:''},
@@ -276,31 +276,22 @@ function save() {
   localStorage.setItem(DB_KEY, chuoi);
 }
 /* Nâng cấp dữ liệu cũ về một ô địa chỉ duy nhất (số nhà + đường gộp chung) */
-/* Thông tin cơ sở đang dùng phần mềm: Công ty TNHH Nha Khoa Hoàng Bách – Thời Đại
-   (GPHĐ 01093/AG-GPHĐ, MST 1702345688). */
-const PK_TD = {
-  name: 'Nha Khoa Hoàng Bách - Thời Đại',
-  legal: 'Công ty TNHH Nha Khoa Hoàng Bách – Thời Đại',
-  addr: 'C22 đường Lê Hồng Phong, phường Rạch Giá, tỉnh An Giang',
-  phone: '0986 262 242', taxCode: '1702345688',
-};
-/* Bản cũ in tên Gò Quao trên bệnh án, phiếu thu và trang đặt hẹn. Chỉ thay những ô
-   còn ĐÚNG mặc định cũ của Gò Quao — ô nào quản lý đã tự sửa thì để nguyên. Gọi cả
-   sau khi kéo cài đặt từ đám mây về, vì bản trên đám mây có thể vẫn là Gò Quao. */
-function chuanHoaPK() {
+/* Bản 97 (07/10/2026) từng đổi thông tin cơ sở sang Thời Đại; nay chạy thử ở Gò Quao
+   trước nên đổi ngược lại. Chỉ thay những ô còn ĐÚNG giá trị bản 97 đã điền — ô quản lý
+   tự sửa thì giữ. Gọi cả sau khi kéo cài đặt từ đám mây, vì đám mây có thể đã nhận bản
+   Thời Đại từ một máy chạy bản 97. Trả về true nếu có đổi. */
+function veGoQuao() {
   const cl = db.clinic || (db.clinic = {});
-  const cu = {
-    name:  ['Nha Khoa Hoàng Bách - Gò Quao', 'Nha Khoa Hoàng Bách'],
-    legal: ['Công ty TNHH Nha Khoa Hoàng Bách – Gò Quao', 'Công ty TNHH Nha Khoa Hoàng Bách - Gò Quao'],
-    addr:  ['Số 33 đường 3/2, Xã Gò Quao, An Giang'],
-    phone: ['0776 262 242'],
-  };
+  const ve = [
+    ['name',    'Nha Khoa Hoàng Bách - Thời Đại', 'Nha Khoa Hoàng Bách - Gò Quao'],
+    ['legal',   'Công ty TNHH Nha Khoa Hoàng Bách – Thời Đại', 'Công ty TNHH Nha Khoa Hoàng Bách – Gò Quao'],
+    ['addr',    'C22 đường Lê Hồng Phong, phường Rạch Giá, tỉnh An Giang', 'Số 33 đường 3/2, Xã Gò Quao, An Giang'],
+    ['phone',   '0986 262 242', '0776 262 242'],
+    ['taxCode', '1702345688', ''],
+  ];
   let doi = false;
-  Object.keys(cu).forEach(k => {
-    if (!cl[k] || cu[k].includes(cl[k])) { if (cl[k] !== PK_TD[k]) { cl[k] = PK_TD[k]; doi = true; } }
-  });
-  if (!cl.taxCode) { cl.taxCode = PK_TD.taxCode; doi = true; }
-  cl.tenTD = 1;
+  ve.forEach(([k, td, gq]) => { if (cl[k] === td) { cl[k] = gq; doi = true; } });
+  if (cl.tenTD) { delete cl.tenTD; doi = true; }
   return doi;
 }
 
@@ -314,10 +305,16 @@ function migrate() {
     cl.caChieuRa  = '17:00';
   }
   if (cl.treCho == null) cl.treCho = 5;
-  /* Phần mềm nay do cơ sở Thời Đại dùng — đổi thông tin còn mang mặc định Gò Quao */
-  chuanHoaPK();
+  /* Đổi tên và địa chỉ phòng khám một lần cho các máy đã cài. Đánh dấu để lần sau
+     không đè lên nữa — quản lý vẫn sửa lại được trong Cài đặt. */
+  if (!cl.tenGQ) {
+    cl.name = 'Nha Khoa Hoàng Bách - Gò Quao';
+    cl.addr = 'Số 33 đường 3/2, Xã Gò Quao, An Giang';
+    cl.tenGQ = 1;
+  }
+  veGoQuao();
   /* Số điện thoại phòng khám — điền một lần cho máy nào chưa có */
-  if (!cl.phone) cl.phone = PK_TD.phone;
+  if (!cl.phone) cl.phone = '0776 262 242';
   if (!cl.phone2) cl.phone2 = '0707 262 242';
   delete cl.shiftStart;
   /* Sơ đồ răng cũ chỉ có một trạng thái mỗi răng: 'rct' (điều trị tủy) và 'crown'
@@ -542,13 +539,6 @@ const App = {
     this.cur = id; this.closeSheet(); this.render(); window.scrollTo({top:0});
   },
   render(){
-    /* Tên cơ sở ở thanh trên và tiêu đề tab lấy theo Cài đặt, không viết cứng */
-    try {
-      const lg = document.querySelector('.topbar .logo b'), sm = document.querySelector('.topbar .logo small');
-      if (lg && db.clinic.name) lg.textContent = db.clinic.name;
-      if (sm) sm.textContent = db.clinic.addr || '';
-      if (db.clinic.name) document.title = db.clinic.name + ' — Quản lý phòng khám';
-    } catch(e){}
     /* Máy đã nối vào phòng khám thì BẮT BUỘC đăng nhập mới xem được dữ liệu.
        Trước đây còn xét thêm !db.customers.length, nên máy nào đã có sẵn dữ liệu thì
        đăng xuất xong vẫn vào thẳng app — đó là lỗ hổng, nay bỏ hẳn điều kiện đó.
