@@ -3,7 +3,7 @@
    Mất mạng vẫn dùng bình thường, có mạng lại thì đẩy lên. */
 'use strict';
 
-const SYNC_TABLES = ['services','staff','customers','treatments','receipts','rx','inventory','appointments','labs','bonuses','invLog','episodes','quyTrinh','giaLab'];
+const SYNC_TABLES = ['services','staff','customers','treatments','receipts','rx','inventory','appointments','labs','bonuses','invLog','episodes','quyTrinh','giaLab','ghiNhan','danhGia'];
 
 /* Công văn hướng dẫn kỹ thuật của Bộ Y tế, mục III.1.1.k: "Dữ liệu hồ sơ bệnh án
    điện tử của người bệnh được lưu trữ độc lập không phụ thuộc vào các hệ thống khác

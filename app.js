@@ -334,6 +334,9 @@ function migrate() {
   /* Trước đây gọi là "Chờ điều trị" — phòng khám quen nói "Chưa điều trị" */
   (db.treatments || []).forEach(t => { if (t.status === 'Chờ điều trị') t.status = 'Chưa điều trị'; });
   if (!db.quyTrinh) db.quyTrinh = [];
+  /* Sổ ghi nhận sự việc và phiếu đánh giá thưởng hiệu quả tháng (danhgia.js) */
+  if (!db.ghiNhan) db.ghiNhan = [];
+  if (!db.danhGia) db.danhGia = [];
   /* Bảng giá gia công lab: lần đầu nạp bảng mặc định, sau đó để quản lý tự sửa */
   if (!db.giaLab) db.giaLab = GiaLab.MAC_DINH.map(x => Object.assign({id: uid()}, x));
   QT.MAU.forEach(m => {
@@ -6618,7 +6621,7 @@ SCREENS.hr = () => {
   const M = monthOf(todayISO());
   /* Không phải quản lý thì chỉ thấy Chấm công — không xem được lương, hoa hồng của người khác */
   const HRTABS = Perm.can('luong')
-    ? [['payroll','Bảng lương'],['attendance','Chấm công'],['commission','Hoa hồng'],['kpi','KPI · Thưởng · Phạt']]
+    ? [['payroll','Bảng lương'],['attendance','Chấm công'],['commission','Hoa hồng'],['kpi','KPI · Thưởng · Phạt'],['danhgia','Đánh giá tháng']]
     : [['attendance','Chấm công']];
   if (!HRTABS.some(t => t[0] === App.state.hrTab)) App.state.hrTab = HRTABS[0][0];
   const tab = App.state.hrTab;
@@ -6753,6 +6756,8 @@ SCREENS.hr = () => {
       <thead><tr><th>Ngày</th><th>Nhân viên</th><th>Lý do</th><th class="r">Số tiền</th></tr></thead>
       <tbody>${db.bonuses.filter(b=>monthOf(b.date)===M).map(b=>`<tr><td class="num">${fmtD(b.date)}</td><td>${h((staffById(b.staffId)||{}).name)}</td><td>${h(b.reason)}</td>
         <td class="r num" style="font-weight:700;color:var(--${b.amount>0?'ok':'danger'})">${b.amount>0?'+':'−'}${money(Math.abs(b.amount))}</td></tr>`).join('') || '<tr><td colspan="4" class="sub-line">Chưa có ghi nhận.</td></tr>'}</tbody></table></div></div>`;
+
+  if (tab === 'danhgia') body = DanhGia.tab();
 
   return `
   <div class="page-head"><h1>Nhân sự</h1><span class="spacer"></span></div>
