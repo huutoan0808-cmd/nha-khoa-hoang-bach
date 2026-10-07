@@ -164,7 +164,11 @@ const Sync = {
     } else if (s.clinic && s.clinic !== mine) {
       try { db.clinic = Object.assign({}, db.clinic, JSON.parse(s.clinic)); } catch(e){}
     }
-    this.clinicSeen = JSON.stringify(db.clinic || {});
+    /* Bản trên đám mây còn mang mặc định Gò Quao thì sửa lại, và giữ "bản đã thấy" là
+       bản cũ để lần đồng bộ sau tự đẩy bản đã sửa lên cho các máy khác. */
+    const truoc = JSON.stringify(db.clinic || {});
+    const doi = typeof chuanHoaPK === 'function' && chuanHoaPK();
+    this.clinicSeen = doi ? truoc : JSON.stringify(db.clinic || {});
 
     /* Bộ đếm mã KH / số phiếu thu: luôn lấy giá trị LỚN NHẤT giữa các máy
        để hai máy không bao giờ cấp trùng số. */
