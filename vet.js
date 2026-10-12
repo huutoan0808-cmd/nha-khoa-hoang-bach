@@ -36,6 +36,7 @@ const VET_BANG = {
   episodes: 'Đợt điều trị', labs: 'Phiếu lab', services: 'Bảng giá dịch vụ',
   giaLab: 'Bảng giá lab', quyTrinh: 'Quy trình công đoạn', staff: 'Nhân viên',
   inventory: 'Kho vật tư', invLog: 'Xuất nhập kho', bonuses: 'Thưởng phạt',
+  congViec: 'Công việc được giao', baoCao: 'Báo cáo cuối ngày',
   ghiNhan: 'Sổ ghi nhận nhân sự', danhGia: 'Phiếu đánh giá tháng',
 };
 

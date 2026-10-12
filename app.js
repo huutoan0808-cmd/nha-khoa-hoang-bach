@@ -516,6 +516,7 @@ const NAV = [
   {id:'calendar', label:'Lịch hẹn', icon:IC.cal},
   {id:'treatment', label:'Điều trị', icon:IC.treat},
   {id:'inventory', label:'Kho', icon:IC.inv},
+  {id:'work', label:'Công việc', icon:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 7-7"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>'},
   {id:'hr', label:'Nhân sự', icon:IC.hr},
   {id:'lab', label:'Lab', icon:IC.lab},
   {id:'reports', label:'Báo cáo', icon:IC.rep},
@@ -592,6 +593,7 @@ const App = {
     $('#bottomNav').innerHTML = first4.map(n => `<button class="bnav-item ${n.id===this.cur?'active':''}" onclick="App.go('${n.id}')">${n.icon}<span>${n.label}</span></button>`).join('') +
       `<button class="bnav-item ${rest.some(n=>n.id===this.cur)?'active':''}" onclick="App.openSheet()">${IC.more}<span>Thêm</span></button>`;
     $('#moreSheet').innerHTML = `<div class="sheet-grid">` + rest.map(n => `<button class="sheet-item ${n.id===this.cur?'active':''}" onclick="App.go('${n.id}')">${n.icon}<span>${n.label}</span></button>`).join('') + `</div>`;
+    if (typeof CV !== 'undefined') { try { CV.veChuong(); } catch(e){} }
     $('#mainArea').innerHTML = SCREENS[this.cur]();
   },
   openSheet(){ $('#sheetBack').classList.add('show'); $('#moreSheet').classList.add('show'); },
@@ -774,13 +776,15 @@ const QUYEN = [
   ['taikhoan',  'Tạo, khóa tài khoản; đặt phân quyền'],
   ['caidat',    'Sửa bảng giá, quy trình, cài đặt chung'],
   ['luong',     'Xem và tính lương, hoa hồng'],
+  ['giaoviec',  'Giao việc cho người khác'],
+  ['baocaoall', 'Xem việc và báo cáo cuối ngày của cả phòng khám'],
 ];
 /* Không cho bỏ hai quyền này của quản lý — bỏ là tự khóa mình ra ngoài, không ai
    vào đặt lại được nữa. */
 const QUYEN_GIU = ['taikhoan', 'caidat'];
 const ROLE_MAC_DINH = {
-  quanly: ['xem','suahoso','ky','mokhoa','thu','xoa','khoiphuc','ketxuat','nhatkyall','saoluu','taikhoan','caidat','luong'],
-  bacsi:  ['xem','suahoso','ky','mokhoa','thu','ketxuat'],
+  quanly: ['xem','suahoso','ky','mokhoa','thu','xoa','khoiphuc','ketxuat','nhatkyall','saoluu','taikhoan','caidat','luong','giaoviec','baocaoall'],
+  bacsi:  ['xem','suahoso','ky','mokhoa','thu','ketxuat','giaoviec'],
   trothu: ['xem'],
   letan:  ['xem','thu'],
 };
@@ -789,10 +793,10 @@ const ROLES = {
   trothu: {label:'Trợ thủ'}, letan: {label:'Lễ tân'},
 };
 const ROLE_TABS = {
-  quanly: ['dashboard','customers','calendar','treatment','inventory','hr','lab','reports','settings'],
-  bacsi:  ['dashboard','customers','calendar','treatment','inventory','hr','lab'],
-  trothu: ['dashboard','customers','calendar','treatment','inventory','hr','lab'],
-  letan:  ['dashboard','customers','calendar','treatment','inventory','hr','lab'],
+  quanly: ['dashboard','customers','calendar','treatment','work','inventory','hr','lab','reports','settings'],
+  bacsi:  ['dashboard','customers','calendar','treatment','work','inventory','hr','lab'],
+  trothu: ['dashboard','customers','calendar','treatment','work','inventory','hr','lab'],
+  letan:  ['dashboard','customers','calendar','treatment','work','inventory','hr','lab'],
 };
 /* Đoán vai trò từ chức danh cũ nếu chưa đặt rõ */
 const guessRole = txt => {
@@ -995,6 +999,7 @@ SCREENS.dashboard = () => {
     <button class="btn primary" onclick="Cal.form()">${IC.plus} Lịch hẹn mới</button>
     <div class="sub">${WEEKD[new Date().getDay()]}, ${fmtD(T)} · ${apptToday.length} lịch hẹn hôm nay</div></div>
   ${Att.myCardHTML()}
+  ${typeof CV !== 'undefined' ? CV.theTongQuan() : ''}
   <div class="kpis">
     ${Perm.can('thu') ? `<div class="card kpi"><div class="k-label">Doanh thu hôm nay</div><div class="k-value num">${money(revToday)}</div><div class="k-note">${db.receipts.filter(r=>r.date===T).length} phiếu thu</div></div>` : ''}
     <div class="card kpi"><div class="k-label">Lịch hẹn hôm nay</div><div class="k-value num">${apptToday.length}</div><div class="k-note">${unconfirmed?`<span class="down">${unconfirmed} chưa xác nhận</span>`:'<span class="up">Đã xác nhận đủ</span>'}</div></div>
@@ -7037,6 +7042,8 @@ SCREENS.settings = () => {
     '</b> — chỉ quản lý mới sửa được các mục có khóa.</div>'}`;
 };
 
+SCREENS.work = () => CV.man();
+
 SCREENS.reports = () => {
   const {type, y, m, q} = App.state.rp;
   const [from, to, label] = Rep.range();
@@ -7135,6 +7142,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 2500);
   /* Canh giờ và canh máy bỏ không */
   KG.khoiDong();
+  /* Việc lặp theo lịch: sinh bản của hôm nay nếu chưa có, rồi nhắc báo cáo cuối ngày */
+  setTimeout(() => {
+    try { CV.sinhHomNay(); CV.nhacCuoiNgay(); App.render(); } catch(e){}
+  }, 1200);
   /* Dữ liệu trên máy đang mã hóa: thử mở bằng khóa còn trong tab, không được thì hỏi */
   if (App.choMoKhoa) {
     Mahoa.tuMo().then(ok => {
