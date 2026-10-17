@@ -558,3 +558,11 @@ input,textarea,[contenteditable]{-webkit-spell-check:none}
 #manKhoa input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;
   background:var(--surface2);color:var(--text);font-size:15px}
 #manKhoa .mk-duoi{margin-top:12px;font-size:12.5px}
+
+/* ---------- Phản hồi tiến độ công việc ---------- */
+.cv-thread{margin-top:8px;border-left:2px solid var(--line);padding-left:10px}
+.cv-ph{padding:6px 0;border-bottom:1px dashed var(--line);font-size:13px}
+.cv-ph:last-child{border-bottom:none}
+.cv-ph-dau{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:3px}
+.cv-anh{display:block;margin-top:6px;max-width:190px;width:100%;border-radius:8px;
+  border:1px solid var(--line);cursor:zoom-in}

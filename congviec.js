@@ -443,3 +443,174 @@ const CV = {
       </div></div></div>`;
   },
 };
+
+/* ================= PHÂN CÔNG VIỆC TRONG TAB NHÂN SỰ =================
+   Cùng dữ liệu với tab Công việc, nhưng xếp theo NGƯỜI thay vì theo việc — quản lý
+   nhìn một người là thấy ngay họ đang ôm bao nhiêu việc, xong tới đâu.
+
+   Thêm phần phản hồi tiến độ: người làm ghi lại tiến độ kèm MỘT tấm ảnh chụp,
+   người giao nhận thông báo ngay.
+
+   Vì sao chỉ một ảnh mỗi lần phản hồi: ảnh nằm chung kho dữ liệu với hồ sơ bệnh nhân,
+   mà trình duyệt chỉ cho mỗi trang khoảng 5MB. Một ảnh đã nén cỡ 50KB; cho đính kèm
+   thoải mái thì vài chục việc là đầy kho, mất cả dữ liệu bệnh án. Cần nhiều ảnh thì
+   ghi thêm một lần phản hồi nữa. */
+
+Object.assign(CV, {
+  /* ---------- Nén ảnh trước khi lưu ---------- */
+  NEN_CANH: 800,
+  NEN_CHAT: 0.6,
+  nenAnh(file){
+    return new Promise((ok, loi) => {
+      if (!file) return ok('');
+      if (!/^image\//.test(file.type)) return loi(new Error('Chỉ nhận tệp ảnh'));
+      const fr = new FileReader();
+      fr.onerror = () => loi(new Error('Không đọc được tệp'));
+      fr.onload = () => {
+        const im = new Image();
+        im.onerror = () => loi(new Error('Tệp ảnh hỏng'));
+        im.onload = () => {
+          const tl = Math.min(1, this.NEN_CANH / Math.max(im.width, im.height));
+          const cv = document.createElement('canvas');
+          cv.width = Math.round(im.width * tl);
+          cv.height = Math.round(im.height * tl);
+          cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+          ok(cv.toDataURL('image/jpeg', this.NEN_CHAT));
+        };
+        im.src = fr.result;
+      };
+      fr.readAsDataURL(file);
+    });
+  },
+
+  /* ---------- Phản hồi tiến độ ---------- */
+  phanHoiForm(id){
+    const v = this.ds().find(x => x.id === id); if (!v) return;
+    App.modal('Phản hồi tiến độ — ' + v.tieuDe, `
+      <form class="form-grid" onsubmit="CV.luuPhanHoi(event,'${id}')">
+        <div class="f full"><label>Tiến độ hiện tại</label>
+          <select name="trangThai">${CV_TT.map(x =>
+            `<option${v.trangThai === x ? ' selected' : ''}>${x}</option>`).join('')}</select></div>
+        <div class="f full"><label>Ghi lại tiến độ</label>
+          <textarea name="noiDung" rows="3" required placeholder="Vd: đã hấp xong 2 mẻ, còn 1 mẻ chờ máy nguội"></textarea></div>
+        <div class="f full"><label>Ảnh chụp (không bắt buộc)</label>
+          <input type="file" name="anh" accept="image/*" capture="environment" onchange="CV.xemTruoc(this)">
+          <div class="combo-hint">Mỗi lần phản hồi đính kèm <b>một ảnh</b>, phần mềm tự nén lại cho nhẹ.
+            Cần nhiều ảnh thì ghi thêm lần phản hồi nữa.</div>
+          <div id="cvAnhXem" style="margin-top:8px"></div></div>
+        <div class="form-actions full">
+          <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+          <button class="btn primary">Gửi phản hồi</button></div>
+      </form>`);
+  },
+  async xemTruoc(inp){
+    const o = document.getElementById('cvAnhXem'); if (!o) return;
+    o.innerHTML = '<span class="sub-line">Đang xử lý ảnh…</span>';
+    try {
+      const d = await this.nenAnh(inp.files[0]);
+      o.innerHTML = d ? `<img src="${d}" class="cv-anh">
+        <div class="sub-line">Đã nén còn ${Math.round(d.length / 1024)} KB</div>` : '';
+    } catch(e){ o.innerHTML = '<span class="sub-line">' + h(e.message) + '</span>'; }
+  },
+  async luuPhanHoi(ev, id){
+    ev.preventDefault();
+    const f = ev.target, v = this.ds().find(x => x.id === id); if (!v) return;
+    const d = Object.fromEntries(new FormData(f).entries());
+    const nut = f.querySelector('button.primary');
+    nut.disabled = true; nut.textContent = 'Đang gửi…';
+    let anh = '';
+    try { anh = await this.nenAnh(f.querySelector('[name="anh"]').files[0]); }
+    catch(e){ App.toast('Ảnh lỗi: ' + e.message); }
+    v.phanHoi = v.phanHoi || [];
+    v.phanHoi.push({id: uid(), luc: new Date().toISOString(), nguoi: this.toi(),
+      noiDung: d.noiDung, anh, trangThai: d.trangThai});
+    const doiTT = v.trangThai !== d.trangThai;
+    v.trangThai = d.trangThai;
+    v.xongLuc = d.trangThai === 'Xong' ? (v.xongLuc || new Date().toISOString()) : '';
+    v._up = Date.now();
+    if (v.nguoiGiao && v.nguoiGiao !== this.toi())
+      this.bao(v.nguoiGiao, 'tiendo', this.ten(this.toi()) + ' báo tiến độ "' + v.tieuDe + '": ' +
+        d.trangThai + (anh ? ' · có ảnh' : ''));
+    save();
+    if (typeof Vet !== 'undefined')
+      Vet.ghi('sua', 'Phản hồi tiến độ: ' + v.tieuDe + ' → ' + d.trangThai + (anh ? ' (kèm ảnh)' : ''));
+    App.closeModal(); App.render();
+    App.toast(doiTT ? 'Đã gửi phản hồi, trạng thái → ' + d.trangThai : 'Đã gửi phản hồi ✓');
+  },
+  xemAnh(id, phId){
+    const v = this.ds().find(x => x.id === id); if (!v) return;
+    const ph = (v.phanHoi || []).find(x => x.id === phId); if (!ph || !ph.anh) return;
+    App.modal('Ảnh tiến độ — ' + v.tieuDe, `
+      <div class="sub-line">${h(this.ten(ph.nguoi))} · ${h(this.gio(ph.luc))}</div>
+      <img src="${ph.anh}" style="width:100%;border-radius:10px;margin-top:8px">
+      <div class="form-actions"><button class="btn" onclick="App.closeModal()">Đóng</button></div>`);
+  },
+  dongPhanHoi(v){
+    const ds = v.phanHoi || [];
+    if (!ds.length) return '';
+    return `<div class="cv-thread">${ds.slice().reverse().map(ph => `
+      <div class="cv-ph">
+        <div class="cv-ph-dau"><b>${h(this.ten(ph.nguoi))}</b>
+          <span class="pill ${ph.trangThai === 'Xong' ? 'ok' : 'info'}">${h(ph.trangThai || '')}</span>
+          <span class="sub-line">${h(this.gio(ph.luc))}</span></div>
+        <div>${h(ph.noiDung || '')}</div>
+        ${ph.anh ? `<img src="${ph.anh}" class="cv-anh" onclick="CV.xemAnh('${v.id}','${ph.id}')" title="Bấm để xem to">` : ''}
+      </div>`).join('')}</div>`;
+  },
+
+  /* ---------- Màn hình trong tab Nhân sự ---------- */
+  manNhanSu(){
+    const me = this.toi(), T = todayISO();
+    const xemHet = Perm.can('baocaoall') || Perm.can('giaoviec');
+    const ai = xemHet ? db.staff.filter(s => s.active !== false)
+                      : db.staff.filter(s => s.id === me);
+    if (!ai.length) return '<div class="note-block">Chưa có nhân viên nào, hoặc bạn chưa đăng nhập.</div>';
+
+    const dong = v => {
+      const tre = v.trangThai !== 'Xong' && v.han && v.han < T;
+      const cuaToi = v.giaoCho === me;
+      return `<div class="ho-so-file ${v.trangThai === 'Xong' ? 'da-dien' : ''}">
+        <div class="hsf-than">
+          <div class="hsf-dau"><b>${h(v.tieuDe)}</b>
+            ${v.uuTien === 'Gấp' ? '<span class="pill danger">Gấp</span>' : ''}
+            ${tre ? '<span class="pill warn">Quá hạn</span>' : ''}
+            <span class="pill ${v.trangThai === 'Xong' ? 'ok' : v.trangThai === 'Đang làm' ? 'info' : 'mutedp'}">${h(v.trangThai)}</span>
+            ${(v.phanHoi || []).length ? `<span class="pill mutedp">${v.phanHoi.length} phản hồi</span>` : ''}</div>
+          <div class="hsf-mo">${v.moTa ? h(v.moTa) + '<br>' : ''}
+            ${v.han ? 'hạn ' + fmtD(v.han) : 'không đặt hạn'}
+            ${v.nguoiGiao ? ' · giao bởi ' + h(this.ten(v.nguoiGiao)) : ''}</div>
+          ${this.dongPhanHoi(v)}
+        </div>
+        <div class="hsf-nut" style="flex-wrap:wrap;gap:4px">
+          ${cuaToi ? `<button class="btn small primary" onclick="CV.phanHoiForm('${v.id}')">Phản hồi tiến độ</button>` : ''}
+          ${Perm.can('giaoviec') ? `<button class="btn small" onclick="CV.form('${v.id}')">Sửa</button>` : ''}
+        </div></div>`;
+    };
+
+    return `
+      ${Perm.can('giaoviec') ? `<div class="form-actions" style="justify-content:flex-start;margin-bottom:12px">
+        <button class="btn primary" onclick="CV.form()">${IC.plus} Giao việc mới</button>
+        <button class="btn" onclick="App.go('work')">Mở tab Công việc</button></div>` : ''}
+      ${ai.map(s => {
+        const ds = this.quaHan(s.id).concat(this.cuaNguoi(s.id, T))
+          .filter((v, i, a) => a.findIndex(x => x.id === v.id) === i);
+        const xong = ds.filter(v => v.trangThai === 'Xong').length;
+        const bc = this.cuaNgay(s.id, T);
+        return `<div class="card mb"><div class="card-h"><h2>${h(s.name)}</h2>
+          <span class="hint">${h(s.role || '')}</span>
+          <span class="pill ${ds.length && xong === ds.length ? 'ok' : 'mutedp'}">${xong}/${ds.length} việc hôm nay</span>
+          ${bc ? '<span class="pill ok">Đã báo cáo</span>' : '<span class="pill warn">Chưa báo cáo</span>'}
+          ${Perm.can('giaoviec') ? `<button class="btn small" onclick="CV.giaoCho('${s.id}')">Giao việc</button>` : ''}</div>
+          <div class="card-b">${ds.length ? ds.map(dong).join('')
+            : '<div class="sub-line">Không có việc nào hôm nay.</div>'}</div></div>`;
+      }).join('')}`;
+  },
+  /* Giao việc với người nhận chọn sẵn */
+  giaoCho(sid){
+    this.form();
+    setTimeout(() => {
+      const o = document.querySelector('#modalBody [name="giaoCho"]');
+      if (o) o.value = sid;
+    }, 40);
+  },
+});

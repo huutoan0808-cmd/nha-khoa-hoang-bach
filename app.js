@@ -1,4 +1,4 @@
-/* Nha Khoa Hoàng Bách - Gò Quao — ứng dụng quản lý phòng khám (v1, dữ liệu lưu trên thiết bị) */
+/* Nha Khoa Hoàng Bách - Thời Đại — ứng dụng quản lý phòng khám (v1, dữ liệu lưu trên thiết bị) */
 'use strict';
 
 /* ================= Tiện ích ================= */
@@ -239,9 +239,9 @@ function seed() {
   svc('Khác','Khám + tư vấn + chụp phim',150000); svc('Khác','Cắt chỉ / tái khám',0);
 
   return {ver: 1,
-    clinic: {name:'Nha Khoa Hoàng Bách - Gò Quao', legal:'Công ty TNHH Nha Khoa Hoàng Bách – Gò Quao',
-             authority:'Sở Y tế An Giang', addr:'Số 33 đường 3/2, Xã Gò Quao, An Giang',
-             phone:'0776 262 242', taxCode:'', maCSKCB:'',
+    clinic: {name:'Nha Khoa Hoàng Bách - Thời Đại', legal:'Công ty TNHH Nha Khoa Hoàng Bách – Thời Đại',
+             authority:'Sở Y tế An Giang', addr:'C22 đường Lê Hồng Phong, phường Rạch Giá, tỉnh An Giang',
+             phone:'0986 262 242', taxCode:'1702345688', maCSKCB:'',
              phone2:'0707 262 242',
              caSangVao:'07:00', caSangRa:'12:00', caChieuVao:'13:00', caChieuRa:'17:00',
              treCho:5, wifiIp:''},
@@ -276,22 +276,23 @@ function save() {
   localStorage.setItem(DB_KEY, chuoi);
 }
 /* Nâng cấp dữ liệu cũ về một ô địa chỉ duy nhất (số nhà + đường gộp chung) */
-/* Bản 97 (07/10/2026) từng đổi thông tin cơ sở sang Thời Đại; nay chạy thử ở Gò Quao
-   trước nên đổi ngược lại. Chỉ thay những ô còn ĐÚNG giá trị bản 97 đã điền — ô quản lý
-   tự sửa thì giữ. Gọi cả sau khi kéo cài đặt từ đám mây, vì đám mây có thể đã nhận bản
-   Thời Đại từ một máy chạy bản 97. Trả về true nếu có đổi. */
-function veGoQuao() {
+/* Phần mềm chạy thử xong ở Gò Quao, nay chuyển sang chi nhánh Thời Đại (Rạch Giá).
+   Chỉ thay những ô còn ĐÚNG giá trị cũ — ô nào quản lý đã tự sửa thì giữ nguyên, vì
+   sửa đè lên thứ người ta cố ý đặt là mất dữ liệu thật. Gọi cả sau khi kéo cài đặt từ
+   đám mây, vì đám mây có thể còn giữ bản Gò Quao của máy chưa cập nhật.
+   Trả về true nếu có đổi. */
+function veThoiDai() {
   const cl = db.clinic || (db.clinic = {});
   const ve = [
-    ['name',    'Nha Khoa Hoàng Bách - Thời Đại', 'Nha Khoa Hoàng Bách - Gò Quao'],
-    ['legal',   'Công ty TNHH Nha Khoa Hoàng Bách – Thời Đại', 'Công ty TNHH Nha Khoa Hoàng Bách – Gò Quao'],
-    ['addr',    'C22 đường Lê Hồng Phong, phường Rạch Giá, tỉnh An Giang', 'Số 33 đường 3/2, Xã Gò Quao, An Giang'],
-    ['phone',   '0986 262 242', '0776 262 242'],
-    ['taxCode', '1702345688', ''],
+    ['name',    'Nha Khoa Hoàng Bách - Gò Quao', 'Nha Khoa Hoàng Bách - Thời Đại'],
+    ['legal',   'Công ty TNHH Nha Khoa Hoàng Bách – Gò Quao', 'Công ty TNHH Nha Khoa Hoàng Bách – Thời Đại'],
+    ['addr',    'Số 33 đường 3/2, Xã Gò Quao, An Giang', 'C22 đường Lê Hồng Phong, phường Rạch Giá, tỉnh An Giang'],
+    ['phone',   '0776 262 242', '0986 262 242'],
+    ['taxCode', '', '1702345688'],
   ];
   let doi = false;
-  ve.forEach(([k, td, gq]) => { if (cl[k] === td) { cl[k] = gq; doi = true; } });
-  if (cl.tenTD) { delete cl.tenTD; doi = true; }
+  ve.forEach(([k, cu, moi]) => { if ((cl[k] || '') === cu) { cl[k] = moi; doi = true; } });
+  if (cl.tenGQ) { delete cl.tenGQ; doi = true; }
   return doi;
 }
 
@@ -307,14 +308,14 @@ function migrate() {
   if (cl.treCho == null) cl.treCho = 5;
   /* Đổi tên và địa chỉ phòng khám một lần cho các máy đã cài. Đánh dấu để lần sau
      không đè lên nữa — quản lý vẫn sửa lại được trong Cài đặt. */
-  if (!cl.tenGQ) {
-    cl.name = 'Nha Khoa Hoàng Bách - Gò Quao';
-    cl.addr = 'Số 33 đường 3/2, Xã Gò Quao, An Giang';
-    cl.tenGQ = 1;
+  if (!cl.tenTD) {
+    cl.name = 'Nha Khoa Hoàng Bách - Thời Đại';
+    cl.addr = 'C22 đường Lê Hồng Phong, phường Rạch Giá, tỉnh An Giang';
+    cl.tenTD = 1;
   }
-  veGoQuao();
+  veThoiDai();
   /* Số điện thoại phòng khám — điền một lần cho máy nào chưa có */
-  if (!cl.phone) cl.phone = '0776 262 242';
+  if (!cl.phone) cl.phone = '0986 262 242';
   if (!cl.phone2) cl.phone2 = '0707 262 242';
   delete cl.shiftStart;
   /* Sơ đồ răng cũ chỉ có một trạng thái mỗi răng: 'rct' (điều trị tủy) và 'crown'
@@ -5797,7 +5798,7 @@ create policy p_rec   on records    for all to authenticated using (true) with c
       <div class="note-block full">Khoảng <b>giữa hai ca là giờ nghỉ trưa, không tính công</b>. Nhờ vậy người ở lại buổi trưa
         và người về rồi quay lại đều ra cùng số giờ — không ai phải chấm công bốn lần một ngày.
         Ai về trưa rồi nghỉ luôn thì phần mềm chỉ tính công buổi sáng.</div>
-      <div class="f"><label>Điện thoại phòng khám</label><input name="phone" value="${h(db.clinic.phone||'')}" placeholder="0776 262 242"></div>
+      <div class="f"><label>Điện thoại phòng khám</label><input name="phone" value="${h(db.clinic.phone||'')}" placeholder="0986 262 242"></div>
       <div class="f"><label>Điện thoại thứ hai</label><input name="phone2" value="${h(db.clinic.phone2||'')}" placeholder="0707 262 242"></div>
       <div class="f full"><label>Địa chỉ mạng phòng khám</label><input name="wifiIp" value="${h(db.clinic.wifiIp||'')}" placeholder="chưa đặt"></div>
       <div class="note-block full">Trình duyệt không đọc được tên wifi, nên phần mềm đối chiếu <b>địa chỉ mạng (IP)</b> của phòng khám thay thế: đứng ở phòng khám dùng wifi phòng khám thì IP trùng, chấm công ở nhà thì bị đánh dấu <b>ngoài mạng phòng khám</b>.
@@ -6646,8 +6647,8 @@ SCREENS.hr = () => {
   const M = monthOf(todayISO());
   /* Không phải quản lý thì chỉ thấy Chấm công — không xem được lương, hoa hồng của người khác */
   const HRTABS = Perm.can('luong')
-    ? [['payroll','Bảng lương'],['attendance','Chấm công'],['commission','Hoa hồng'],['kpi','KPI · Thưởng · Phạt'],['danhgia','Đánh giá tháng']]
-    : [['attendance','Chấm công']];
+    ? [['payroll','Bảng lương'],['attendance','Chấm công'],['congviec','Phân công việc'],['commission','Hoa hồng'],['kpi','KPI · Thưởng · Phạt'],['danhgia','Đánh giá tháng']]
+    : [['attendance','Chấm công'],['congviec','Phân công việc']];
   if (!HRTABS.some(t => t[0] === App.state.hrTab)) App.state.hrTab = HRTABS[0][0];
   const tab = App.state.hrTab;
   const payRows = db.staff.map(st => {
@@ -6746,6 +6747,8 @@ SCREENS.hr = () => {
       Giờ nghỉ trưa không tính công, nên <b>ai ở lại buổi trưa và ai về rồi quay lại đều ra cùng số giờ</b> — chỉ cần chấm vào lúc đến và chấm ra lúc về hẳn.
       Ai về trưa không quay lại thì chỉ được công buổi sáng.</div>`;
   }
+
+  if (tab === 'congviec') body = CV.manNhanSu();
 
   if (tab === 'commission') body = `
     <div class="page-head" style="margin-bottom:12px">
