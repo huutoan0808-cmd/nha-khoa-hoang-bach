@@ -442,13 +442,16 @@ const Importer = {
     if (!rows.length) return '';
     const cols = Object.keys(rows[0]).map(x => x.toLowerCase());
     const has = t => cols.some(c => c.includes(t));
-    /* Chỉ bảng khách hàng mới có cột họ tên, nên một dấu hiệu là đủ — trước đây
-       còn đòi đúng chữ "ngày tháng năm sinh" nên file ghi "Ngày sinh" là không nhận ra. */
-    if (has('họ và tên') || has('họ tên') || has('tên khách hàng')) return 'customers';
-    if (has('dịch vụ') && (has('đơn giá') || has('giảm'))) return 'items';
-    if (has('ngày điều trị') || has('tổng thu')) return 'treatments';
+    /* Xét dấu hiệu RIÊNG trước, dấu hiệu chung sau. Cột "Họ và tên" không phải của
+       riêng bảng khách hàng — bảng lịch hẹn cũng có cột đó. Trước đây xét nó đầu
+       tiên nên file lịch hẹn bị nhận nhầm là khách hàng, rồi đè lên file khách hàng
+       thật; mà lịch hẹn lại bỏ trống cột tên nên cuối cùng không còn khách nào, kéo
+       theo lịch sử điều trị cũng rỗng vì không có khách để gắn vào. */
     if (has('ngày đặt hẹn') || (has('giờ bắt đầu') && has('mã kh'))) return 'appointments';
+    if (has('ngày điều trị') || has('tổng thu')) return 'treatments';
+    if (has('dịch vụ') && (has('đơn giá') || has('giảm'))) return 'items';
     if (has('tên vật liệu') || has('mã vật liệu')) return 'inventory';
+    if (has('họ và tên') || has('họ tên') || has('tên khách hàng')) return 'customers';
     return '';
   },
 
@@ -460,6 +463,9 @@ const Importer = {
       const rows = this.parseCSV(await f.text());
       const kind = this.detectKind(rows);
       if (!kind) { unknown.push(f.name); continue; }
+      /* Hai file cùng được nhận là một loại thì GIỮ FILE ĐẦU và báo ra, đừng lặng lẽ
+         đè — đè mất một bảng mà không ai biết là kiểu hỏng khó tìm nhất. */
+      if (found[kind]) { unknown.push(f.name + ' (trùng loại với file trước)'); continue; }
       found[kind] = rows;
     }
     const done = [], skipped = [];
