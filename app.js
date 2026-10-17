@@ -314,6 +314,20 @@ function migrate() {
     cl.tenTD = 1;
   }
   veThoiDai();
+  /* Giờ thật của cơ sở Thời Đại từ 04/10/2026: thứ Hai–thứ Sáu đóng cửa 19:00,
+     thứ Bảy và Chủ nhật đóng cửa 17:00; nghỉ trưa 12:00–13:30 mọi ngày.
+     Đặt một lần rồi đánh dấu, sau đó quản lý tự sửa trong Nhân sự → Chấm công. */
+  if (!cl.caTD) {
+    cl.caSangVao = '08:00'; cl.caSangRa = '12:00';
+    cl.caChieuVao = '13:30'; cl.caChieuRa = '19:00';
+    const tuan = {};
+    for (let i = 0; i < 7; i++) {
+      tuan[String(i)] = {sangVao:'08:00', sangRa:'12:00', chieuVao:'13:30',
+                         chieuRa: (i === 0 || i === 6) ? '17:00' : '19:00'};
+    }
+    cl.caTuan = tuan;
+    cl.caTD = 1;
+  }
   /* Số điện thoại phòng khám — điền một lần cho máy nào chưa có */
   if (!cl.phone) cl.phone = '0986 262 242';
   if (!cl.phone2) cl.phone2 = '0707 262 242';
@@ -5060,23 +5074,55 @@ const Att = {
 
   logOf(staffId, date){ return (db.attLog||[]).find(x => x.staffId === staffId && x.date === date); },
 
-  /* ---------- Ca làm việc: sáng 7–12, chiều 13–17 ----------
-     Giờ nghỉ trưa 12–13 nằm ngoài cả hai ca nên không được tính công. Nhờ vậy người
-     ở lại buổi trưa và người về rồi quay lại đều ra cùng số giờ, khỏi phải chấm công
-     bốn lần một ngày. Ai về trưa không quay lại thì chỉ được công buổi sáng. */
-  ca(){
+  /* ---------- Ca làm việc ----------
+     Giờ nghỉ trưa nằm ngoài cả hai ca nên không được tính công. Nhờ vậy người ở lại
+     buổi trưa và người về rồi quay lại đều ra cùng số giờ, khỏi phải chấm công bốn
+     lần một ngày. Ai về trưa không quay lại thì chỉ được công buổi sáng.
+
+     Cơ sở Thời Đại đóng cửa sớm hơn vào thứ Bảy và Chủ nhật, nên giờ phải đặt được
+     RIÊNG CHO TỪNG NGÀY trong tuần. Một cặp giờ dùng chung cho cả tuần sẽ báo nhầm
+     "về sớm 2 tiếng" cho mọi người vào hai ngày cuối tuần, rồi trừ công oan.
+     db.clinic.caTuan['0'..'6'] (0 = Chủ nhật) ghi giờ riêng; ngày nào không có thì
+     lấy cặp giờ chung caSangVao/caSangRa/caChieuVao/caChieuRa. */
+  THU: ['Chủ nhật','Thứ hai','Thứ ba','Thứ tư','Thứ năm','Thứ sáu','Thứ bảy'],
+  gioCua(ngay){
     const c = db.clinic || {};
-    return [{ten:'Sáng',  s: hm2m(c.caSangVao  || '07:00'), e: hm2m(c.caSangRa  || '12:00')},
-            {ten:'Chiều', s: hm2m(c.caChieuVao || '13:00'), e: hm2m(c.caChieuRa || '17:00')}];
+    const chung = {sangVao: c.caSangVao || '07:00', sangRa: c.caSangRa || '12:00',
+                   chieuVao: c.caChieuVao || '13:00', chieuRa: c.caChieuRa || '17:00'};
+    if (!ngay) return chung;
+    const d = new Date(String(ngay).slice(0,10) + 'T00:00');
+    if (isNaN(d)) return chung;
+    const r = ((c.caTuan || {})[String(d.getDay())]) || null;
+    return r ? Object.assign({}, chung, r) : chung;
   },
-  phutChuan(){ return this.ca().reduce((s,c) => s + Math.max(0, c.e - c.s), 0); },
-  moTaCa(){ const c = this.ca(); return `Sáng ${m2hm(c[0].s)}–${m2hm(c[0].e)} · Chiều ${m2hm(c[1].s)}–${m2hm(c[1].e)}`; },
+  ca(ngay){
+    const g = this.gioCua(ngay);
+    return [{ten:'Sáng',  s: hm2m(g.sangVao),  e: hm2m(g.sangRa)},
+            {ten:'Chiều', s: hm2m(g.chieuVao), e: hm2m(g.chieuRa)}];
+  },
+  phutChuan(ngay){ return this.ca(ngay).reduce((s,c) => s + Math.max(0, c.e - c.s), 0); },
+  moTaCa(ngay){ const c = this.ca(ngay); return `Sáng ${m2hm(c[0].s)}–${m2hm(c[0].e)} · Chiều ${m2hm(c[1].s)}–${m2hm(c[1].e)}`; },
+  /* Mô tả cả tuần, gộp những ngày giống nhau cho gọn */
+  moTaTuan(){
+    const nhom = {};
+    for (let i = 0; i < 7; i++) {
+      const k = this.moTaCa(this.ngayCuaThu(i));
+      (nhom[k] || (nhom[k] = [])).push(this.THU[i]);
+    }
+    return Object.entries(nhom).map(([gio, ds]) => ds.join(', ') + ': ' + gio).join(' · ');
+  },
+  /* Một ngày bất kỳ rơi đúng vào thứ cần xem — chỉ dùng để tra giờ, không dùng tính công */
+  ngayCuaThu(thu){
+    const d = new Date();
+    d.setDate(d.getDate() - d.getDay() + thu);
+    return isoOf(d);
+  },
 
   /* Tính một ngày công: số phút làm thật, trễ bao lâu, về sớm bao lâu, làm buổi nào */
   tinh(log){
     const r = {phut:0, cong:0, tre:0, som:0, buoi:[], veTrua:false, dangLam:false};
     if (!log || !log.inAt) return r;
-    const ca = this.ca(), cho = +(db.clinic.treCho ?? 5);
+    const ca = this.ca(log.date), cho = +(db.clinic.treCho ?? 5);
     const vao = hm2m(log.inAt), ra = log.outAt ? hm2m(log.outAt) : null;
     /* Chưa chấm ra: hôm nay thì tạm tính tới lúc này, ngày cũ thì để trống chờ sửa tay */
     const het = ra != null ? ra : (log.date === todayISO() ? hm2m(nowHM()) : null);
@@ -5090,7 +5136,8 @@ const Att = {
       const p = b - a;
       if (p > 0) { r.phut += p; r.buoi.push(c.ten); }
     });
-    r.cong = this.phutChuan() ? r.phut / this.phutChuan() : 0;
+    const chuan = this.phutChuan(log.date);
+    r.cong = chuan ? r.phut / chuan : 0;
     /* Đi trễ: tính theo buổi mà người đó bắt đầu làm */
     if (vao > ca[0].s + cho && vao < ca[0].e) r.tre = vao - ca[0].s;
     else if (vao > ca[1].s + cho && vao < ca[1].e) r.tre = vao - ca[1].s;
@@ -5170,7 +5217,7 @@ const Att = {
     const nut = !l ? 'Chấm công vào ca' : (!l.outAt ? 'Chấm công ra ca' : 'Cập nhật giờ ra');
     return `<div class="card mb"><div class="card-b" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
       <div style="flex:1;min-width:180px">
-        <div class="sub-line">Chấm công hôm nay · ${h(st.name)} · ${h(this.moTaCa())}</div>
+        <div class="sub-line">Chấm công hôm nay · ${h(st.name)} · ${h(this.moTaCa(todayISO()))}</div>
         <div style="display:flex;gap:18px;margin-top:4px;flex-wrap:wrap;align-items:center">
           <div><span class="sub-line">Vào</span> <b class="num" style="font-size:16px">${l&&l.inAt?h(l.inAt):'—'}</b>
             ${t.tre?'<span class="pill warn">trễ '+gioPhut(t.tre)+'</span>':''}</div>
@@ -5240,7 +5287,7 @@ const Att = {
               <div><div class="sub-line">Giờ ra</div><div class="num" style="font-size:20px;font-weight:700">${l&&l.outAt?l.outAt:'—'}</div></div>
               <div><div class="sub-line">Làm được</div><div class="num" style="font-size:20px;font-weight:700">${gioPhut(Att.tinh(l).phut)}</div></div>
             </div>
-            <div class="sub-line" style="margin-top:8px">${h(Att.moTaCa())} · nghỉ trưa không tính công</div>
+            <div class="sub-line" style="margin-top:8px">${h(Att.moTaCa(todayISO()))} · nghỉ trưa không tính công</div>
             ${l&&l.net==='outside'?'<div class="pill danger" style="margin-top:10px">Chấm ngoài mạng phòng khám</div>':''}
           </div></div>
           <button class="btn primary" style="width:100%;justify-content:center;padding:14px" onclick="Att.selfCheck('${st.id}')">${next}</button>
@@ -5795,6 +5842,18 @@ create policy p_rec   on records    for all to authenticated using (true) with c
       <div class="f"><label>Ca chiều — vào</label><input type="time" name="caChieuVao" value="${h(db.clinic.caChieuVao||'13:00')}"></div>
       <div class="f"><label>Ca chiều — ra</label><input type="time" name="caChieuRa" value="${h(db.clinic.caChieuRa||'17:00')}"></div>
       <div class="f"><label>Cho phép trễ (phút)</label><input type="number" name="treCho" min="0" max="60" value="${h(String(db.clinic.treCho ?? 5))}"></div>
+      <div class="f full"><label>Giờ riêng theo từng ngày trong tuần</label>
+        <div class="tbl-wrap"><table class="tbl"><thead><tr>
+          <th>Ngày</th><th>Sáng vào</th><th>Sáng ra</th><th>Chiều vào</th><th>Chiều ra</th></tr></thead>
+          <tbody>${Att.THU.map((ten, i) => { const g = Att.gioCua(Att.ngayCuaThu(i)); return `<tr>
+            <td>${h(ten)}</td>
+            <td><input type="time" name="t${i}_sangVao" value="${h(g.sangVao)}"></td>
+            <td><input type="time" name="t${i}_sangRa" value="${h(g.sangRa)}"></td>
+            <td><input type="time" name="t${i}_chieuVao" value="${h(g.chieuVao)}"></td>
+            <td><input type="time" name="t${i}_chieuRa" value="${h(g.chieuRa)}"></td></tr>`; }).join('')}</tbody></table></div>
+        <div class="combo-hint">Bốn ô ở trên là giờ chung. Bảng này đè lên giờ chung cho từng ngày —
+          cơ sở Thời Đại đóng cửa sớm thứ Bảy và Chủ nhật nên phải đặt riêng,
+          nếu không hai ngày đó ai cũng bị tính là về sớm rồi trừ công oan.</div></div>
       <div class="note-block full">Khoảng <b>giữa hai ca là giờ nghỉ trưa, không tính công</b>. Nhờ vậy người ở lại buổi trưa
         và người về rồi quay lại đều ra cùng số giờ — không ai phải chấm công bốn lần một ngày.
         Ai về trưa rồi nghỉ luôn thì phần mềm chỉ tính công buổi sáng.</div>
@@ -5817,6 +5876,20 @@ create policy p_rec   on records    for all to authenticated using (true) with c
     if (g.some(x => x == null)) { App.toast('Chưa nhập đủ bốn mốc giờ của hai ca'); return; }
     if (g[1] <= g[0] || g[3] <= g[2] || g[2] < g[1]) { App.toast('Giờ ca chưa hợp lý — ca chiều phải bắt đầu sau khi ca sáng kết thúc'); return; }
     ['caSangVao','caSangRa','caChieuVao','caChieuRa'].forEach(k => db.clinic[k] = d[k]);
+    /* Bảng giờ từng ngày: kiểm từng dòng rồi mới ghi, một dòng sai thì bỏ cả bảng
+       chứ không ghi nửa vời — giờ nửa vời tính công còn tệ hơn giờ chung. */
+    const tuan = {};
+    for (let i = 0; i < 7; i++) {
+      const o = {sangVao: d['t'+i+'_sangVao'], sangRa: d['t'+i+'_sangRa'],
+                 chieuVao: d['t'+i+'_chieuVao'], chieuRa: d['t'+i+'_chieuRa']};
+      const m = [o.sangVao, o.sangRa, o.chieuVao, o.chieuRa].map(hm2m);
+      if (m.some(x => x == null)) { App.toast('Thiếu giờ ở dòng ' + Att.THU[i]); return; }
+      if (m[1] <= m[0] || m[3] <= m[2] || m[2] < m[1]) {
+        App.toast('Giờ ngày ' + Att.THU[i] + ' chưa hợp lý — ca chiều phải bắt đầu sau ca sáng'); return;
+      }
+      tuan[String(i)] = o;
+    }
+    db.clinic.caTuan = tuan;
     db.clinic.treCho = Math.max(0, +d.treCho || 0);
     db.clinic.phone = (d.phone||'').trim();
     db.clinic.phone2 = (d.phone2||'').trim();
@@ -6182,7 +6255,7 @@ const DatHen = {
   /* ---------- Khung giờ ---------- */
   /* Các mốc giờ trong ca làm việc, bỏ giờ nghỉ trưa */
   khungGio(){
-    const ca = Att.ca(), ra = [];
+    const ca = Att.ca(todayISO()), ra = [];
     ca.forEach(c => { for (let t = c.s; t + this.BUOC <= c.e; t += this.BUOC) ra.push(t); });
     return ra;
   },
@@ -6245,7 +6318,7 @@ const DatHen = {
           <div class="f full"><label>Ghi chú (không bắt buộc)</label>
             <input name="ghichu" placeholder="Vd: đau răng hàm dưới bên phải"></div>
         </div>
-        <div class="note-block" style="margin-top:10px">Giờ làm việc: <b>${h(Att.moTaCa())}</b>.
+        <div class="note-block" style="margin-top:10px">Giờ làm việc hôm nay: <b>${h(Att.moTaCa(todayISO()))}</b>.
           Đây mới là <b>yêu cầu đặt hẹn</b> — phòng khám sẽ gọi lại xác nhận.
           ${cl.phone?`<br>Cần gấp xin gọi thẳng <b>${h(cl.phone)}</b>${cl.phone2?' hoặc <b>'+h(cl.phone2)+'</b>':''}.`:''}</div>
         <div class="form-actions" style="margin-top:12px">
@@ -6733,7 +6806,7 @@ SCREENS.hr = () => {
       <button class="btn" onclick="Att.clinicQR()">Mã QR phòng khám</button>
       <button class="btn" onclick="Att.settingsForm()">Cài đặt</button>`)}
       <span class="spacer"></span>
-      <span class="sub-line">${h(Att.moTaCa())}${db.clinic.wifiIp?' · mạng phòng khám đã đặt':' · chưa đặt mạng phòng khám'}</span>
+      <span class="sub-line">${h(Att.moTaTuan())}${db.clinic.wifiIp?' · mạng phòng khám đã đặt':' · chưa đặt mạng phòng khám'}</span>
     </div>
     <div class="card mb"><div class="card-h"><h2>Hôm nay — ${fmtD(T)}</h2><span class="hint">nhân viên quét mã QR ở quầy để ghi giờ vào / giờ ra</span></div>
       <div class="tbl-wrap"><table style="min-width:780px">
@@ -6743,7 +6816,7 @@ SCREENS.hr = () => {
       <div class="tbl-wrap"><table style="min-width:760px">
         <thead><tr><th>Nhân viên</th><th class="r">Số công</th><th class="r">Tổng giờ</th><th class="r">Ngày có mặt</th><th class="r">Đi trễ</th><th class="r">Về sớm</th><th class="r">Về trưa</th><th class="r">Chấm ngoài PK</th></tr></thead>
         <tbody>${sum}</tbody></table></div></div>
-    <div class="note-block" style="margin-top:12px">Một ngày đủ ca = <b>${gioPhut(Att.phutChuan())}</b> (${h(Att.moTaCa())}) = <b>1 công</b>.
+    <div class="note-block" style="margin-top:12px">Một ngày đủ ca hôm nay = <b>${gioPhut(Att.phutChuan(todayISO()))}</b> (${h(Att.moTaCa(todayISO()))}) = <b>1 công</b>.
       Giờ nghỉ trưa không tính công, nên <b>ai ở lại buổi trưa và ai về rồi quay lại đều ra cùng số giờ</b> — chỉ cần chấm vào lúc đến và chấm ra lúc về hẳn.
       Ai về trưa không quay lại thì chỉ được công buổi sáng.</div>`;
   }
@@ -6998,7 +7071,7 @@ SCREENS.settings = () => {
   <div class="card mb"><div class="card-h"><h2>Phòng khám và nhân sự</h2></div>
     <div class="card-b">
       ${the('Thông tin phòng khám, giờ làm việc, chấm công',
-        `${h(Att.moTaCa())}${cl.wifiIp ? ' · đã đặt mạng phòng khám' : ' · chưa đặt mạng phòng khám'}`,
+        `${h(Att.moTaTuan())}${cl.wifiIp ? ' · đã đặt mạng phòng khám' : ' · chưa đặt mạng phòng khám'}`,
         `<button class="btn small primary" onclick="Att.settingsForm()"${khoa}>Mở cài đặt</button>`)}
       ${the('Nhân viên', `${db.staff.filter(x=>x.active!==false).length} người đang làm việc · tên, chức danh, vai trò, tỷ lệ riêng`,
         `<button class="btn small primary" onclick="HR.dsNhanVien()"${khoa}>Sửa nhân viên</button>`)}
