@@ -1147,7 +1147,7 @@ const Cust = {
     App.modal(id ? 'Sửa hồ sơ khách hàng' : 'Thêm khách hàng (theo mẫu BA-18)', `
     <form id="custForm" class="form-grid" onsubmit="Cust.save(event,'${id||''}')">
       <div class="f"><label>Mã khách hàng</label>
-        <input name="code" value="${h(c.code || Cust.maTiepTheo())}" placeholder="KH-1"
+        <input name="code" value="${h(c.code || Cust.maTiepTheo())}" placeholder="${h(Cust.tienTo())}-1"
           style="text-transform:uppercase" autocomplete="off">
         <div class="combo-hint">${id ? 'Đổi mã thì mọi hồ sơ của khách này vẫn giữ nguyên.'
           : 'Đã điền sẵn mã kế tiếp — sửa được nếu phòng khám đánh số theo cách riêng.'}</div></div>
@@ -1188,10 +1188,13 @@ const Cust = {
   },
 
   /* Mã kế tiếp theo bộ đếm, nhưng nhảy qua mã nào đã có người dùng */
+  /* Tiền tố mã khách. Mỗi cơ sở một tiền tố riêng để nhìn mã là biết hồ sơ của đâu —
+     Rạch Giá (Thời Đại) là RG. Đổi được trong Cài đặt → Thông tin phòng khám. */
+  tienTo(){ return (((db.clinic || {}).maKH || 'RG') + '').trim().toUpperCase() || 'RG'; },
   maTiepTheo(){
     const co = new Set(db.customers.map(x => Combo.norm(x.code || '')));
     let n = (db.seq && db.seq.cust) || 1, ma;
-    do { ma = 'KH-' + n; n++; } while (co.has(Combo.norm(ma)) && n < 1e6);
+    do { ma = this.tienTo() + '-' + n; n++; } while (co.has(Combo.norm(ma)) && n < 1e6);
     return ma;
   },
 
@@ -1213,7 +1216,7 @@ const Cust = {
     else {
       /* Bộ đếm vẫn chạy để lần sau gợi ý đúng, kể cả khi lễ tân tự đặt mã */
       db.seq.cust++;
-      const c = Object.assign({id:uid(), code: d.code || ('KH-'+db.seq.cust), createdAt: d.createdAt || todayISO(),
+      const c = Object.assign({id:uid(), code: d.code || (Cust.tienTo()+'-'+db.seq.cust), createdAt: d.createdAt || todayISO(),
         teeth:{}, record:{dienBien:[], vanDe:[]}}, d);
       db.customers.unshift(c); App.chonKhach(c.id); App.toast('Đã thêm khách hàng ✓');
     }
@@ -2882,7 +2885,7 @@ const Treat = {
     const r = db.rx.find(x=>x.id===id);
     r.status = 'sent';
     const c = custById(r.customerId);
-    r.code = '79-' + (c.code||'').replace('KH-','') + '-' + r.date.replace(/-/g,'').slice(2) + '-' + Math.floor(1000+Math.random()*9000);
+    r.code = '79-' + (c.code||'').replace(/^[A-Za-zÀ-ỹ]+-/, '') + '-' + r.date.replace(/-/g,'').slice(2) + '-' + Math.floor(1000+Math.random()*9000);
     save(); App.render(); App.toast('Đã gửi lên Đơn thuốc quốc gia ✓ (mô phỏng — bản thật cần mã liên thông)');
   },
   printRx(id){
@@ -5903,6 +5906,10 @@ create policy p_rec   on records    for all to authenticated using (true) with c
       <div class="note-block full">Khoảng <b>giữa hai ca là giờ nghỉ trưa, không tính công</b>. Nhờ vậy người ở lại buổi trưa
         và người về rồi quay lại đều ra cùng số giờ — không ai phải chấm công bốn lần một ngày.
         Ai về trưa rồi nghỉ luôn thì phần mềm chỉ tính công buổi sáng.</div>
+      <div class="f"><label>Tiền tố mã khách hàng</label>
+        <input name="maKH" value="${h(Cust.tienTo())}" maxlength="6" style="text-transform:uppercase" placeholder="RG">
+        <div class="combo-hint">Mã khách mới sẽ là <b>${h(Cust.tienTo())}-1</b>, <b>${h(Cust.tienTo())}-2</b>…
+          Mã đã cấp rồi thì giữ nguyên, không đổi theo.</div></div>
       <div class="f"><label>Điện thoại phòng khám</label><input name="phone" value="${h(db.clinic.phone||'')}" placeholder="0986 262 242"></div>
       <div class="f"><label>Điện thoại thứ hai</label><input name="phone2" value="${h(db.clinic.phone2||'')}" placeholder="0707 262 242"></div>
       <div class="f full"><label>Địa chỉ mạng phòng khám</label><input name="wifiIp" value="${h(db.clinic.wifiIp||'')}" placeholder="chưa đặt"></div>
@@ -5937,6 +5944,10 @@ create policy p_rec   on records    for all to authenticated using (true) with c
     }
     db.clinic.caTuan = tuan;
     db.clinic.treCho = Math.max(0, +d.treCho || 0);
+    /* Bỏ dấu gạch và khoảng trắng, vì phần mềm tự nối "-" vào sau tiền tố —
+       để lọt vào thì ra mã kiểu "RG--12". Gõ bậy thì giữ nguyên tiền tố cũ. */
+    const tt = (d.maKH || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (tt) db.clinic.maKH = tt;
     db.clinic.phone = (d.phone||'').trim();
     db.clinic.phone2 = (d.phone2||'').trim();
     db.clinic.wifiIp = (d.wifiIp||'').trim();
@@ -6756,7 +6767,7 @@ const DatHen = {
     const sdt = (x.sdt || '').replace(/\D/g, '');
     let c = db.customers.find(y => (y.phone || '').replace(/\D/g, '') === sdt && sdt);
     if (!c) {
-      c = {id: uid(), code: 'KH-' + (db.seq.cust++), name: (x.ten || '').toUpperCase().trim(),
+      c = {id: uid(), code: Cust.tienTo() + '-' + (db.seq.cust++), name: (x.ten || '').toUpperCase().trim(),
            phone: x.sdt, createdAt: todayISO(), teeth: {}, record: {dienBien: []}, source: 'Đặt hẹn online'};
       db.customers.unshift(c);
     }
@@ -7508,7 +7519,10 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     rd.readAsText(f);
   });
-  $('#modalBack').addEventListener('click', ev => { if (ev.target.id === 'modalBack') App.closeModal(); });
+  /* Trước đây bấm ra nền ngoài là đóng khung nhập liệu — gõ hồ sơ nửa chừng lỡ tay
+     bấm hụt một cái là mất sạch, không hỏi han gì. Nay phải bấm nút Hủy hoặc dấu ✕
+     mới đóng. Giữ lại sự kiện để nuốt cú bấm, khỏi lọt xuống trang phía dưới. */
+  $('#modalBack').addEventListener('click', ev => { if (ev.target.id === 'modalBack') ev.stopPropagation(); });
   Sync.snapshot();
   /* Mở từ liên kết mời hoặc mã QR chấm công → tự lưu cấu hình rồi mời đăng nhập */
   const invited = Att.applyInvite();

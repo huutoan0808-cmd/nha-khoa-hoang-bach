@@ -104,7 +104,8 @@ const Importer = {
     const code = g('code');
     const c = {
       id: uid(),
-      code: code ? 'KH-' + String(code).padStart(4,'0') : 'KH-' + (seq),
+      code: (() => { const t = (typeof Cust !== 'undefined' && Cust.tienTo) ? Cust.tienTo() : 'RG';
+                     return code ? t + '-' + String(code).padStart(4,'0') : t + '-' + seq; })(),
       name: name.toUpperCase(),
       dob: this.toISO(g('dob')),
       gender: /nữ|nu/i.test(g('gender')) ? 'Nữ' : (/nam/i.test(g('gender')) ? 'Nam' : ''),
