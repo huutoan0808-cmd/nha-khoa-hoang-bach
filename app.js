@@ -1141,6 +1141,20 @@ const Cust = {
     const w = Combo.el('cbWard');
     if (w) { w.inp.value = ''; w.inp.placeholder = (WARDS[v] ? 'Gõ tên phường/xã của ' + v : 'Nhập phường/xã'); }
   },
+  /* Mấy nguồn hay gặp nhất, để lễ tân tick thay vì gõ — gõ tay thì mười người ra
+     mười kiểu ("fb", "FB", "face", "Facebook") rồi không thống kê được. */
+  NGUON: ['Facebook', 'Zalo', 'TikTok', 'Người quen giới thiệu', 'Tự đến'],
+  /* Tick một ô thì điền vào ô chữ bên dưới — ô chữ mới là thứ được lưu */
+  chonNguon(v){
+    const o = document.querySelector('#custForm [name="source"]');
+    if (o) { o.value = v; }
+  },
+  /* Gõ tay thành thứ khác thì bỏ tick, kẻo nhìn vào tưởng đang chọn cái đã tick */
+  goNguon(v){
+    document.querySelectorAll('#custForm [name="nguonTick"]').forEach(r => {
+      r.checked = (r.value === (v || '').trim());
+    });
+  },
   form(id){
     const c = id ? custById(id) : {doiTuong:'Thu phí'};
     const f = (label, name, val, ph, type) => `<div class="f"><label>${label}</label><input name="${name}" value="${h(val||'')}" placeholder="${ph||''}" type="${type||'text'}"></div>`;
@@ -1171,7 +1185,14 @@ const Cust = {
       ${f('10. Số thẻ BHYT','bhyt',c.bhyt)}
       ${f('BHYT giá trị đến ngày','bhytDen',c.bhytDen,'','date')}
       ${f('11. Số CCCD / Hộ chiếu / Định danh','cccd',c.cccd)}
-      ${f('Nguồn khách','source',c.source,'Facebook / Giới thiệu / Walk-in...')}
+      <div class="f full"><label>Nguồn khách — biết phòng khám từ đâu</label>
+        <div class="check-list">${this.NGUON.map(n => `<label>
+          <input type="radio" name="nguonTick" value="${h(n)}"${(c.source||'').trim() === n ? ' checked' : ''}
+                 onchange="Cust.chonNguon(this.value)"> ${h(n)}</label>`).join('')}</div>
+        <input name="source" value="${h(c.source||'')}" placeholder="Tick ở trên, hoặc gõ nguồn khác vào đây"
+               oninput="Cust.goNguon(this.value)" style="margin-top:8px">
+        <div class="combo-hint">Tick một ô là tự điền xuống dưới. Nguồn không có trong danh sách
+          thì gõ thẳng vào ô chữ.</div></div>
       ${f('12. Thân nhân báo tin (họ tên, quan hệ)','kinName',c.kinName)}
       ${f('Điện thoại thân nhân','kinPhone',c.kinPhone)}
       <div class="f full"><label>Địa chỉ thân nhân báo tin</label>
