@@ -5952,77 +5952,150 @@ create policy p_rec   on records    for all to authenticated using (true) with c
 const QT = {
   /* Bảng gốc của phòng khám. b = mã bước (giữ cố định để không mất dữ liệu khi đổi tên),
      t = tên, p = phần trăm, tien = số tiền cố định (dùng thay cho %). */
+  /* Chép từ "BẢNG TÍNH LƯƠNG THEO %" của phòng khám.
+     tt   = tỷ trọng của công đoạn trong cả ca (chỉ để xem cho dễ hiểu)
+     p10  = ăn bao nhiêu % doanh thu ròng, với người thuộc nhóm lương 10%
+     p30  = ... với người thuộc nhóm lương 30%
+     tien = trả khoán theo lần, không tính %.
+     Vài dòng trong bảng gốc KHÔNG bằng tt × nhóm lương (Gắn hột, PRF, Vecni fluor,
+     Phụ tiểu phẫu, Trám KT có đặt chốt) nên lấy đúng con số đã in trong bảng,
+     không tự nhân lại. */
   MAU: [
-    {id:'qt_su', ten:'Phục hình sứ', nhom:['Phục hình sứ'], truLab:true,
-     labGY:[['Sứ kim loại',180000],['Titan',280000],['Zirconia',600000]],
+    {id:'qt_su', ten:'Phục hình sứ', nhom:['Phục hình sứ'], truLab:true, labGY:[],
      buoc:[
-      {b:'su_tv',   t:'Tư vấn',                          p:10},
-      {b:'su_mai',  t:'Mài cùi',                         p:30},
-      {b:'su_ld',   t:'Lấy dấu + che cùi / làm răng tạm', p:10},
-      {b:'su_thu',  t:'Thử răng / thử sườn',             p:10},
-      {b:'su_gtam', t:'Gắn tạm sứ',                      p:15},
-      {b:'su_gsht', t:'Gắn sứ hoàn tất (GSHT)',          p:15},
-      {b:'su_chinh',t:'Chỉnh ê / đau',                   p:2},
+      {b:'su_tv',   t:'Tư vấn',                           tt:10, p10:1,   p30:3},
+      {b:'su_mai',  t:'Mài cùi',                          tt:30, p10:3,   p30:9},
+      {b:'su_ld',   t:'Lấy dấu + che cùi / làm răng tạm', tt:10, p10:1,   p30:3},
+      {b:'su_thu',  t:'Thử răng / thử sườn',              tt:10, p10:1,   p30:3},
+      {b:'su_gtam', t:'Gắn tạm sứ (GTS)',                 tt:15, p10:1.5, p30:4.5},
+      {b:'su_gsht', t:'Gắn sứ hoàn tất (GSHT)',           tt:15, p10:1.5, p30:4.5},
+      {b:'su_chinh',t:'Chỉnh đau',                        tt:2,  p10:0.2, p30:0.6},
      ]},
     {id:'qt_tlban', ten:'Tháo lắp bán hàm', nhom:[], truLab:true, labGY:[],
      buoc:[
-      {b:'tlb_tv',  t:'Tư vấn',                     p:10},
-      {b:'tlb_ld',  t:'LD + mài chỉnh sơ khởi',     p:25},
-      {b:'tlb_thu', t:'Thử răng / thử khung',       p:20},
-      {b:'tlb_giao',t:'Giao hàm',                   p:25},
-      {b:'tlb_dau', t:'Chỉnh đau',                  p:5},
+      {b:'tlb_tv',  t:'Tư vấn',                       tt:10, p10:1,   p30:3},
+      {b:'tlb_ld',  t:'Lấy dấu + mài chỉnh sơ khởi',  tt:25, p10:2.5, p30:7.5},
+      {b:'tlb_thu', t:'Thử răng / thử khung',         tt:20, p10:2,   p30:6},
+      {b:'tlb_giao',t:'Giao hàm',                     tt:25, p10:2.5, p30:7.5},
+      {b:'tlb_dau', t:'Chỉnh đau',                    tt:5,  p10:0.5, p30:1.5},
      ]},
-    {id:'qt_tltoan', ten:'Tháo lắp toàn hàm', nhom:['Phục hình tháo lắp'], truLab:true,
-     labGY:[['Răng 300k',50000],['Răng 400k',90000],['Răng 500k',120000],['Răng 1.000k',250000]],
+    {id:'qt_tltoan', ten:'Tháo lắp toàn hàm', nhom:['Phục hình tháo lắp'], truLab:true, labGY:[],
      buoc:[
-      {b:'tlt_tv',   t:'Tư vấn',                        p:10},
-      {b:'tlt_ldsk', t:'LDSK',                          p:10},
-      {b:'tlt_vanh', t:'Chạy vành khít + LD lần 2',     p:25},
-      {b:'tlt_tqt',  t:'Ghi tương quan tâm',            p:10},
-      {b:'tlt_thu',  t:'Thử răng',                      p:10},
-      {b:'tlt_giao', t:'Giao hàm',                      p:10},
-      {b:'tlt_dau',  t:'Chỉnh đau',                     p:5},
+      {b:'tlt_tv',   t:'Tư vấn',                         tt:10, p10:1,   p30:3},
+      {b:'tlt_ldsk', t:'Lấy dấu sơ khởi (LDSK)',         tt:10, p10:1,   p30:3},
+      {b:'tlt_vanh', t:'Chạy vành khít + lấy dấu lần 2', tt:25, p10:2.5, p30:7.5},
+      {b:'tlt_tqt',  t:'Ghi tương quan tâm (TQT)',       tt:10, p10:1,   p30:3},
+      {b:'tlt_thu',  t:'Thử răng',                       tt:10, p10:1,   p30:3},
+      {b:'tlt_giao', t:'Giao hàm',                       tt:10, p10:1,   p30:3},
+      {b:'tlt_dau',  t:'Chỉnh đau',                      tt:5,  p10:0.5, p30:1.5},
      ]},
     {id:'qt_noinha', ten:'Nội nha', nhom:['Điều trị tủy'], truLab:false, labGY:[],
      buoc:[
-      {b:'nn_tv',   t:'Tư vấn',                            p:10},
-      {b:'nn_ssot', t:'SSOT',                              p:50},
-      {b:'nn_thuoc',t:'Thay thuốc',                        p:5},
-      {b:'nn_bot',  t:'BOT',                               p:10},
-      {b:'nn_tram', t:'Trám kết thúc',                     p:10},
-      {b:'nn_tk',   t:'Tái khám chụp phim KT sau 6 tháng', p:5},
+      {b:'nn_tv',      t:'Tư vấn',                                  tt:10, p10:1,   p30:3},
+      {b:'nn_ssot',    t:'Sửa soạn ống tuỷ (SSOT)',                 tt:50, p10:5,   p30:15},
+      {b:'nn_bot',     t:'Trám bít ống tuỷ (BOT)',                  tt:10, p10:1,   p30:3},
+      {b:'nn_thuoc',   t:'Đặt / thay thuốc (mỗi lần)',              tt:5,  p10:0.5, p30:1.5},
+      {b:'nn_tram',    t:'Trám kết thúc',                           tt:10, p10:1,   p30:3},
+      {b:'nn_tramchot',t:'Trám kết thúc CÓ ĐẶT CHỐT (đổi vật liệu)',tt:20, p10:2,   p30:6},
+      {b:'nn_tk',      t:'Tái khám + chụp phim kiểm tra sau 6 tháng',tt:5, p10:0.5, p30:1.5},
+     ]},
+    {id:'qt_caovoi', ten:'Cạo vôi răng', nhom:['Nha chu'], truLab:false, labGY:[],
+     buoc:[
+      {b:'cv_l1', t:'Lần 1', tt:50, p10:5, p30:15},
+      {b:'cv_l2', t:'Lần 2', tt:50, p10:5, p30:15},
+     ]},
+    {id:'qt_prf', ten:'PRF', nhom:[], truLab:false, labGY:[],
+     buoc:[
+      {b:'prf_tv',  t:'Tư vấn',              p10:5, p30:10},
+      {b:'prf_mau', t:'Rút máu / thực hiện', p10:5, p30:10},
+     ]},
+    {id:'qt_duphong', ten:'Dự phòng', nhom:[], truLab:false, labGY:[],
+     buoc:[
+      {b:'dp_fluor', t:'Vecni Fluor',           p10:5, p30:10},
+      {b:'dp_hot',   t:'Gắn hột (mỗi lần)', tt:50, p10:5, p30:10},
      ]},
     {id:'qt_tay', ten:'Tẩy trắng', nhom:['Thẩm mỹ'], truLab:false, labGY:[],
      buoc:[
-      {b:'ty_tv',  t:'Tư vấn',    tien:10000},
-      {b:'ty_lam', t:'Tẩy trắng', tien:50000},
+      {b:'ty_tv',  t:'Tư vấn',         p10:1, p30:1},
+      {b:'ty_lam', t:'Làm tẩy trắng',  tien:50000},
      ]},
     {id:'qt_implant', ten:'Implant', nhom:['Implant'], truLab:false, labGY:[],
-     buoc:[{b:'im_tv', t:'Tư vấn', tien:300000}]},
-    {id:'qt_prf', ten:'PRF', nhom:[], truLab:false, labGY:[],
-     buoc:[{b:'prf_tv', t:'Tư vấn', p:5}, {b:'prf_mau', t:'Rút máu', p:5}]},
+     buoc:[
+      {b:'im_tv',  t:'Tư vấn implant',          tien:300000},
+      {b:'im_phu', t:'Phụ implant (mỗi trụ)',   tien:50000},
+     ]},
+    {id:'qt_tieuphau', ten:'Tiểu phẫu', nhom:[], truLab:false, labGY:[],
+     buoc:[{b:'tp_phu', t:'Phụ tiểu phẫu', p10:1, p30:1}]},
   ],
 
-  ds(){ return db.quyTrinh || []; },
-  boId(id){ return this.ds().find(q => q.id === id) || null; },
+  /* ---------- Nhóm lương và các mức bị trừ ----------
+     Bảng 1 của tài liệu: người ở nhóm lương 30% mà ca đó giảm giá 20–30% thì chỉ còn
+     ăn như nhóm 10%; giảm từ 50% trở lên thì không có hoa hồng; không có ảnh
+     trước–sau thì nhóm 10% còn 7, nhóm 30% còn 20. Để sửa được vì đây là chính sách,
+     không phải luật. */
+  QUY_TAC: {giamNhe:10, giamNang:50, mucKhiGiam:10, khongAnh10:7, khongAnh30:20},
+  quyTac(){ return Object.assign({}, this.QUY_TAC, (db.clinic || {}).hhQuyTac || {}); },
+  /* Nhóm lương của một người; chưa đặt thì coi là 10% cho an toàn (trả thiếu còn bù được,
+     trả dư rồi đòi lại thì không). */
+  mucCua(st){ const v = st && st.nhomHH != null ? +st.nhomHH : 10; return v > 0 ? v : 10; },
+  /* Ca này thực tế giảm bao nhiêu phần trăm — tính cả giảm theo % lẫn giảm bằng tiền */
+  giamCua(t){
+    const goc = (+t.donGia || 0) * (+t.sl || 1);
+    if (!goc) return +t.giamPct || 0;
+    return Math.max(0, Math.min(100, (1 - (+t.price || 0) / goc) * 100));
+  },
+  /* Nhân vào tiền công: 1 là ăn đủ, 0 là không có gì.
+     Bảng 1 là mấy CỘT RỜI NHAU, không nói ca vừa giảm giá vừa thiếu ảnh thì tính sao.
+     Ở đây lấy cột THẤP NHẤT áp dụng được. Nếu nhân chồng hai mức vào nhau thì có lúc
+     bác sĩ nhận ít hơn phụ tá trên cùng một ca (33.000 so với 34.650) — vô lý. */
+  heSo(t, st){
+    if (!t) return 1;
+    const qt = this.quyTac(), muc = this.mucCua(st);
+    if (!muc) return 0;
+    let eff = muc;
+    const g = this.giamCua(t);
+    if (g >= qt.giamNang) eff = 0;
+    else if (g > qt.giamNhe) eff = Math.min(eff, qt.mucKhiGiam);
+    if (t.coAnh === false) eff = Math.min(eff, muc >= 30 ? qt.khongAnh30 : qt.khongAnh10);
+    return eff / muc;
+  },
+  /* Vì sao bị trừ — để hiện ra cho người làm biết, đừng để họ tự đoán */
+  lyDoTru(t, st){
+    if (!t) return '';
+    const qt = this.quyTac(), g = this.giamCua(t), ra = [];
+    if (g >= qt.giamNang) ra.push('ca giảm ' + Math.round(g) + '% nên không có hoa hồng');
+    else if (g > qt.giamNhe) ra.push('ca giảm ' + Math.round(g) + '% nên hạ về mức 10%');
+    if (t.coAnh === false) ra.push('chưa có ảnh trước–sau');
+    return ra.join(' · ');
+  },
+
+  ds(){ return (db.quyTrinh || []).filter(q => !q.an); },
+  dsAn(){ return (db.quyTrinh || []).filter(q => q.an); },
+  /* Tìm cả kỹ thuật đã bỏ, để còn bấm "Dùng lại" được */
+  boId(id){ return (db.quyTrinh || []).find(q => q.id === id) || null; },
   /* Quy trình dùng cho một hạng mục: gán tay thì theo đó, chưa gán thì đoán theo nhóm */
   cua(t){
     if (!t) return null;
-    if (t.qtId) return this.boId(t.qtId);
+    if (t.qtId) { const q = this.boId(t.qtId); return (q && !q.an) ? q : null; }
     return this.ds().find(q => (q.nhom||[]).includes(t.group)) || null;
   },
   buocCua(q, b){ return q ? (q.buoc||[]).find(x => x.b === b) : null; },
-  /* Tỷ lệ áp cho một người ở một bước: đặt riêng thì theo riêng, không thì theo bảng gốc */
+  /* Tỷ lệ áp cho một người ở một bước: đặt riêng thì theo riêng, không thì lấy cột
+     ứng với nhóm lương của người đó. buoc.p là của bản cũ, giữ để dữ liệu cũ không vỡ. */
   pctCua(st, buoc){
     const r = st && st.model && st.model.cd;
-    return (r && r[buoc.b] != null && r[buoc.b] !== '') ? +r[buoc.b] : (buoc.p != null ? +buoc.p : null);
+    if (r && r[buoc.b] != null && r[buoc.b] !== '') return +r[buoc.b];
+    const muc = this.mucCua(st);
+    if (muc >= 30 && buoc.p30 != null) return +buoc.p30;
+    if (buoc.p10 != null) return +buoc.p10;
+    return buoc.p != null ? +buoc.p : null;
   },
   /* Tiền công ĐẦY ĐỦ của một bước, chưa xét khách đã trả tới đâu */
   tienBuocDay(t, q, buoc, st){
     if (buoc.tien != null) return +buoc.tien || 0;
     const goc = Math.max(0, (+t.price || 0) - (q && q.truLab ? (+t.tienLab || 0) : 0));
     const p = this.pctCua(st, buoc);
-    return p == null ? 0 : goc * p / 100;
+    return p == null ? 0 : goc * p / 100 * this.heSo(t, st);
   },
   /* Tiền công THỰC HƯỞNG = tiền đầy đủ × phần khách đã thanh toán cho hạng mục đó.
      Khách trả 60% thì mọi người trong ca cùng nhận 60%, trả nốt thì nhận nốt. */
@@ -6109,7 +6182,8 @@ const QT = {
       return `<tr>
         <td><label style="display:flex;gap:8px;align-items:center;cursor:pointer">
           <input type="checkbox" name="lam" value="${b.b}"${x.s?' checked':''}> <b>${h(b.t)}</b></label>
-          <span class="sub-line">${b.tien != null ? money(b.tien) : b.p + '%'}</span></td>
+          <span class="sub-line">${st ? this.moTaBuocCho(b, st) + ' · nhóm ' + this.mucCua(st) + '%'
+                                      : this.moTaBuoc(b) + ' (10% · 30%)'}</span></td>
         <td><select name="ng_${b.b}">
           <option value="">— chọn người làm —</option>
           ${nv.map(s=>`<option value="${s.id}"${x.s===s.id?' selected':''}>${h(s.name)}</option>`).join('')}</select></td>
@@ -6125,6 +6199,15 @@ const QT = {
       <div class="note-block full" style="border-color:var(--accent)">Khách đã thanh toán cho hạng mục này:
         <b>${money(thu)} / ${money(t.price)}</b> = <b>${Math.round(ty*100)}%</b>.
         Tiền công mọi người nhận <b>đúng bằng phần khách đã trả</b>; khách trả nốt thì phần còn lại tự cộng vào.</div>
+      <div class="f full"><div class="check-row">
+        <label><input type="checkbox" name="coAnh"${t.coAnh===false?'':' checked'}> Ca này <b>có ảnh trước – sau</b></label></div>
+        <div class="combo-hint">Bỏ tick thì hoa hồng cả ca bị hạ xuống
+          ${this.quyTac().khongAnh10}% / ${this.quyTac().khongAnh30}% theo quy tắc phòng khám.</div></div>
+      ${(() => { const g = this.giamCua(t), r = this.quyTac();
+        if (g <= r.giamNhe) return '';
+        return `<div class="note-block full warn-block">Ca này giảm <b>${Math.round(g)}%</b> —
+          ${g >= r.giamNang ? 'theo quy tắc thì <b>không có hoa hồng</b>.'
+                            : `hoa hồng bị hạ về mức <b>${r.mucKhiGiam}%</b>.`}</div>`; })()}
       ${q.truLab?`<div class="f full"><label>Tiền lab (trừ trước khi tính %)</label>
         ${Tien.o('tienLab', t.tienLab||0)}
         ${(() => { const gy = GiaLab.goiY().length ? GiaLab.goiY() : q.labGY; return gy.length?`<div class="combo-hint">Mức thường dùng: ${gy.map(([n,v])=>
@@ -6150,6 +6233,7 @@ const QT = {
     const d = Object.fromEntries(new FormData(f).entries());
     if (d.tienLab != null) t.tienLab = num(d.tienLab);
     t.qtId = d.qtId;
+    t.coAnh = !!f.querySelector('[name="coAnh"]:checked');
     const lam = [...f.querySelectorAll('[name="lam"]:checked')].map(x => x.value);
     const thieu = [];
     t.cd = lam.map(b => {
@@ -6165,51 +6249,156 @@ const QT = {
   /* ---------- Cài đặt quy trình (quản lý) ---------- */
   bang(){
     if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới sửa được quy trình'); return; }
+    const an = this.dsAn();
     App.modal('Quy trình & tỷ lệ hoa hồng theo công đoạn', `
-      <div class="note-block mb">Mỗi loại dịch vụ có một quy trình. Ai làm công đoạn nào thì hưởng phần đó —
-        một ca chia được cho nhiều người. Phục hình thì <b>trừ tiền lab rồi mới tính %</b>.
+      <div class="note-block mb">Mỗi <b>kỹ thuật</b> (quy trình) gồm nhiều công đoạn. Ai làm công đoạn nào thì
+        hưởng phần đó — một ca chia được cho nhiều người. Phục hình thì <b>trừ tiền lab rồi mới tính %</b>.
         Muốn một người có tỷ lệ riêng thì sửa trong <b>hồ sơ nhân viên</b>.</div>
+      <div class="note-block mb">Người làm thuộc <b>nhóm lương 10%</b> hay <b>30%</b> thì ăn theo cột tương ứng —
+        đặt trong hồ sơ từng nhân viên. Ca có giảm giá hoặc thiếu ảnh trước–sau thì bị hạ,
+        theo <button class="link-btn" onclick="QT.quyTacForm()">quy tắc này</button>.</div>
+      <div class="form-actions" style="justify-content:flex-start;margin-bottom:12px;flex-wrap:wrap;gap:6px">
+        <button class="btn primary" onclick="QT.qtForm()">${IC.plus} Thêm kỹ thuật</button>
+        <button class="btn" onclick="QT.napMau()">Nạp lại theo bảng tính lương</button></div>
+      ${this.ds().length ? '' : '<div class="note-block warn-block mb">Chưa có kỹ thuật nào. Bấm <b>Thêm kỹ thuật</b> để tạo, không thì không tính được hoa hồng theo công đoạn.</div>'}
       ${this.ds().map(q => `<div class="rx mb"><div class="rx-head">
           <b>${h(q.ten)}</b> <span class="sub-line">${q.truLab?'· trừ tiền lab trước':''}
           ${(q.nhom||[]).length?'· nhóm: '+h(q.nhom.join(', ')):'· chưa gắn nhóm dịch vụ'}</span>
           <span class="spacer"></span><span class="pill ${this.tongPct(q)>100?'danger':'mutedp'}">${this.tongPct(q)}%</span></div>
-        <div class="card-b"><div class="tbl-wrap"><table style="min-width:420px">
-          <thead><tr><th>Công đoạn</th><th class="r">Tỷ lệ / số tiền</th><th></th></tr></thead>
+        <div class="card-b">${(q.buoc||[]).length ? `<div class="tbl-wrap"><table style="min-width:520px">
+          <thead><tr><th>Công đoạn</th><th class="r">Tỷ trọng</th><th class="r">Lương 10%</th><th class="r">Lương 30%</th><th></th></tr></thead>
           <tbody>${q.buoc.map(b=>`<tr><td>${h(b.t)}</td>
-            <td class="r num">${b.tien!=null?money(b.tien):b.p+'%'}</td>
-            <td><button class="btn small" onclick="QT.buocForm('${q.id}','${b.b}')">Sửa</button></td></tr>`).join('')}</tbody></table></div>
-          <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
+            <td class="r num">${b.tien!=null?'—':(b.tt!=null?b.tt+'%':'—')}</td>
+            <td class="r num">${b.tien!=null?money(b.tien):(b.p10!=null?b.p10:(b.p||0))+'%'}</td>
+            <td class="r num">${b.tien!=null?money(b.tien):(b.p30!=null?b.p30:(b.p||0))+'%'}</td>
+            <td><button class="btn small" onclick="QT.buocForm('${q.id}','${b.b}')">Sửa</button></td></tr>`).join('')}</tbody></table></div>`
+          : '<div class="sub-line">Chưa có công đoạn nào — chưa chia hoa hồng được.</div>'}
+          <div class="form-actions" style="justify-content:flex-start;margin-top:8px;flex-wrap:wrap;gap:6px">
             <button class="btn small" onclick="QT.buocForm('${q.id}')">${IC.plus} Thêm công đoạn</button>
-            <button class="btn small" onclick="QT.nhomForm('${q.id}')">Gắn nhóm dịch vụ</button></div>
-        </div></div>`).join('')}`);
+            <button class="btn small" onclick="QT.qtForm('${q.id}')">Sửa kỹ thuật</button>
+            <button class="btn small danger" onclick="QT.qtDel('${q.id}')">Bỏ kỹ thuật này</button></div>
+        </div></div>`).join('')}
+      ${an.length ? `<div class="note-block"><b>Kỹ thuật đã bỏ</b> — phần đã đặt vẫn còn, bấm là dùng lại được:<br>
+        ${an.map(q => `<span style="display:inline-block;margin:6px 8px 0 0">${h(q.ten)}
+          <button class="btn small" onclick="QT.qtDungLai('${q.id}')">Dùng lại</button></span>`).join('')}</div>` : ''}`);
   },
-  tongPct(q){ return (q.buoc||[]).reduce((s,b) => s + (b.p || 0), 0); },
+  tongPct(q){ return +(q.buoc||[]).reduce((s,b) => s + (b.tt != null ? +b.tt : (b.p || 0)), 0).toFixed(1); },
+  /* Mô tả một công đoạn cho gọn: trả khoán thì ghi tiền, còn lại ghi cả hai nhóm lương */
+  moTaBuoc(b){
+    if (b.tien != null) return money(b.tien) + '/lần';
+    if (b.p10 != null || b.p30 != null) return (b.p10 != null ? b.p10 : 0) + '% · ' + (b.p30 != null ? b.p30 : 0) + '%';
+    return (b.p || 0) + '%';
+  },
+  moTaBuocCho(b, st){
+    if (b.tien != null) return money(b.tien) + '/lần';
+    const p = this.pctCua(st, b);
+    return (p == null ? 0 : p) + '%';
+  },
   buocForm(qid, bid){
     const q = this.boId(qid); const b = bid ? this.buocCua(q, bid) : {};
     App.modal((bid?'Sửa':'Thêm') + ' công đoạn — ' + q.ten, `
     <form class="form-grid" onsubmit="QT.buocSave(event,'${qid}','${bid||''}')">
       <div class="f full"><label>Tên công đoạn</label><input name="t" required value="${h(b.t||'')}"></div>
-      <div class="f"><label>Tỷ lệ (%)</label><input type="number" name="p" step="0.5" min="0" max="100" value="${b.p!=null?b.p:''}" placeholder="Vd: 30"></div>
-      <div class="f"><label>Hoặc số tiền cố định (₫)</label>${Tien.o('tien', b.tien!=null?b.tien:'')}</div>
-      <div class="note-block full">Điền <b>một trong hai</b>. Có số tiền cố định thì phần trăm bị bỏ qua —
-        dùng cho những việc trả theo lần như tư vấn implant, tẩy trắng.</div>
+      <div class="f"><label>Tỷ trọng trong cả ca (%)</label>
+        <input type="number" name="tt" step="0.5" min="0" max="100" value="${b.tt!=null?b.tt:''}" placeholder="Vd: 30"
+               oninput="QT.doiTT(this)"></div>
+      <div class="f"><label>Người nhóm lương 10% ăn (%)</label>
+        <input type="number" name="p10" step="0.1" min="0" max="100" value="${b.p10!=null?b.p10:(b.p!=null?b.p:'')}"></div>
+      <div class="f"><label>Người nhóm lương 30% ăn (%)</label>
+        <input type="number" name="p30" step="0.1" min="0" max="100" value="${b.p30!=null?b.p30:(b.p!=null?b.p:'')}"></div>
+      <div class="f"><label>Hoặc trả khoán theo lần (₫)</label>${Tien.o('tien', b.tien!=null?b.tien:'')}</div>
+      <div class="note-block full">Gõ <b>tỷ trọng</b> thì hai ô dưới tự điền (tỷ trọng × 10% và × 30%) — sửa đè lên được
+        nếu bảng của phòng khám ghi khác. Có <b>tiền khoán</b> thì mọi phần trăm bị bỏ qua, dùng cho
+        tư vấn implant, làm tẩy trắng, phụ implant.</div>
       <div class="form-actions full">
         ${bid?`<button type="button" class="btn danger" onclick="QT.buocDel('${qid}','${bid}')">Xóa</button><span class="spacer"></span>`:''}
         <button type="button" class="btn" onclick="QT.bang()">Quay lại</button><button class="btn primary">Lưu</button></div>
     </form>`);
   },
+  /* Gõ tỷ trọng thì điền sẵn hai ô nhóm lương — đỡ phải bấm máy tính */
+  doiTT(o){
+    const f = o.form, v = parseFloat(o.value);
+    if (isNaN(v)) return;
+    if (f.p10) f.p10.value = +(v * 0.1).toFixed(2);
+    if (f.p30) f.p30.value = +(v * 0.3).toFixed(2);
+  },
   buocSave(ev, qid, bid){
     ev.preventDefault();
     const d = Object.fromEntries(new FormData(ev.target).entries());
     const q = this.boId(qid);
-    const tien = num(d.tien), p = d.p === '' ? null : num(d.p);
-    if (!tien && p == null) { App.toast('Phải nhập tỷ lệ % hoặc số tiền cố định'); return; }
+    const tien = num(d.tien);
+    const so = k => (d[k] === '' || d[k] == null) ? null : num(d[k]);
+    const p10 = so('p10'), p30 = so('p30'), tt = so('tt');
+    if (!tien && p10 == null && p30 == null) {
+      App.toast('Phải nhập phần trăm cho ít nhất một nhóm lương, hoặc tiền khoán'); return;
+    }
     const o = {t: (d.t||'').trim()};
-    if (tien) o.tien = tien; else o.p = p;
+    if (tien) o.tien = tien;
+    else {
+      if (tt != null) o.tt = tt;
+      o.p10 = p10 != null ? p10 : 0;
+      o.p30 = p30 != null ? p30 : 0;
+    }
     let b = bid && this.buocCua(q, bid);
-    if (b) { delete b.p; delete b.tien; Object.assign(b, o); }
+    if (b) { delete b.p; delete b.p10; delete b.p30; delete b.tt; delete b.tien; Object.assign(b, o); }
     else q.buoc.push(Object.assign({b: 'b' + uid()}, o));
     save(); this.bang(); App.toast('Đã lưu công đoạn ✓');
+  },
+
+  /* ---------- Quy tắc trừ (Bảng 1 của tài liệu) ---------- */
+  quyTacForm(){
+    const r = this.quyTac();
+    App.modal('Quy tắc hạ hoa hồng', `
+    <form class="form-grid" onsubmit="QT.quyTacSave(event)">
+      <div class="note-block full">Theo bảng tính lương của phòng khám: ca giảm giá nhiều hoặc thiếu ảnh
+        trước–sau thì người làm ăn ít đi. Đây là chính sách của phòng khám nên sửa được.</div>
+      <div class="f"><label>Giảm tới mức này thì vẫn ăn đủ (%)</label>
+        <input type="number" name="giamNhe" min="0" max="100" value="${r.giamNhe}"></div>
+      <div class="f"><label>Giảm quá mức trên thì hạ về nhóm (%)</label>
+        <input type="number" name="mucKhiGiam" min="0" max="100" value="${r.mucKhiGiam}"></div>
+      <div class="f"><label>Giảm từ mức này trở lên thì không có hoa hồng (%)</label>
+        <input type="number" name="giamNang" min="0" max="100" value="${r.giamNang}"></div>
+      <div class="f"></div>
+      <div class="f"><label>Không có ảnh — nhóm 10% còn (%)</label>
+        <input type="number" name="khongAnh10" step="0.5" min="0" max="100" value="${r.khongAnh10}"></div>
+      <div class="f"><label>Không có ảnh — nhóm 30% còn (%)</label>
+        <input type="number" name="khongAnh30" step="0.5" min="0" max="100" value="${r.khongAnh30}"></div>
+      <div class="note-block full">Bảng gốc không nói rõ ca giảm trong khoảng <b>trên 30% tới dưới 50%</b> thì sao,
+        nên phần mềm đang xếp chung với nhóm "giảm nhiều" — tức hạ về ${r.mucKhiGiam}%. Muốn khác thì sửa ô trên.</div>
+      <div class="form-actions full">
+        <button type="button" class="btn" onclick="QT.bang()">Quay lại</button><button class="btn primary">Lưu</button></div>
+    </form>`);
+  },
+  quyTacSave(ev){
+    ev.preventDefault();
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    db.clinic.hhQuyTac = {};
+    Object.keys(this.QUY_TAC).forEach(k => { if (d[k] !== '' && d[k] != null) db.clinic.hhQuyTac[k] = num(d[k]); });
+    save(); this.bang(); App.toast('Đã lưu quy tắc ✓');
+  },
+
+  /* ---------- Nạp lại bảng gốc ----------
+     Vòng nạp lúc mở app chỉ thêm kỹ thuật CÒN THIẾU, nên bản cũ đã nằm trong máy sẽ
+     không tự đổi theo. Phải có nút bấm tay, và nói rõ cái gì bị ghi đè. */
+  napMau(){
+    if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới nạp được'); return; }
+    const co = this.MAU.filter(m => (db.quyTrinh||[]).some(q => q.id === m.id)).length;
+    if (!confirm('Nạp lại ' + this.MAU.length + ' kỹ thuật theo BẢNG TÍNH LƯƠNG THEO % của phòng khám?\n\n'
+      + co + ' kỹ thuật đang có sẽ bị GHI ĐÈ tên, tỷ trọng và phần trăm hai nhóm lương.\n'
+      + 'Kỹ thuật anh tự thêm và tỷ lệ riêng của từng người vẫn giữ nguyên.')) return;
+    this.MAU.forEach(m => {
+      const i = (db.quyTrinh||[]).findIndex(q => q.id === m.id);
+      const moi = JSON.parse(JSON.stringify(m));
+      if (i < 0) db.quyTrinh.push(moi);
+      else {
+        /* giữ lại việc gắn nhóm nếu quản lý đã chỉnh tay khác bản gốc */
+        const cu = db.quyTrinh[i];
+        if ((cu.nhom||[]).length && JSON.stringify(cu.nhom) !== JSON.stringify(m.nhom)) moi.nhom = cu.nhom;
+        delete moi.an;
+        db.quyTrinh[i] = moi;
+      }
+    });
+    save(); this.bang(); App.toast('Đã nạp ' + this.MAU.length + ' kỹ thuật ✓');
   },
   buocDel(qid, bid){
     const q = this.boId(qid), b = this.buocCua(q, bid);
@@ -6218,24 +6407,67 @@ const QT = {
     q.buoc = q.buoc.filter(x => x.b !== bid);
     save(); this.bang(); App.toast('Đã xóa');
   },
-  nhomForm(qid){
-    const q = this.boId(qid);
-    App.modal('Gắn nhóm dịch vụ — ' + q.ten, `
-    <form class="form-grid" onsubmit="QT.nhomSave(event,'${qid}')">
-      <div class="f full"><label>Hạng mục thuộc những nhóm này sẽ tự dùng quy trình trên</label>
-        <div class="check-list">${NHOM_DV.map(g=>`<label><input type="checkbox" name="nhom" value="${h(g)}"${(q.nhom||[]).includes(g)?' checked':''}> ${h(g)}</label>`).join('')}</div></div>
+  /* Thêm mới hoặc sửa một kỹ thuật. Không truyền qid thì là thêm mới. */
+  qtForm(qid){
+    const q = (qid && this.boId(qid)) || {};
+    App.modal((qid ? 'Sửa kỹ thuật — ' + q.ten : 'Thêm kỹ thuật'), `
+    <form class="form-grid" onsubmit="QT.qtSave(event,'${qid||''}')">
+      <div class="f full"><label>Tên kỹ thuật</label>
+        <input name="ten" required value="${h(q.ten||'')}" placeholder="Vd: Nhổ răng khôn, Trám răng, Cạo vôi…"></div>
+      <div class="f full"><label>Hạng mục thuộc những nhóm này sẽ tự dùng kỹ thuật trên</label>
+        <div class="check-list">${NHOM_DV.map(g => {
+          const chu = this.ds().find(x => x.id !== qid && (x.nhom||[]).includes(g));
+          return `<label><input type="checkbox" name="nhom" value="${h(g)}"${(q.nhom||[]).includes(g)?' checked':''}> ${h(g)}${
+            chu ? ` <span class="sub-line">— đang thuộc ${h(chu.ten)}</span>` : ''}</label>`;
+        }).join('')}</div>
+        <div class="combo-hint">Một nhóm chỉ thuộc được một kỹ thuật. Tick vào nhóm đang thuộc kỹ thuật khác
+          thì nhóm đó được chuyển hẳn sang đây.</div></div>
       <div class="f full"><div class="check-row">
-        <label><input type="checkbox" name="truLab"${q.truLab?' checked':''}> Trừ tiền lab trước khi tính %</label></div></div>
+        <label><input type="checkbox" name="truLab"${q.truLab?' checked':''}> Trừ tiền lab trước khi tính %</label></div>
+        <div class="combo-hint">Bật cho phục hình sứ, tháo lắp — những món phải trả tiền cho labo.</div></div>
+      ${qid ? '' : '<div class="note-block full">Tạo xong thì nhớ <b>thêm công đoạn</b> cho nó, chưa có công đoạn thì chưa chia hoa hồng được.</div>'}
       <div class="form-actions full">
+        ${qid ? `<button type="button" class="btn danger" onclick="QT.qtDel('${qid}')">Bỏ kỹ thuật này</button><span class="spacer"></span>` : ''}
         <button type="button" class="btn" onclick="QT.bang()">Quay lại</button><button class="btn primary">Lưu</button></div>
     </form>`);
   },
-  nhomSave(ev, qid){
+  qtSave(ev, qid){
     ev.preventDefault();
-    const f = ev.target, q = this.boId(qid);
-    q.nhom = [...f.querySelectorAll('[name="nhom"]:checked')].map(x => x.value);
-    q.truLab = !!f.querySelector('[name="truLab"]:checked');
-    save(); this.bang(); App.toast('Đã lưu ✓');
+    const f = ev.target, d = Object.fromEntries(new FormData(f).entries());
+    const ten = (d.ten || '').trim();
+    if (!ten) { App.toast('Phải đặt tên kỹ thuật'); return; }
+    const nhom = [...f.querySelectorAll('[name="nhom"]:checked')].map(x => x.value);
+    const truLab = !!f.querySelector('[name="truLab"]:checked');
+    let q = qid && this.boId(qid);
+    if (q) Object.assign(q, {ten, nhom, truLab});
+    else { q = {id: 'qt' + uid(), ten, nhom, truLab, labGY: [], buoc: []}; db.quyTrinh.push(q); }
+    /* cua() lấy kỹ thuật ĐẦU TIÊN khớp nhóm, nên để hai kỹ thuật cùng ôm một nhóm là
+       hoa hồng chạy theo cái nào xếp trước — khó lần ra. Gỡ nhóm khỏi những cái kia. */
+    let go = 0;
+    this.ds().forEach(x => {
+      if (x.id === q.id) return;
+      const truoc = (x.nhom || []).length;
+      x.nhom = (x.nhom || []).filter(g => !nhom.includes(g));
+      go += truoc - x.nhom.length;
+    });
+    save(); this.bang();
+    App.toast((qid ? 'Đã lưu kỹ thuật ✓' : 'Đã thêm kỹ thuật ✓')
+      + (go ? ' — đã chuyển ' + go + ' nhóm từ kỹ thuật khác sang' : ''));
+  },
+  qtDel(qid){
+    const q = this.boId(qid); if (!q) return;
+    const ma = new Set((q.buoc || []).map(b => b.b));
+    const dung = db.treatments.filter(t => (t.cd || []).some(x => ma.has(x.b))).length;
+    if (!confirm('Bỏ kỹ thuật "' + q.ten + '"?'
+      + (dung ? '\n\n' + dung + ' hạng mục đã ghi công đoạn của kỹ thuật này. Bỏ đi thì phần hoa hồng đó KHÔNG còn được tính nữa, kể cả những tháng đã qua.' : '')
+      + '\n\nPhần đã đặt vẫn được giữ lại — bấm "Dùng lại" là khôi phục.')) return;
+    q.an = 1;
+    save(); this.bang(); App.toast('Đã bỏ "' + q.ten + '"');
+  },
+  qtDungLai(qid){
+    const q = this.boId(qid); if (!q) return;
+    delete q.an;
+    save(); this.bang(); App.toast('Đã dùng lại "' + q.ten + '" ✓');
   },
 
   /* ---------- Tỷ lệ riêng của từng người ---------- */
@@ -6248,7 +6480,7 @@ const QT = {
       ${this.ds().map(q => `<div class="full"><div class="rx"><div class="rx-head"><b>${h(q.ten)}</b></div>
         <div class="card-b"><div class="form-grid">
           ${q.buoc.map(b => `<div class="f"><label>${h(b.t)}
-            <span class="sub-line">chung: ${b.tien!=null?money(b.tien):b.p+'%'}</span></label>
+            <span class="sub-line">chung: ${this.moTaBuoc(b)}</span></label>
             ${b.tien!=null ? `<div class="sub-line" style="padding:8px 0">Trả theo lần — không đổi bằng %</div>` :
               `<input type="number" step="0.5" min="0" max="100" name="${b.b}" value="${r[b.b]!=null?r[b.b]:''}" placeholder="theo chung">`}</div>`).join('')}
         </div></div></div></div>`).join('')}
@@ -6282,7 +6514,8 @@ const QT = {
           <td><b>${h(st?st.name:'?')}</b></td>
           <td>${h(c?c.name:'?')}<br><span class="sub-line">${h(x.t.name)}${x.t.tooth?' — R'+h(x.t.tooth):''}</span></td>
           <td>${h(x.buoc.t)}<br><span class="sub-line">${h(x.q.ten)}</span></td>
-          <td class="r num">${x.buoc.tien!=null?'theo lần':p+'%'}${rieng?' <span class="pill info">riêng</span>':''}</td>
+          <td class="r num">${x.buoc.tien!=null?'theo lần':p+'%'}${rieng?' <span class="pill info">riêng</span>':''}
+            ${(() => { const ld = this.lyDoTru(x.t, st); return ld ? `<br><span class="sub-line">${h(ld)}</span>` : ''; })()}</td>
           <td class="r num">${Math.round(this.tyLeThu(x.t)*100)}%</td>
           <td class="r num" style="font-weight:600">${money(x.tien)}</td></tr>`;
       }).join('')}</tbody></table></div>`;
@@ -6716,6 +6949,12 @@ const HR = {
       </select></div>
       <div class="f"><label>Lương cứng (₫)</label>${Tien.o('base', st.base||0)}</div>
       <div class="f"><label>Chỉ tiêu KPI doanh thu (₫)</label>${Tien.o('kpiTarget', st.kpiTarget||0)}</div>
+      <div class="f"><label>Nhóm lương (hoa hồng công đoạn)</label><select name="nhomHH">
+        <option value="10"${QT.mucCua(st)<30?' selected':''}>Nhóm 10%</option>
+        <option value="30"${QT.mucCua(st)>=30?' selected':''}>Nhóm 30%</option>
+      </select>
+        <div class="combo-hint">Quyết định người này ăn theo cột nào trong bảng công đoạn.
+          Chưa đặt thì mặc định nhóm 10%.</div></div>
       <div class="f full"><label>Hoa hồng theo công đoạn</label>
         ${id?`<button type="button" class="btn" onclick="QT.riengForm('${id}')">Đặt tỷ lệ riêng cho người này</button>
         <div class="combo-hint">Không đặt gì thì dùng tỷ lệ chung của phòng khám.</div>`
@@ -6732,6 +6971,7 @@ const HR = {
     const d = Object.fromEntries(new FormData(ev.target).entries());
     d.base = num(d.base); d.kpiTarget = num(d.kpiTarget); d.email = (d.email||'').trim();
     d.active = d.active !== '0';
+    d.nhomHH = num(d.nhomHH) || 10;
     if (id) Object.assign(staffById(id), d);
     else db.staff.push(Object.assign({id:uid(), model:{type:'svcGroup', rates:{}, def:10}}, d));
     save(); App.closeModal(); App.render(); App.toast('Đã lưu nhân viên ✓');
@@ -6918,21 +7158,27 @@ SCREENS.hr = () => {
    Trước đây mức tiền lab nằm cứng trong từng quy trình, muốn đổi phải sửa mã.
    Nay để thành một bảng giá riêng, quản lý tự sửa trong tab Cài đặt. */
 const GiaLab = {
+  /* Chép từ Bảng 7 "TIỀN LAB — TRỪ RA TRƯỚC KHI TÍNH %" trong bảng tính lương của phòng khám */
   MAC_DINH: [
-    {n:'Mão sứ kim loại (Cr-Co)', d:'răng', p:180000},
-    {n:'Mão sứ Titan',            d:'răng', p:280000},
-    {n:'Mão sứ Zirconia',         d:'răng', p:600000},
-    {n:'Mão toàn sứ Emax',        d:'răng', p:900000},
-    {n:'Dán sứ Veneer',           d:'răng', p:900000},
-    {n:'Cầu răng sứ',             d:'đơn vị', p:600000},
-    {n:'Sườn Implant / Abutment', d:'cái', p:1200000},
-    {n:'Hàm khung kim loại',      d:'hàm', p:1200000},
-    {n:'Hàm nhựa dẻo',            d:'hàm', p:700000},
-    {n:'Hàm nhựa cứng',           d:'hàm', p:500000},
-    {n:'Răng nhựa trên hàm',      d:'răng', p:50000},
-    {n:'Máng tẩy trắng',          d:'hàm', p:300000},
-    {n:'Máng chống nghiến',       d:'hàm', p:500000},
-    {n:'Máng duy trì chỉnh nha',  d:'hàm', p:300000},
+    {n:'Sứ kim loại',               d:'răng', p:180000},
+    {n:'Sứ Titan',                  d:'răng', p:280000},
+    {n:'Sứ Zirconia',               d:'răng', p:600000},
+    {n:'Sứ DDbio',                  d:'răng', p:700000},
+    {n:'Sứ Cercon',                 d:'răng', p:1000000},
+    {n:'Sứ Lava 3M',                d:'răng', p:1400000},
+    {n:'Veneer',                    d:'răng', p:1200000},
+    {n:'Cùi giả Zirconia',          d:'răng', p:400000},
+    {n:'RTL Nhật',                  d:'răng', p:50000},
+    {n:'RTL Mỹ',                    d:'răng', p:90000},
+    {n:'RTL Composite',             d:'răng', p:120000},
+    {n:'RTL Excellent',             d:'răng', p:250000},
+    {n:'Chốt bi Rhein83 (Cetec)',   d:'cái',  p:1200000},
+    {n:'Khung liên kết (Ozean)',    d:'cái',  p:600000},
+    {n:'Mắc cài bi (Ozean)',        d:'cái',  p:1500000},
+    {n:'Mắc cài đơn (Ozean)',       d:'cái',  p:400000},
+    {n:'Lưới',                      d:'cái',  p:100000},
+    {n:'Móc dẻo',                   d:'cái',  p:150000},
+    {n:'Hàm khung titan',           d:'hàm',  p:400000},
   ],
   ds(){
     if (!db.giaLab || !db.giaLab.length) db.giaLab = this.MAC_DINH.map(x => Object.assign({id: uid()}, x));
