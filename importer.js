@@ -457,6 +457,21 @@ const Importer = {
 
   /* Nhập nhiều file cùng lúc, tự sắp đúng thứ tự: khách hàng trước, còn lại sau */
   async runMulti(files, mode){
+    /* Nhập hàng loạt KHÔNG phải là "người dùng sửa từng bản ghi". Để nguyên thì mỗi
+       lần nhập sinh vài nghìn dòng nhật ký, trong đó dòng xóa còn kèm bản sao cả hồ
+       sơ — ba lần nhập là 13.000 dòng và 6 MB, đầy kho của trình duyệt. Nay ngưng ghi
+       vết trong lúc nhập, xong ghi đúng một dòng tổng kết cho mỗi bảng. */
+    /* "Thay thế toàn bộ" xóa sạch danh sách đang có. Chụp một bản lùi trước đã —
+       nhập nhầm file hay nhầm chế độ là chuyện xảy ra thật, và lúc đó không còn
+       đường nào quay lại nếu không có bản này. */
+    if (mode === 'replace' && typeof SL !== 'undefined' && (db.customers || []).length) {
+      try { await SL.chup(false, 'Tự giữ lại ngay trước khi nhập thay thế toàn bộ'); } catch(e){}
+    }
+    if (typeof Vet !== 'undefined') Vet.ngung();
+    try { return await this.runMultiThat(files, mode); }
+    finally { if (typeof Vet !== 'undefined') Vet.chay(); }
+  },
+  async runMultiThat(files, mode){
     const order = ['customers','items','treatments','appointments','inventory'];
     const found = {}, unknown = [];
     for (const f of files) {
@@ -478,14 +493,19 @@ const Importer = {
         if (mode === 'replace') db.customers = made;
         else { const have = new Set(db.customers.map(c => c.code)); made.forEach(c => { if (!have.has(c.code)) db.customers.push(c); }); }
         done.push('Khách hàng: ' + made.length);
+        if (typeof Vet !== 'undefined') Vet.ghi('them', 'Nhập từ file: ' + made.length +
+          ' hồ sơ khách hàng' + (mode === 'replace' ? ' (thay thế toàn bộ danh sách cũ)' : ''), {luu:false});
       } else {
         const r = kind === 'treatments' ? this.buildTreatments(rows)
                 : kind === 'appointments' ? this.buildAppointments(rows) : this.buildInventory(rows);
         this._pending = Object.assign({kind}, r);
         this.commitOther(mode === 'replace' ? 'replace-silent' : 'append');
-        done.push(this.KINDS[kind].label + ': ' +
-          (kind === 'treatments' ? Object.values(r.visits).reduce((s,v)=>s+v.length,0) + ' lần điều trị, ' + r.receipts.length + ' phiếu thu'
-           : kind === 'appointments' ? r.appointments.length : r.inventory.length));
+        const soDong = kind === 'treatments' ? Object.values(r.visits).reduce((s,v)=>s+v.length,0) + ' lần điều trị, ' + r.receipts.length + ' phiếu thu'
+           : kind === 'appointments' ? r.appointments.length : r.inventory.length;
+        done.push(this.KINDS[kind].label + ': ' + soDong);
+        if (typeof Vet !== 'undefined') Vet.ghi('them', 'Nhập từ file — ' +
+          this.KINDS[kind].label.toLowerCase() + ': ' + soDong +
+          (mode === 'replace' ? ' (thay thế toàn bộ)' : ''), {luu:false});
       }
       save();
     }

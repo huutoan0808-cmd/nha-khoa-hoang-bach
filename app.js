@@ -273,7 +273,30 @@ function save() {
   if (typeof Vet !== 'undefined') { try { Vet.quet(); } catch(e){} }
   const chuoi = JSON.stringify(db);
   if (typeof Mahoa !== 'undefined' && Mahoa.bat()) { Mahoa.ghi(chuoi); return; }
-  localStorage.setItem(DB_KEY, chuoi);
+  try {
+    localStorage.setItem(DB_KEY, chuoi);
+  } catch(e) {
+    /* Kho trên máy đầy. Thứ ĐƯỢC PHÉP mất là nhật ký, không phải hồ sơ bệnh nhân —
+       nên bỏ bớt nhật ký rồi ghi lại. Im lặng nuốt lỗi ở đây là mất dữ liệu mà không
+       ai biết, nên vẫn phải báo ra một lần. */
+    let cuu = false;
+    if (db.vet && db.vet.length > 200) {
+      db.vet = db.vet.slice(-200);
+      try { localStorage.setItem(DB_KEY, JSON.stringify(db)); cuu = true; } catch(e2){}
+    }
+    if (!App._daBaoDay) {
+      App._daBaoDay = true;
+      setTimeout(() => App.modal(cuu ? 'Kho dữ liệu trên máy đã đầy' : 'KHÔNG LƯU ĐƯỢC DỮ LIỆU', `
+        <div class="note-block warn-block">${cuu
+          ? 'Máy này hết chỗ lưu nên phần mềm đã <b>rút gọn nhật ký lưu vết</b> để giữ lại hồ sơ bệnh nhân. Hồ sơ không mất.'
+          : '<b>Máy này hết chỗ lưu và phần mềm không ghi xuống được.</b> Những gì vừa nhập chỉ đang nằm trong bộ nhớ tạm — tải lại trang là mất.'}</div>
+        <div class="note-block">Làm ngay theo thứ tự:<br>
+          1. Bấm nút <b>⟳ đồng bộ</b> trên thanh đầu để đẩy dữ liệu lên đám mây.<br>
+          2. Bấm nút <b>⬇ sao lưu</b> để tải một bản về máy.<br>
+          3. Rồi mới tải lại trang.</div>
+        <div class="form-actions"><button class="btn primary" onclick="App.closeModal()">Đã hiểu</button></div>`), 50);
+    }
+  }
 }
 /* Nâng cấp dữ liệu cũ về một ô địa chỉ duy nhất (số nhà + đường gộp chung) */
 /* Phần mềm chạy thử xong ở Gò Quao, nay chuyển sang chi nhánh Thời Đại (Rạch Giá).
@@ -7196,7 +7219,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const f = ev.target.files[0]; if (!f) return;
     if (!confirm('Phục hồi từ file "' + f.name + '"? Dữ liệu hiện tại trên máy sẽ bị THAY THẾ toàn bộ.')) { ev.target.value=''; return; }
     const rd = new FileReader();
-    rd.onload = () => { try { const d = JSON.parse(rd.result); if (!d.customers) throw 0; db = d; save(); App.render(); App.toast('Đã phục hồi dữ liệu ✓'); } catch(e){ App.toast('File không hợp lệ'); } ev.target.value=''; };
+    rd.onload = () => {
+      try {
+        const d = JSON.parse(rd.result); if (!d.customers) throw 0;
+        /* Phục hồi là thay cả kho, không phải người dùng sửa từng bản ghi. Để nguyên
+           thì bản chụp cũ so với bản vừa nạp sẽ đẻ ra hàng nghìn dòng "xóa" và "thêm"
+           vô nghĩa, lại kèm bản sao, đủ làm đầy kho. Ngưng ghi vết, chụp lại từ đầu,
+           rồi ghi đúng một dòng. */
+        if (typeof Vet !== 'undefined') Vet.ngung();
+        db = d;
+        try { save(); } finally { if (typeof Vet !== 'undefined') Vet.chay(); }
+        if (typeof Vet !== 'undefined')
+          Vet.ghi('khoiphuc', 'Phục hồi toàn bộ dữ liệu từ file "' + f.name + '" — ' +
+            (d.customers || []).length + ' hồ sơ khách hàng');
+        if (typeof Sync !== 'undefined') Sync.snapshot();
+        App.render(); App.toast('Đã phục hồi dữ liệu ✓');
+      } catch(e){ App.toast('File không hợp lệ'); }
+      ev.target.value='';
+    };
     rd.readAsText(f);
   });
   $('#modalBack').addEventListener('click', ev => { if (ev.target.id === 'modalBack') App.closeModal(); });

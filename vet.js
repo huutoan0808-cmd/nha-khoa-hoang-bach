@@ -28,6 +28,11 @@
 'use strict';
 
 const VET_MAX = 3000;          /* giữ lại trên máy bao nhiêu dòng gần nhất */
+/* Nhật ký là thứ ĐƯỢC PHÉP mất; hồ sơ bệnh nhân thì không. Nên nhật ký có trần cứng:
+   vượt trần thì cắt bớt dòng cũ nhất kể cả chưa kịp đẩy lên đám mây. Trước đây chỉ
+   cắt dòng đã đẩy, nên lúc chưa đồng bộ nó phình vô hạn và chiếm chỗ của hồ sơ. */
+const VET_CO_TOI_DA = 600000;  /* tổng số ký tự tối đa của nhật ký trên máy */
+const VET_BAN_SAO_TOI_DA = 4000;  /* bản sao của bản ghi bị xóa dài hơn thì rút gọn */
 
 /* Bảng nào được theo dõi, và gọi tên ra tiếng Việt cho người đọc nhật ký */
 const VET_BANG = {
@@ -170,23 +175,44 @@ const Vet = {
       id: (typeof uid === 'function' ? uid() : String(Math.random()).slice(2)) + Date.now().toString(36),
       at: luc, email: who.email, ten: who.ten, vai: who.vai,
       act, tbl: tbl || '', rid: rid || '', nhan: nhan || '',
-      truong: truong || null, banSao: banSao || null,
+      truong: truong || null, banSao: this.gonBanSao(banSao),
       khach: khach || '', may,
     };
   },
   nap(ds){
     db.vet = db.vet || [];
     ds.forEach(x => db.vet.push(x));
-    /* Cắt bớt: chỉ bỏ những dòng ĐÃ đẩy lên đám mây, để không mất vết khi mất mạng */
+    this.donBot();
+  },
+  /* Cắt bớt theo hai mức: ưu tiên bỏ dòng đã đẩy lên đám mây, nhưng nếu vẫn quá dài
+     thì bỏ cả dòng chưa đẩy — thà mất vết còn hơn đầy kho rồi mất hồ sơ bệnh nhân. */
+  donBot(){
+    if (!db.vet) return;
     if (db.vet.length > VET_MAX + 500) {
       const giu = [], thua = db.vet.length - VET_MAX;
       let bo = 0;
-      db.vet.forEach(x => {
-        if (bo < thua && x.day) { bo++; return; }
-        giu.push(x);
-      });
+      db.vet.forEach(x => { if (bo < thua && x.day) { bo++; return; } giu.push(x); });
       db.vet = giu;
     }
+    if (db.vet.length > VET_MAX) db.vet = db.vet.slice(-VET_MAX);
+    /* Trần theo dung lượng, vì một dòng kèm bản sao nặng hơn một dòng thường rất nhiều */
+    let co = JSON.stringify(db.vet).length;
+    while (co > VET_CO_TOI_DA && db.vet.length > 200) {
+      db.vet = db.vet.slice(Math.ceil(db.vet.length / 4));
+      co = JSON.stringify(db.vet).length;
+    }
+  },
+
+  /* Bản sao của bản ghi bị xóa dùng để khôi phục. Hồ sơ khách kèm cả quá trình điều
+     trị có thể nặng vài chục KB; giữ nguyên vài trăm bản là vỡ kho. Dài quá thì giữ
+     phần nhận dạng, bỏ phần nội dung — vẫn biết đã xóa cái gì, chỉ là không bấm
+     khôi phục lại được. */
+  gonBanSao(b){
+    if (!b) return null;
+    let j = '';
+    try { j = JSON.stringify(b); } catch(e){ return null; }
+    if (j.length <= VET_BAN_SAO_TOI_DA) return b;
+    return {id: b.id, code: b.code, name: b.name, ten: b.ten, _rutGon: j.length};
   },
 
   /* ---------- Ghi một việc không phải sửa dữ liệu ---------- */
@@ -256,6 +282,10 @@ const Vet = {
     if (Perm.chan('khoiphuc', 'khôi phục bản ghi đã xóa')) return;
     const v = (db.vet || []).find(x => x.id === vid);
     if (!v || v.act !== 'xoa' || !v.banSao) { App.toast('Dòng này không khôi phục được'); return; }
+    if (v.banSao._rutGon) {
+      App.toast('Bản ghi này quá lớn nên nhật ký chỉ giữ tên, không khôi phục được — lấy lại từ bản sao lưu');
+      return;
+    }
     if (!db[v.tbl]) db[v.tbl] = [];
     if (db[v.tbl].some(x => x.id === v.banSao.id)) { App.toast('Bản ghi này đã có lại rồi'); return; }
     if (!confirm('Khôi phục "' + (v.nhan || v.banSao.id) + '"?')) return;
