@@ -167,3 +167,18 @@ const BANG_GIA = [
   {g:'Khác', n:'Nẹp cố định răng chấn thương',                        p:1000000,  d:'răng'},
   {g:'Khác', n:'Đặt chốt',                                            p:300000,   d:'chốt'},
 ];
+
+/* ---------- Thứ tự hiển thị chuẩn ----------
+   Bảng giá trong phần mềm trước đây hiện theo thứ tự bản ghi được thêm vào, nên
+   dịch vụ cùng loại nằm rải rác khắp nhóm. Nay xếp theo đúng vị trí ở BANG_GIA —
+   tức theo thứ tự trên bảng giá giấy của phòng khám. Dịch vụ tự thêm, không có
+   trong bảng giá chuẩn, xuống cuối nhóm và xếp theo vần. */
+const bgKey = s => String(s == null ? '' : s).toLowerCase()
+  .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd')
+  .replace(/[^a-z0-9]+/g, ' ').trim();
+
+const BG_THU_TU = (() => {
+  const m = {};
+  BANG_GIA.forEach((x, i) => { const k = bgKey(x.n); if (!(k in m)) m[k] = i; });
+  return m;
+})();

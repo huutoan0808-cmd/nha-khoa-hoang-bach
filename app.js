@@ -4581,9 +4581,12 @@ const Tooth = {
 };
 
 /* ---------- Bảng giá dịch vụ ---------- */
-const NHOM_DV = ['Chẩn đoán hình ảnh','Nha chu','Trám răng','Nhổ răng','Điều trị tủy',
-                 'Phục hình sứ','Phục hình tháo lắp','Implant','Chỉnh nha','Thẩm mỹ',
-                 'Răng trẻ em','Khác'];
+/* Thứ tự nhóm đi theo mạch điều trị thật: khám → nha chu → trám → nội nha → nhổ →
+   phục hình → implant → chỉnh nha → trẻ em → thẩm mỹ. Trước đây Nhổ răng chen vào
+   giữa Trám răng và Điều trị tủy, tách đôi hai việc vốn đi liền nhau. */
+const NHOM_DV = ['Chẩn đoán hình ảnh','Nha chu','Trám răng','Điều trị tủy','Nhổ răng',
+                 'Phục hình sứ','Phục hình tháo lắp','Implant','Chỉnh nha',
+                 'Răng trẻ em','Thẩm mỹ','Khác'];
 const Svc = {
   /* Gợi ý dịch vụ dùng chung cho ô đặt lịch và ô lập hạng mục: bỏ trùng tên,
      xếp theo nhóm rồi theo tên, ghi kèm nhóm và giá ở bên phải. */
@@ -4596,8 +4599,28 @@ const Svc = {
     });
     const thu = g => { const i = NHOM_DV.indexOf(g); return i < 0 ? 99 : i; };
     return [...m.values()]
-      .sort((a, b) => thu(a.group) - thu(b.group) || String(a.name).localeCompare(String(b.name), 'vi'))
+      .sort((a, b) => thu(a.group) - thu(b.group) || this.thuTu(a) - this.thuTu(b)
+                   || String(a.name).localeCompare(String(b.name), 'vi'))
       .map(x => ({t: x.name, s: (x.group || '') + (coGia && x.price ? ' · ' + money(x.price) : '')}));
+  },
+
+  /* ---------- Thứ tự hiển thị trong một nhóm ----------
+     Lấy theo vị trí trên bảng giá giấy của phòng khám (BG_THU_TU trong banggia.js),
+     không lấy theo thứ tự bản ghi được thêm vào — thêm vào lúc nào thì tuỳ lịch sử
+     nhập liệu, nên cùng một loại dịch vụ nằm rải rác khắp nhóm.
+     Dịch vụ nào quản lý tự đặt số thứ tự thì số đó thắng; dịch vụ tự thêm mà không
+     có trong bảng giá chuẩn thì xuống cuối nhóm, xếp theo vần. */
+  thuTu(s){
+    if (s.stt !== undefined && s.stt !== null && s.stt !== '' && !isNaN(+s.stt)) return +s.stt;
+    if (typeof BG_THU_TU !== 'undefined' && typeof bgKey === 'function') {
+      const i = BG_THU_TU[bgKey(s.name)];
+      if (i !== undefined) return i;
+    }
+    return 9000;
+  },
+  sapXep(ds){
+    return ds.slice().sort((a, b) =>
+      this.thuTu(a) - this.thuTu(b) || String(a.name).localeCompare(String(b.name), 'vi'));
   },
 
   /* Gợi ý chỉ có TÊN dịch vụ — dùng cho ô hẹp như "Kế hoạch điều trị" của từng răng,
@@ -4609,8 +4632,8 @@ const Svc = {
     const tim = Combo.norm(App.state.svcQ || '');
     const sua = Perm.can('caidat');
     const loc = ds => ds.filter(s => !tim || Combo.norm(s.name).includes(tim) || Combo.norm(s.group||'').includes(tim));
-    const theoNhom = NHOM_DV.map(g => ({g, ds: loc(db.services.filter(s => s.group === g))}))
-      .concat([{g:'(chưa xếp nhóm)', ds: loc(db.services.filter(s => !NHOM_DV.includes(s.group)))}])
+    const theoNhom = NHOM_DV.map(g => ({g, ds: this.sapXep(loc(db.services.filter(s => s.group === g)))}))
+      .concat([{g:'(chưa xếp nhóm)', ds: this.sapXep(loc(db.services.filter(s => !NHOM_DV.includes(s.group))))}])
       .filter(x => x.ds.length);
     const chuaGia = db.services.filter(s => !s.price && !s.mienPhi).length;
     const rows = theoNhom.map(({g, ds}) => `
