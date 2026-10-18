@@ -6048,7 +6048,17 @@ const QT = {
   quyTac(){ return Object.assign({}, this.QUY_TAC, (db.clinic || {}).hhQuyTac || {}); },
   /* Nhóm lương của một người; chưa đặt thì coi là 10% cho an toàn (trả thiếu còn bù được,
      trả dư rồi đòi lại thì không). */
-  mucCua(st){ const v = st && st.nhomHH != null ? +st.nhomHH : 10; return v > 0 ? v : 10; },
+  mucCua(st){
+    const v = st && st.nhomHH != null && st.nhomHH !== '' ? +st.nhomHH : 10;
+    return isNaN(v) || v < 0 ? 10 : v;
+  },
+  /* Nội suy giữa cột 10% và cột 30% cho một mức bất kỳ.
+     M = 10 ra đúng a, M = 30 ra đúng b; dưới 10 thì co lại theo tỷ lệ cho về 0. */
+  noiSuy(a, b, muc){
+    a = +a || 0; b = +b || 0;
+    const v = muc >= 10 ? a + (b - a) * (muc - 10) / 20 : a * muc / 10;
+    return Math.max(0, +v.toFixed(4));
+  },
   /* Ca này thực tế giảm bao nhiêu phần trăm — tính cả giảm theo % lẫn giảm bằng tiền */
   giamCua(t){
     const goc = (+t.donGia || 0) * (+t.sl || 1);
@@ -6067,7 +6077,7 @@ const QT = {
     const g = this.giamCua(t);
     if (g >= qt.giamNang) eff = 0;
     else if (g > qt.giamNhe) eff = Math.min(eff, qt.mucKhiGiam);
-    if (t.coAnh === false) eff = Math.min(eff, muc >= 30 ? qt.khongAnh30 : qt.khongAnh10);
+    if (t.coAnh === false) eff = Math.min(eff, this.noiSuy(qt.khongAnh10, qt.khongAnh30, muc));
     return eff / muc;
   },
   /* Vì sao bị trừ — để hiện ra cho người làm biết, đừng để họ tự đoán */
@@ -6091,14 +6101,17 @@ const QT = {
     return this.ds().find(q => (q.nhom||[]).includes(t.group)) || null;
   },
   buocCua(q, b){ return q ? (q.buoc||[]).find(x => x.b === b) : null; },
-  /* Tỷ lệ áp cho một người ở một bước: đặt riêng thì theo riêng, không thì lấy cột
-     ứng với nhóm lương của người đó. buoc.p là của bản cũ, giữ để dữ liệu cũ không vỡ. */
+  /* Tỷ lệ áp cho một người ở một bước. Tiền từng công đoạn dùng CHUNG cho cả phòng
+     khám; thứ riêng của mỗi người chỉ là con số % trong hồ sơ. Bản cũ còn cho đặt
+     riêng từng công đoạn (st.model.cd) — đã bỏ, vì hai cách chồng nhau thì cái riêng
+     đè lên cái chung, sửa ô % mà tiền không đổi, không ai hiểu vì sao.
+     buoc.p là của bản cũ hơn nữa, giữ để dữ liệu cũ không vỡ. */
   pctCua(st, buoc){
-    const r = st && st.model && st.model.cd;
-    if (r && r[buoc.b] != null && r[buoc.b] !== '') return +r[buoc.b];
     const muc = this.mucCua(st);
-    if (muc >= 30 && buoc.p30 != null) return +buoc.p30;
-    if (buoc.p10 != null) return +buoc.p10;
+    if (buoc.p10 != null || buoc.p30 != null) {
+      return this.noiSuy(buoc.p10 != null ? buoc.p10 : buoc.p30,
+                         buoc.p30 != null ? buoc.p30 : buoc.p10, muc);
+    }
     return buoc.p != null ? +buoc.p : null;
   },
   /* Tiền công ĐẦY ĐỦ của một bước, chưa xét khách đã trả tới đâu */
@@ -6188,30 +6201,33 @@ const QT = {
     const rows = q.buoc.map(b => {
       const x = daLam.find(y => y.b === b.b) || {};
       const st = staffById(x.s);
-      const day = this.tienBuocDay(t, q, b, st);
-      const thuc = day * ty;
+      /* Chưa chọn người làm thì để gạch ngang, đừng hiện số — hiện số lúc chưa có ai
+         trông như đã có người được trả, mà thật ra là tiền giả định ở mức 10%. */
+      const day = st ? this.tienBuocDay(t, q, b, st) : null;
+      const thuc = day == null ? null : day * ty;
       return `<tr>
         <td><label style="display:flex;gap:8px;align-items:center;cursor:pointer">
           <input type="checkbox" name="lam" value="${b.b}"${x.s?' checked':''}> <b>${h(b.t)}</b></label>
-          <span class="sub-line">${st ? this.moTaBuocCho(b, st) + ' · nhóm ' + this.mucCua(st) + '%'
+          <span class="sub-line" id="ty_${b.b}">${st ? this.moTaBuocCho(b, st) + ' · ' + this.mucCua(st) + '%'
                                       : this.moTaBuoc(b) + ' (10% · 30%)'}</span></td>
-        <td><select name="ng_${b.b}">
+        <td><select name="ng_${b.b}" onchange="QT.tinhLai('${tid}')">
           <option value="">— chọn người làm —</option>
-          ${nv.map(s=>`<option value="${s.id}"${x.s===s.id?' selected':''}>${h(s.name)}</option>`).join('')}</select></td>
+          ${nv.map(s=>`<option value="${s.id}"${x.s===s.id?' selected':''}>${h(s.name)}${
+            s.nhomHH != null && s.nhomHH !== '' ? ' — ' + QT.mucCua(s) + '%' : ''}</option>`).join('')}</select></td>
         <td><input type="date" name="ngay_${b.b}" value="${h(x.d||todayISO())}"></td>
-        <td class="r num">${money(day)}</td>
-        <td class="r num" style="font-weight:600">${money(thuc)}</td></tr>`;
+        <td class="r num" id="day_${b.b}">${day==null?'—':money(day)}</td>
+        <td class="r num" style="font-weight:600" id="thuc_${b.b}">${thuc==null?'—':money(thuc)}</td></tr>`;
     }).join('');
     const goc = Math.max(0, (+t.price||0) - (q.truLab ? (+t.tienLab||0) : 0));
     App.modal('Công đoạn — ' + t.name + (t.tooth ? ' (R' + t.tooth + ')' : ''), `
     <form class="form-grid" onsubmit="QT.ghiSave(event,'${tid}')">
       <div class="note-block full">Khách: <b>${h(c?c.name:'')}</b> · Quy trình: <b>${h(q.ten)}</b> ·
-        Giá dịch vụ: <b>${money(t.price)}</b>${q.truLab?` · Tiền lab: <b>${money(t.tienLab||0)}</b> → tính % trên <b>${money(goc)}</b>`:''}</div>
+        Giá dịch vụ: <b>${money(t.price)}</b>${q.truLab?` · Tiền lab: <b>${money(t.tienLab||0)}</b> → tính % trên <b id="qtGoc">${money(goc)}</b>`:''}</div>
       <div class="note-block full" style="border-color:var(--accent)">Khách đã thanh toán cho hạng mục này:
         <b>${money(thu)} / ${money(t.price)}</b> = <b>${Math.round(ty*100)}%</b>.
         Tiền công mọi người nhận <b>đúng bằng phần khách đã trả</b>; khách trả nốt thì phần còn lại tự cộng vào.</div>
       <div class="f full"><div class="check-row">
-        <label><input type="checkbox" name="coAnh"${t.coAnh===false?'':' checked'}> Ca này <b>có ảnh trước – sau</b></label></div>
+        <label><input type="checkbox" name="coAnh"${t.coAnh===false?'':' checked'} onchange="QT.tinhLai('${tid}')"> Ca này <b>có ảnh trước – sau</b></label></div>
         <div class="combo-hint">Bỏ tick thì hoa hồng cả ca bị hạ xuống
           ${this.quyTac().khongAnh10}% / ${this.quyTac().khongAnh30}% theo quy tắc phòng khám.</div></div>
       ${(() => { const g = this.giamCua(t), r = this.quyTac();
@@ -6220,7 +6236,7 @@ const QT = {
           ${g >= r.giamNang ? 'theo quy tắc thì <b>không có hoa hồng</b>.'
                             : `hoa hồng bị hạ về mức <b>${r.mucKhiGiam}%</b>.`}</div>`; })()}
       ${q.truLab?`<div class="f full"><label>Tiền lab (trừ trước khi tính %)</label>
-        ${Tien.o('tienLab', t.tienLab||0)}
+        ${Tien.o('tienLab', t.tienLab||0, `oninput="QT.tinhLai('${tid}')"`)}
         ${(() => { const gy = GiaLab.goiY().length ? GiaLab.goiY() : q.labGY; return gy.length?`<div class="combo-hint">Mức thường dùng: ${gy.map(([n,v])=>
           `<button type="button" class="link-btn" onclick="this.form.tienLab.value=Tien.dinh('${v}')">${h(n)} ${money(v)}</button>`).join(' · ')}</div>`:''; })()}</div>`:''}
       <div class="full"><div class="tbl-wrap"><table style="min-width:560px">
@@ -6232,6 +6248,32 @@ const QT = {
         <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
         <button class="btn primary">Lưu công đoạn</button></div>
     </form>`);
+  },
+  /* Tính lại cả bảng ngay khi lễ tân đổi người làm, sửa tiền lab hoặc bỏ tick ảnh —
+     không phải lưu rồi mở lại mới thấy số. Chỉ đọc form, KHÔNG ghi gì vào db. */
+  tinhLai(tid){
+    const t = db.treatments.find(x => x.id === tid); if (!t) return;
+    const f = document.querySelector('#modalBody form'); if (!f) return;
+    const q = (f.qtId && this.boId(f.qtId.value)) || this.cua(t); if (!q) return;
+    const tam = Object.assign({}, t);
+    if (f.tienLab) tam.tienLab = num(f.tienLab.value);
+    tam.coAnh = !!f.querySelector('[name="coAnh"]:checked');
+    const ty = this.tyLeThu(t);
+    (q.buoc || []).forEach(b => {
+      const sel = f.querySelector('[name="ng_' + b.b + '"]');
+      const st = sel && sel.value ? staffById(sel.value) : null;
+      const day = st ? this.tienBuocDay(tam, q, b, st) : null;
+      const oTy = document.getElementById('ty_' + b.b);
+      const oDay = document.getElementById('day_' + b.b);
+      const oThuc = document.getElementById('thuc_' + b.b);
+      if (oTy) oTy.textContent = st ? this.moTaBuocCho(b, st) + ' · ' + this.mucCua(st) + '%'
+                                    : this.moTaBuoc(b) + ' (10% · 30%)';
+      if (oDay) oDay.textContent = day == null ? '—' : money(day);
+      if (oThuc) oThuc.textContent = day == null ? '—' : money(day * ty);
+    });
+    const goc = Math.max(0, (+t.price || 0) - (q.truLab ? (+tam.tienLab || 0) : 0));
+    const oGoc = document.getElementById('qtGoc');
+    if (oGoc) oGoc.textContent = money(goc);
   },
   ganQT(tid){
     const t = db.treatments.find(x => x.id === tid);
@@ -6481,36 +6523,6 @@ const QT = {
     save(); this.bang(); App.toast('Đã dùng lại "' + q.ten + '" ✓');
   },
 
-  /* ---------- Tỷ lệ riêng của từng người ---------- */
-  riengForm(stId){
-    const st = staffById(stId); if (!st) return;
-    const r = (st.model && st.model.cd) || {};
-    App.modal('Tỷ lệ hoa hồng riêng — ' + st.name, `
-    <form class="form-grid" onsubmit="QT.riengSave(event,'${stId}')">
-      <div class="note-block full">Để trống thì dùng tỷ lệ chung của phòng khám. Chỉ điền ô nào muốn khác đi.</div>
-      ${this.ds().map(q => `<div class="full"><div class="rx"><div class="rx-head"><b>${h(q.ten)}</b></div>
-        <div class="card-b"><div class="form-grid">
-          ${q.buoc.map(b => `<div class="f"><label>${h(b.t)}
-            <span class="sub-line">chung: ${this.moTaBuoc(b)}</span></label>
-            ${b.tien!=null ? `<div class="sub-line" style="padding:8px 0">Trả theo lần — không đổi bằng %</div>` :
-              `<input type="number" step="0.5" min="0" max="100" name="${b.b}" value="${r[b.b]!=null?r[b.b]:''}" placeholder="theo chung">`}</div>`).join('')}
-        </div></div></div></div>`).join('')}
-      <div class="form-actions full">
-        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu</button></div>
-    </form>`);
-  },
-  riengSave(ev, stId){
-    ev.preventDefault();
-    const st = staffById(stId);
-    const d = Object.fromEntries(new FormData(ev.target).entries());
-    const cd = {};
-    Object.keys(d).forEach(k => { if (d[k] !== '' && d[k] != null) cd[k] = num(d[k]); });
-    if (!st.model) st.model = {};
-    st.model.cd = cd;
-    save(); App.closeModal(); App.render();
-    App.toast(Object.keys(cd).length ? 'Đã đặt ' + Object.keys(cd).length + ' tỷ lệ riêng ✓' : 'Đã bỏ hết tỷ lệ riêng, dùng chung');
-  },
-
   /* ---------- Bảng hoa hồng theo công đoạn ---------- */
   bangThang(month){
     const ds = this.congThang(month);
@@ -6520,12 +6532,11 @@ const QT = {
       <tbody>${ds.map(x => {
         const st = staffById(x.staffId), c = custById(x.t.customerId);
         const p = this.pctCua(st, x.buoc);
-        const rieng = st && st.model && st.model.cd && st.model.cd[x.buoc.b] != null;
         return `<tr><td class="num">${fmtD(x.date)}</td>
           <td><b>${h(st?st.name:'?')}</b></td>
           <td>${h(c?c.name:'?')}<br><span class="sub-line">${h(x.t.name)}${x.t.tooth?' — R'+h(x.t.tooth):''}</span></td>
           <td>${h(x.buoc.t)}<br><span class="sub-line">${h(x.q.ten)}</span></td>
-          <td class="r num">${x.buoc.tien!=null?'theo lần':p+'%'}${rieng?' <span class="pill info">riêng</span>':''}
+          <td class="r num">${x.buoc.tien!=null?'theo lần':p+'%'}
             ${(() => { const ld = this.lyDoTru(x.t, st); return ld ? `<br><span class="sub-line">${h(ld)}</span>` : ''; })()}</td>
           <td class="r num">${Math.round(this.tyLeThu(x.t)*100)}%</td>
           <td class="r num" style="font-weight:600">${money(x.tien)}</td></tr>`;
@@ -6960,16 +6971,14 @@ const HR = {
       </select></div>
       <div class="f"><label>Lương cứng (₫)</label>${Tien.o('base', st.base||0)}</div>
       <div class="f"><label>Chỉ tiêu KPI doanh thu (₫)</label>${Tien.o('kpiTarget', st.kpiTarget||0)}</div>
-      <div class="f"><label>Nhóm lương (hoa hồng công đoạn)</label><select name="nhomHH">
-        <option value="10"${QT.mucCua(st)<30?' selected':''}>Nhóm 10%</option>
-        <option value="30"${QT.mucCua(st)>=30?' selected':''}>Nhóm 30%</option>
-      </select>
-        <div class="combo-hint">Quyết định người này ăn theo cột nào trong bảng công đoạn.
-          Chưa đặt thì mặc định nhóm 10%.</div></div>
-      <div class="f full"><label>Hoa hồng theo công đoạn</label>
-        ${id?`<button type="button" class="btn" onclick="QT.riengForm('${id}')">Đặt tỷ lệ riêng cho người này</button>
-        <div class="combo-hint">Không đặt gì thì dùng tỷ lệ chung của phòng khám.</div>`
-        :'<div class="combo-hint">Lưu nhân viên xong mới đặt được tỷ lệ riêng.</div>'}</div>
+      <div class="f"><label>Tỷ lệ hoa hồng (%)</label>
+        <input type="number" name="nhomHH" step="0.5" min="0" max="100" value="${QT.mucCua(st)}">
+        <div class="combo-hint">
+          ${[10,15,20,25,30].map(v=>`<button type="button" class="link-btn" onclick="this.closest('.f').querySelector('[name=nhomHH]').value=${v}">${v}%</button>`).join(' · ')}
+          <br>Bảng công đoạn in sẵn hai cột <b>10%</b> và <b>30%</b>. Điền đúng hai số đó thì ăn đúng cột;
+          điền số ở giữa (15, 20, 25) thì phần mềm chia đều giữa hai cột. Chưa đặt thì coi là 10%.</div></div>
+      <div class="note-block full">Tiền từng công đoạn <b>dùng chung cho cả phòng khám</b>, đặt một lần ở
+        Cài đặt → Quy trình. Riêng của mỗi người chỉ là ô <b>tỷ lệ %</b> ở trên.</div>
       <div class="note-block full">Email phải trùng với tài khoản đã tạo trong Supabase → <b>Authentication → Users</b>
         thì nhân viên mới tự quét mã QR chấm công được.</div>
       <div class="form-actions full">
@@ -7138,7 +7147,7 @@ SCREENS.hr = () => {
           <td class="r num">${ds.length}</td>
           <td class="r num">${money(QT.hoaHong(st.id, M))}</td>
           <td class="r num" style="font-weight:700">${money(HR.commissionOf(st, M))}</td>
-          <td>${Perm.only('caidat', `<button class="btn small" onclick="QT.riengForm('${st.id}')">Tỷ lệ riêng</button>`)}</td></tr>`;
+          <td>${Perm.only('caidat', `<button class="btn small" onclick="HR.staffForm('${st.id}')">${QT.mucCua(st)}%</button>`)}</td></tr>`;
       }).join('')}</tbody></table></div></div>
     <div class="card"><div class="card-h"><h2>Chi tiết công đoạn đã làm</h2>
       <span class="hint">tháng ${M.slice(5)}/${M.slice(0,4)}</span></div>
