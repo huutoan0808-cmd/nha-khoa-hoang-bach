@@ -1148,12 +1148,44 @@ const Cust = {
   chonNguon(v){
     const o = document.querySelector('#custForm [name="source"]');
     if (o) { o.value = v; }
+    this.hienGT(v);
   },
   /* Gõ tay thành thứ khác thì bỏ tick, kẻo nhìn vào tưởng đang chọn cái đã tick */
   goNguon(v){
     document.querySelectorAll('#custForm [name="nguonTick"]').forEach(r => {
       r.checked = (r.value === (v || '').trim());
     });
+    this.hienGT(v);
+  },
+  /* Ô tra người giới thiệu chỉ hiện khi nguồn đúng là "Người quen giới thiệu" */
+  hienGT(v){
+    const box = document.getElementById('gtBox');
+    if (box) box.style.display = (v || '').trim() === 'Người quen giới thiệu' ? '' : 'none';
+  },
+
+  /* ---------- Người giới thiệu ----------
+     Trùng tên là chuyện thường ở phòng khám, nên gợi ý phải kèm MÃ khách thì mới
+     biết đúng người nào; số điện thoại để ở dòng phụ nên gõ số cũng tra ra. */
+  dsGioiThieu(boId){
+    return (db.customers || []).filter(x => x.id !== boId).map(x => ({
+      t: (x.name || '') + (x.code ? ' (' + x.code + ')' : ''),
+      s: [x.phone, x.province].filter(Boolean).join(' · '),
+    }));
+  },
+  /* Lấy lại hồ sơ khách từ chuỗi "TÊN (MÃ)". Không khớp thì trả null — người giới
+     thiệu không phải khách của phòng khám cũng là chuyện bình thường. */
+  khachTuChuoi(v){
+    const m = String(v || '').match(/\(([^()]+)\)\s*$/);
+    if (!m) return null;
+    const ma = Combo.norm(m[1].trim());
+    return (db.customers || []).find(x => Combo.norm(x.code || '') === ma) || null;
+  },
+  /* Combo gọi hàm này trần (r.onpick(v, inp)) nên KHÔNG có this — phải gọi Cust. */
+  chonGioiThieu(v){
+    const f = document.getElementById('custForm'); if (!f) return;
+    const c = Cust.khachTuChuoi(v);
+    if (f.gtId) f.gtId.value = c ? c.id : '';
+    if (c && f.gtPhone) f.gtPhone.value = c.phone || '';
   },
   form(id){
     const c = id ? custById(id) : {doiTuong:'Thu phí'};
@@ -1193,6 +1225,14 @@ const Cust = {
                oninput="Cust.goNguon(this.value)" style="margin-top:8px">
         <div class="combo-hint">Tick một ô là tự điền xuống dưới. Nguồn không có trong danh sách
           thì gõ thẳng vào ô chữ.</div></div>
+      <div class="f full" id="gtBox"${(c.source||'').trim() === 'Người quen giới thiệu' ? '' : ' style="display:none"'}>
+        <label>Người giới thiệu</label>
+        ${Combo.html('cbGioiThieu', 'gtTen', c.gtTen || '', this.dsGioiThieu(id),
+          'Gõ tên hoặc số điện thoại người giới thiệu…', Cust.chonGioiThieu,
+          'Gõ không dấu cũng ra, gõ số điện thoại cũng ra. Người giới thiệu chưa phải khách của phòng khám thì cứ gõ tên tự do.')}
+        <input type="hidden" name="gtId" value="${h(c.gtId||'')}">
+        <input name="gtPhone" value="${h(c.gtPhone||'')}" placeholder="Điện thoại người giới thiệu" style="margin-top:8px">
+      </div>
       ${f('12. Thân nhân báo tin (họ tên, quan hệ)','kinName',c.kinName)}
       ${f('Điện thoại thân nhân','kinPhone',c.kinPhone)}
       <div class="f full"><label>Địa chỉ thân nhân báo tin</label>
@@ -1228,6 +1268,18 @@ const Cust = {
     if (d.code) {
       const trung = db.customers.find(x => x.id !== id && Combo.norm(x.code||'') === Combo.norm(d.code));
       if (trung) { App.toast('Mã ' + d.code + ' đã dùng cho khách ' + trung.name + ' — chọn mã khác'); return; }
+    }
+    /* Chốt lại người giới thiệu lúc lưu, thay vì bám theo từng lần gõ: gõ đè lên
+       chuỗi "TÊN (MÃ)" rồi mà gtId còn giữ người cũ thì sau này đếm ra sai người. */
+    if (d.source !== undefined) {
+      if ((d.source || '').trim() !== 'Người quen giới thiệu') {
+        d.gtTen = ''; d.gtPhone = ''; d.gtId = '';
+      } else {
+        const ng = Cust.khachTuChuoi(d.gtTen);
+        d.gtId = ng ? ng.id : '';
+        d.gtTen = (d.gtTen || '').trim();
+        d.gtPhone = (d.gtPhone || '').trim() || (ng ? (ng.phone || '') : '');
+      }
     }
     d.province = (d.province || '').trim();
     d.ward = (d.ward || '').trim();
@@ -2200,7 +2252,10 @@ SCREENS.customers = () => {
           <div class="f"><label>Địa chỉ</label><b>${h(fullAddr(c)||'—')}</b></div>
           <div class="f"><label>Đối tượng · CCCD</label><b>${h(c.doiTuong||'—')} · ${h(c.cccd||'—')}</b></div>
           <div class="f"><label>Thân nhân báo tin</label><b>${h(c.kinName||'—')} ${c.kinPhone?'· '+h(c.kinPhone):''}</b></div>
-          <div class="f"><label>Nguồn khách</label><b>${h(c.source||'—')}</b></div>
+          <div class="f"><label>Nguồn khách</label><b>${h(c.source||'—')}</b>${
+            c.gtTen ? `<br><span class="sub-line">Do ${c.gtId
+              ? `<button class="link-btn" onclick="App.chonKhach('${c.gtId}')">${h(c.gtTen)}</button>`
+              : h(c.gtTen)}${c.gtPhone ? ' · ' + h(c.gtPhone) : ''} giới thiệu</span>` : ''}</div>
         </div>
         <div class="check-row" style="margin-top:8px">${tags.join(' ')}</div>
       </div>
