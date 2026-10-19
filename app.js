@@ -851,9 +851,9 @@ const Perm = {
      cũng trả về toàn quyền, nên đăng xuất xong lại thành quản lý. */
   offline(){ return !Cloud.configured(); },
   me(){
-    const email = (Cloud.who() || '').toLowerCase();
+    const email = (Cloud.who() || '').trim().toLowerCase();
     if (!email) return null;
-    const s = db.staff.find(x => (x.email || '').toLowerCase() === email);
+    const s = db.staff.find(x => (x.email || '').trim().toLowerCase() === email);
     return (s && s.active === false) ? null : s;    /* đã nghỉ thì coi như không có quyền */
   },
   role(){
@@ -5809,7 +5809,7 @@ create policy p_rec   on records    for all to authenticated using (true) with c
         <td><span class="pill ${role==='quanly'?'info':'mutedp'}">${h((ROLES[role]||{}).label||role)}</span></td>
         <td>${off?'<span class="pill danger">Đã khóa</span>':'<span class="pill ok">Đang làm</span>'}</td>
         <td style="white-space:nowrap">
-          <button class="btn small" onclick="HR.staffForm('${s.id}')">Sửa</button>
+          <button class="btn small" onclick="HR.staffForm('${s.id}','tk')">Sửa</button>
           ${s.email ? (off
             ? `<button class="btn small" onclick="Att.setActive('${s.id}',true)">Mở lại</button>`
             : `<button class="btn small danger" onclick="Att.setActive('${s.id}',false)">Khóa</button>`) : ''}
@@ -5830,7 +5830,7 @@ create policy p_rec   on records    for all to authenticated using (true) with c
         Xóa hẳn tài khoản cũng ở đó (⋮ → Delete user).</div>
       <div class="form-actions">
         <button type="button" class="btn" onclick="App.closeModal()">Đóng</button>
-        <button type="button" class="btn" onclick="HR.staffForm()">${IC.plus} Thêm nhân viên</button>
+        <button type="button" class="btn" onclick="HR.staffForm('','tk')">${IC.plus} Thêm nhân viên</button>
         <button type="button" class="btn primary" onclick="Att.accountsForm()">Cấp tài khoản mới</button></div>`);
   },
   setActive(id, on){
@@ -5922,8 +5922,57 @@ create policy p_rec   on records    for all to authenticated using (true) with c
       /* Ghi vết sau khi đã kéo nhân viên về, lúc đó mới biết người đăng nhập là ai */
       if (typeof Vet !== 'undefined') { Vet.chup(); Vet.ghi('dangnhap', 'Đăng nhập vào ' + Vet.may()); }
       App.render();
-      App.toast('Xin chào ' + ((Att.myStaff() || {}).name || Cloud.who()));
-    } catch(e){ App.toast('Đăng nhập không được: ' + e.message); }
+      /* Đăng nhập được mà không có hồ sơ nhân viên nào mang email này thì người đó
+         vào phần mềm với quyền thấp nhất và không chấm công được — phải nói ngay,
+         không thì họ tưởng phần mềm hỏng. */
+      const toi = Att.myStaff();
+      if (!toi) {
+        App.modal('Vào được, nhưng chưa nhận ra bạn là ai', `
+          <div class="note-block warn-block">Tài khoản <b>${h(Cloud.who())}</b> đăng nhập thành công,
+            nhưng <b>không có nhân viên nào trong phần mềm gắn email này</b>.</div>
+          <div class="note-block">Quản lý mở <b>Nhân sự → Tài khoản truy cập</b>, bấm <b>Sửa</b> ở dòng của bạn
+            rồi điền đúng email <b>${h(Cloud.who())}</b> vào ô <b>Email đăng nhập</b>.</div>
+          <div class="form-actions"><button class="btn primary" onclick="App.closeModal()">Đã hiểu</button></div>`);
+        return;
+      }
+      App.toast('Xin chào ' + toi.name);
+    } catch(e){ App.loiDangNhap(e); }
+  },
+  /* Dịch mấy câu lỗi của Supabase ra việc phải làm. Nguyên nhân khác nhau mà cứ hiện
+     một dòng tiếng Anh thô thì không ai biết đường sửa. */
+  loiDangNhap(e){
+    const m = String((e && e.message) || e);
+    let vi = '', cach = '';
+    if (/invalid login credentials|invalid_grant/i.test(m)) {
+      vi = 'Sai email hoặc sai mật khẩu — hoặc Supabase chưa hề có tài khoản với email này.';
+      cach = `<b>Tên có trong phần mềm không có nghĩa là đã có tài khoản.</b> Thêm nhân viên chỉ tạo hồ sơ;
+        tài khoản đăng nhập phải tạo riêng.<br><br>
+        Quản lý vào <b>Supabase → Authentication → Users</b>, tìm đúng email đó.
+        Không thấy thì bấm <b>Add user</b> để tạo (nhớ bật <b>Auto Confirm User</b>).
+        Có rồi thì bấm <b>⋮ → Update user</b> đặt lại mật khẩu mới.`;
+    } else if (/email not confirmed|not confirmed/i.test(m)) {
+      vi = 'Tài khoản đã tạo nhưng chưa được xác nhận email, nên Supabase chưa cho vào.';
+      cach = `Vào <b>Supabase → Authentication → Users</b>, bấm <b>⋮</b> ở dòng người đó → <b>Update user</b>
+        → bật <b>Auto Confirm User</b> (hoặc xóa đi rồi tạo lại và nhớ tick ô đó).`;
+    } else if (/rate limit|too many/i.test(m)) {
+      vi = 'Thử sai nhiều lần quá nên Supabase chặn tạm.';
+      cach = 'Đợi vài phút rồi đăng nhập lại.';
+    } else if (/password/i.test(m) && /short|least|6/i.test(m)) {
+      vi = 'Mật khẩu ngắn hơn mức Supabase cho phép.';
+      cach = 'Đặt lại mật khẩu dài ít nhất 6 ký tự.';
+    } else if (/failed to fetch|networkerror|abort|timeout/i.test(m)) {
+      vi = 'Không nối được tới máy chủ.';
+      cach = `Kiểm tra mạng. Vẫn không được thì vào <b>supabase.com</b> xem dự án có đang
+        <b>Paused</b> không — bản miễn phí tự ngủ khi khoảng một tuần không ai dùng, bấm <b>Restore</b> là chạy lại.`;
+    } else {
+      vi = m;
+      cach = 'Chụp màn hình câu lỗi này gửi quản lý.';
+    }
+    App.modal('Đăng nhập không được', `
+      <div class="note-block warn-block">${vi}</div>
+      <div class="note-block">${cach}</div>
+      <div class="sub-line" style="margin-top:8px">Máy chủ trả về: <span class="num">${h(m)}</span></div>
+      <div class="form-actions"><button class="btn primary" onclick="App.closeModal()">Đóng</button></div>`);
   },
   /* Mọi nút Đăng xuất đều đi chung một đường: đẩy dữ liệu lên rồi mới thoát */
   logout(){ App.doLogout(); },
@@ -7018,11 +7067,11 @@ const HR = {
       <td><b>${h(s.name)}</b><br><span class="sub-line">${h(s.email||'chưa gắn email')}</span></td>
       <td>${h(s.role||'—')}<br><span class="sub-line">quyền: ${h((ROLES[Perm.roleOf(s)]||{}).label||'—')}</span></td>
       <td>${s.active===false?'<span class="pill danger">Đã nghỉ</span>':'<span class="pill ok">Đang làm</span>'}</td>
-      <td><button class="btn small" onclick="HR.staffForm('${s.id}')">Sửa</button></td></tr>`).join('')
+      <td><button class="btn small" onclick="HR.staffForm('${s.id}','ds')">Sửa</button></td></tr>`).join('')
       || '<tr><td colspan="4" class="sub-line">Chưa có nhân viên nào.</td></tr>';
     App.modal('Danh sách nhân viên', `
       <div class="form-actions" style="justify-content:flex-start;margin-bottom:10px">
-        <button class="btn primary" onclick="HR.staffForm()">${IC.plus} Thêm nhân viên</button></div>
+        <button class="btn primary" onclick="HR.staffForm('','ds')">${IC.plus} Thêm nhân viên</button></div>
       <div class="tbl-wrap"><table style="min-width:520px">
         <thead><tr><th>Họ tên · email</th><th>Chức danh · quyền</th><th>Trạng thái</th><th></th></tr></thead>
         <tbody>${rows}</tbody></table></div>
@@ -7030,7 +7079,20 @@ const HR = {
         phần mềm lưu theo mã nhân viên, không lưu tên rời rạc.</div>`);
   },
 
-  staffForm(id){
+  /* Nhớ mình được mở ra từ bảng nào, để lưu xong còn biết đường quay lại.
+     'ds' = Danh sách nhân viên · 'tk' = Tài khoản truy cập · bỏ trống = mở thẳng
+     từ màn Nhân sự, đóng khung là thấy lại bảng lương nên không cần quay đâu cả. */
+  _ve: null,
+  quayVe(){
+    const v = this._ve; this._ve = null;
+    if (v === 'ds') { this.dsNhanVien(); return true; }
+    if (v === 'tk') { Att.accountsPanel(); return true; }
+    return false;
+  },
+  /* Nút Hủy cũng về bảng cũ chứ không đóng sạch */
+  huyStaff(){ if (!HR.quayVe()) App.closeModal(); },
+  staffForm(id, ve){
+    this._ve = ve || null;
     const st = id ? staffById(id) : {role:'Bác sĩ điều trị', base:0, kpiTarget:0, model:{type:'svcGroup', rates:{}, def:10}};
     App.modal(id ? 'Sửa nhân viên' : 'Thêm nhân viên', `
     <form class="form-grid" onsubmit="HR.staffSave(event,'${id||''}')">
@@ -7059,7 +7121,7 @@ const HR = {
         thì nhân viên mới tự quét mã QR chấm công được.</div>
       <div class="form-actions full">
         ${id?`<button type="button" class="btn danger" onclick="HR.staffDel('${id}')">Xóa nhân viên</button><span class="spacer"></span>`:''}
-        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu</button></div>
+        <button type="button" class="btn" onclick="HR.huyStaff()">${this._ve ? 'Quay lại' : 'Hủy'}</button><button class="btn primary">Lưu</button></div>
     </form>`);
   },
   staffSave(ev, id){
@@ -7070,7 +7132,9 @@ const HR = {
     d.nhomHH = num(d.nhomHH) || 10;
     if (id) Object.assign(staffById(id), d);
     else db.staff.push(Object.assign({id:uid(), model:{type:'svcGroup', rates:{}, def:10}}, d));
-    save(); App.closeModal(); App.render(); App.toast('Đã lưu nhân viên ✓');
+    save(); App.render();
+    if (!this.quayVe()) App.closeModal();
+    App.toast('Đã lưu nhân viên ✓');
   },
   staffDel(id){
     const st = staffById(id);
@@ -7078,7 +7142,9 @@ const HR = {
     db.staff = db.staff.filter(x => x.id !== id);
     db.attLog = (db.attLog||[]).filter(x => x.staffId !== id);
     db.bonuses = (db.bonuses||[]).filter(x => x.staffId !== id);
-    save(); App.closeModal(); App.render(); App.toast('Đã xóa nhân viên');
+    save(); App.render();
+    if (!this.quayVe()) App.closeModal();
+    App.toast('Đã xóa nhân viên');
   },
   bonusForm(){
     App.modal('Thêm thưởng / phạt', `
