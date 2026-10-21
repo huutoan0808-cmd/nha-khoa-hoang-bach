@@ -1776,6 +1776,8 @@ const Cust = {
        hoạch và hạng mục điều trị đọc tới. Tình trạng răng thì vẫn nằm ở lớp ban đầu. */
     if (lop === 'teeth') {
       const dv = (d.dichVu || '').trim(), icd = icdCode((d.chanDoan || '').trim());
+      this.vanDeTuRang(c, n, icd);
+      this.dongBoChanDoan(c);
       if (dv || icd) {
         c.teethKH = c.teethKH || {};
         const nen = c.teethKH[n] || Object.assign({}, (c.teeth || {})[n] || {s: d.s, mat: []});
@@ -2073,6 +2075,8 @@ const Cust = {
     });
     /* Chẩn đoán và dịch vụ chảy sang sơ đồ KẾ HOẠCH, y như khi ghi từng răng một */
     const dv = (d.dichVu || '').trim(), icd = icdCode((d.chanDoan || '').trim());
+    ds.forEach(n => this.vanDeTuRang(c, n, icd));
+    this.dongBoChanDoan(c);
     if (dv || icd) {
       c.teethKH = c.teethKH || {};
       ds.forEach(n => {
@@ -2222,10 +2226,27 @@ const Cust = {
     save(); App.render(); this.vanDeBang();
   },
   /* Vấn đề đầu = bệnh chính, còn lại = bệnh kèm theo — để bản in giữ đúng mẫu BA-18 */
+  /* Chẩn đoán gõ trong khung ghi răng chảy xuống bảng Chẩn đoán.
+     Những dòng do khung răng sinh ra được đánh dấu tuRang để lần sau còn sửa hoặc
+     dọn đúng dòng đó — dòng quản lý tự thêm tay thì không đụng tới.
+     Một răng chỉ giữ một dòng tự sinh; đổi chẩn đoán thì sửa tại chỗ, xóa chẩn đoán
+     thì gỡ dòng đó đi. */
+  vanDeTuRang(c, n, icd){
+    if (!c.record) c.record = {};
+    if (!c.record.vanDe) c.record.vanDe = [];
+    const ds = c.record.vanDe;
+    const i = ds.findIndex(x => x.tuRang && String(x.rang) === String(n));
+    if (!icd) { if (i >= 0) ds.splice(i, 1); return; }
+    if (i >= 0) { ds[i].icd = icd; ds[i].ngay = ds[i].ngay || todayISO(); }
+    else ds.push({id: uid(), icd, rang: String(n), note: '', ngay: todayISO(),
+                  tinhTrang: 'Đang điều trị', tuRang: 1});
+  },
   dongBoChanDoan(c){
     const ds = this.vanDe(c);
     if (!c.record) c.record = {};
-    if (!ds.length) return;
+    /* Xóa hết vấn đề thì phải xóa luôn dòng Bệnh chính, không thì bệnh án in ra
+       vẫn còn chẩn đoán của lần trước. */
+    if (!ds.length) { c.record.chanDoan = ''; c.record.chanDoanKem = ''; c._up = Date.now(); return; }
     c.record.chanDoan = ds[0].icd;
     c.record.chanDoanKem = ds.slice(1).map(x => icdName(x.icd) + (x.rang ? ' (R' + x.rang + ')' : '')).join('; ');
     c._up = Date.now();
@@ -2247,7 +2268,8 @@ const Cust = {
     const ds = this.vanDe(c);
     const rows = ds.map((v, i) => `<tr>
       <td>${i === 0 ? '<span class="pill danger">Bệnh chính</span>' : '<span class="pill mutedp">Kèm theo</span>'}</td>
-      <td><b>${h(icdName(v.icd))}</b>${v.note?`<br><span class="sub-line">${h(v.note)}</span>`:''}</td>
+      <td><b>${h(icdName(v.icd))}</b>${v.tuRang?' <span class="pill mutedp">từ sơ đồ răng</span>':''}${
+        v.note?`<br><span class="sub-line">${h(v.note)}</span>`:''}</td>
       <td class="num">${h(v.rang||'—')}</td>
       <td class="num">${v.ngay?fmtD(v.ngay):'—'}</td>
       <td>${h(v.tinhTrang||'')}</td>
@@ -2936,7 +2958,9 @@ const Treat = {
       ds.forEach(n => {
         const nen = c.teethKH[n] || Object.assign({}, (c.teeth || {})[n] || {s: 'ok', mat: []});
         c.teethKH[n] = Object.assign({}, nen, {dichVu: ten, chanDoan: icd});
+        if (icd) Cust.vanDeTuRang(c, n, icd);
       });
+      if (icd) Cust.dongBoChanDoan(c);
     } else {
       c.keHoachKhac = c.keHoachKhac || [];
       c.keHoachKhac.push({id: uid(), dichVu: ten, chanDoan: icd});
@@ -5038,12 +5062,18 @@ const Tooth = {
   /* Lưới chọn số răng cho các hộp thoại không gắn với sơ đồ của một khách cụ thể
      (vd: thêm dịch vụ vào kế hoạch). Bấm để chọn / bỏ chọn, có thể chọn nhiều răng. */
   chonSoHTML(ten){
+    /* Mỗi hàm 16 răng phải nằm GỌN MỘT HÀNG thì mới ra hình cung hàm; rớt xuống
+       dòng là nhìn không còn ra trái phải trên dưới nữa. Nút co lại vừa đủ, và cho
+       cuộn ngang khi màn hình quá hẹp thay vì xuống dòng. */
     const hang = ds => ds.map(n => `<button type="button" class="btn small chon-rang" data-n="${n}"
-      onclick="Tooth.chonSo(this,'${ten}')" style="min-width:38px">${n}</button>`).join('');
-    const d = 'display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:4px 0';
+      onclick="Tooth.chonSo(this,'${ten}')"
+      style="flex:none;min-width:0;width:30px;padding:5px 0;font-size:12px">${n}</button>`).join('');
+    const d = 'display:flex;flex-wrap:nowrap;gap:3px;align-items:center;margin:4px 0;min-width:max-content';
     return `<input type="hidden" name="${ten}" value="">
-      <div style="${d}">${hang(TEETH_UP.slice(0,8))}<span style="width:14px"></span>${hang(TEETH_UP.slice(8))}</div>
-      <div style="${d}">${hang(TEETH_DN.slice(0,8))}<span style="width:14px"></span>${hang(TEETH_DN.slice(8))}</div>
+      <div style="overflow-x:auto;max-width:100%">
+        <div style="${d}">${hang(TEETH_UP.slice(0,8))}<span style="flex:none;width:12px"></span>${hang(TEETH_UP.slice(8))}</div>
+        <div style="${d}">${hang(TEETH_DN.slice(0,8))}<span style="flex:none;width:12px"></span>${hang(TEETH_DN.slice(8))}</div>
+      </div>
       <div class="combo-hint">Đang chọn: <b id="soRangDaChon">chưa chọn răng nào</b> —
         bấm lần nữa để bỏ chọn. Không chọn răng nào thì dịch vụ tính cho cả hàm.</div>`;
   },
