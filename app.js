@@ -1383,6 +1383,31 @@ const Cust = {
       if (o) o.scrollIntoView({block:'nearest', behavior:'smooth'}); }, 0);
   },
   dongRang(){ App.state.rangMo = null; App.render(); },
+  /* Hạng mục do khung ghi răng lập ra — đánh dấu tuRang để lần sau sửa đúng dòng đó
+     chứ không đẻ thêm dòng mới mỗi lần bấm Lưu. */
+  hangMucCua(c, n){
+    return (db.treatments || []).find(t => t.customerId === c.id && String(t.tuRang) === String(n)) || null;
+  },
+  tinhTien(hm){
+    if (!hm) return 0;
+    return Treat.thanhTien(hm.donGia != null ? hm.donGia : hm.price, hm.sl, hm.giamPct, hm.giamTien);
+  },
+  /* Chọn dịch vụ thì điền sẵn đơn giá, giống hệt hộp thoại hạng mục */
+  chonDVRang(v){
+    const f = document.querySelector('#oRangGhi form') || document.querySelector('#modalBody form');
+    if (!f) return;
+    const dv = (db.services || []).find(x => x.name === v);
+    const o = f.querySelector('[name="donGia"]');
+    if (dv && o && !num(o.value)) o.value = Tien.dinh(String(dv.price || 0));
+    this.tinhTienRang();
+  },
+  tinhTienRang(){
+    const f = document.querySelector('#oRangGhi form') || document.querySelector('#modalBody form');
+    if (!f) return;
+    const g = k => (f.querySelector('[name="' + k + '"]') || {}).value;
+    const o = document.getElementById('tienRang');
+    if (o) o.textContent = money(Treat.thanhTien(num(g('donGia')), +g('sl') || 1, +g('giamPct') || 0, num(g('giamTien'))));
+  },
   /* Khung ghi cho một răng — trước đây là nội dung của hộp thoại, nay vẽ thẳng
      xuống dưới sơ đồ nên trả về HTML thay vì tự bật hộp thoại. */
   rangFormHTML(c, n, lop){
@@ -1438,13 +1463,34 @@ const Cust = {
       <div class="f full"><label>Dịch vụ điều trị</label>
         ${Combo.html('cbRangDV','dichVu', (lop === 'teeth' ? ((c.teethKH||{})[n]||{}).dichVu : t.dichVu) || '',
           Svc.goiY(1), 'Gõ tên dịch vụ, vd: boc su, noi nha',
-          null, 'Gợi ý lấy từ bảng giá phòng khám, kèm giá. Lưu xong bấm "Đưa vào điều trị" để tạo hạng mục.')}</div>` : ''}
+          v => Cust.chonDVRang(v), 'Chọn dịch vụ là tự điền giá, và hạng mục điều trị được lập luôn khi bấm Lưu.')}</div>
+      ${(() => {
+        /* Phần giá chép từ hộp thoại "Thêm hạng mục điều trị": ghi xong một răng là
+           hạng mục có luôn, khỏi phải mở thêm một hộp thoại nữa cho cùng một việc. */
+        const hm = Cust.hangMucCua(c, n);
+        return `<div class="f"><label>Đơn giá / răng (₫)</label>
+          ${Tien.o('donGia', hm ? (hm.donGia != null ? hm.donGia : hm.price) : '', 'oninput="Cust.tinhTienRang()"')}</div>
+        <div class="f"><label>Số lượng</label>
+          <input type="number" name="sl" min="1" step="1" value="${hm ? (hm.sl || 1) : 1}" oninput="Cust.tinhTienRang()"></div>
+        <div class="f"><label>Giảm giá (%)</label>
+          <input type="number" name="giamPct" min="0" max="100" step="0.5" value="${hm && hm.giamPct ? hm.giamPct : ''}"
+            placeholder="0" oninput="Cust.tinhTienRang()"></div>
+        <div class="f"><label>Giảm thêm (₫)</label>
+          ${Tien.o('giamTien', hm ? hm.giamTien : '', 'oninput="Cust.tinhTienRang()"')}</div>
+        <div class="f"><label>Trạng thái</label><select name="tinhTrangDT">
+          ${TREAT_STATUS.map(x => `<option${(hm ? hm.status : 'Chưa điều trị') === x ? ' selected' : ''}>${x}</option>`).join('')}
+        </select></div>
+        <div class="f"><label>&nbsp;</label>
+          <div class="note-block" style="margin:0;padding:9px 12px">Thành tiền:
+            <b id="tienRang">${money(Cust.tinhTien(hm))}</b></div></div>
+        ${hm ? '' : '<div class="note-block full">Chọn dịch vụ rồi bấm <b>Lưu</b> là hạng mục điều trị được lập luôn — không phải mở thêm hộp thoại nào nữa.</div>'}`;
+      })()}` : ''}
       ${kh ? '' : `<div class="note-block full">Nội nha để riêng vì răng <b>đã nội nha rồi bọc sứ</b> là chuyện thường —
         chọn "Răng sứ" mà vẫn tick được nội nha, sơ đồ hiện cả hai.</div>`}
       <div class="form-actions full">
         ${(c[lop]||{})[n]?`<button type="button" class="btn danger" onclick="Cust.toothXoa(${n},'${lop}')">Xóa đánh dấu</button><span class="spacer"></span>`:''}
         <button type="button" class="btn" onclick="Cust.dongRang()">Đóng</button>
-        ${(kh || lop === 'teeth')?`<button type="button" class="btn" onclick="Cust.rangSangDieuTri(${n})">Lưu &amp; đưa vào điều trị →</button>`:''}
+
         <button class="btn primary">Lưu</button></div>
     </form>`;
   },
@@ -1579,6 +1625,35 @@ const Cust = {
         <button class="btn small" onclick="Cust.dongRang()">Đóng</button></div>
       <div class="card-b">${this.rangFormHTML(c, n, lop)}</div></div>`;
   },
+  /* Lập hoặc cập nhật hạng mục điều trị của răng này. Bỏ trống dịch vụ thì gỡ hạng
+     mục đi — nhưng chỉ gỡ khi chưa làm gì: đã ghi công đoạn hoặc đã thu tiền rồi mà
+     xóa thì mất cả tiền công lẫn công nợ, lúc đó chỉ cảnh báo và giữ nguyên. */
+  luuHangMuc(c, n, ten, d, f){
+    const cu = this.hangMucCua(c, n);
+    if (!ten) {
+      if (!cu) return;
+      const daLam = (cu.cd || []).length;
+      if (daLam) { App.toast('Răng ' + n + ' đã ghi công đoạn nên giữ lại hạng mục — xóa ở trang Dịch vụ nếu thật sự muốn bỏ'); return; }
+      db.treatments = db.treatments.filter(x => x.id !== cu.id);
+      return;
+    }
+    const dv = (db.services || []).find(x => Combo.norm(x.name || '') === Combo.norm(ten));
+    const donGia = num((f.querySelector('[name="donGia"]') || {}).value) || (dv ? (dv.price || 0) : 0);
+    const sl = Math.max(1, +((f.querySelector('[name="sl"]') || {}).value) || 1);
+    const giamPct = Math.min(100, Math.max(0, +((f.querySelector('[name="giamPct"]') || {}).value) || 0));
+    const giamTien = num((f.querySelector('[name="giamTien"]') || {}).value);
+    const tt = (f.querySelector('[name="tinhTrangDT"]') || {}).value || 'Chưa điều trị';
+    const o = {name: dv ? dv.name : ten, group: dv ? dv.group : 'Khác', serviceId: dv ? dv.id : '',
+               tooth: String(n), donGia, sl, giamPct, giamTien,
+               price: Treat.thanhTien(donGia, sl, giamPct, giamTien), status: tt, tuRang: String(n)};
+    if (cu) Object.assign(cu, o, {_up: Date.now()});
+    else {
+      const ep = Dot.dangChon(c);
+      db.treatments.push(Object.assign({id: uid(), customerId: c.id, episodeId: ep ? ep.id : '',
+        doctorId: (ep && ep.doctorId) || '', assistantId: '', date: todayISO(), cd: []}, o));
+    }
+  },
+
   /* Hàm khung là chuyện của CẢ HÀM, không phải của một cái răng — nhưng chỉ hỏi
      khi răng đang được đánh dấu là răng tháo lắp, vì ngoài lúc đó ra hỏi cũng vô nghĩa.
      Tick vào thì ghi cho đúng cái hàm chứa răng đó. */
@@ -1778,6 +1853,7 @@ const Cust = {
       const dv = (d.dichVu || '').trim(), icd = icdCode((d.chanDoan || '').trim());
       this.vanDeTuRang(c, n, icd);
       this.dongBoChanDoan(c);
+      this.luuHangMuc(c, n, dv, d, f);
       if (dv || icd) {
         c.teethKH = c.teethKH || {};
         const nen = c.teethKH[n] || Object.assign({}, (c.teeth || {})[n] || {s: d.s, mat: []});
@@ -2914,9 +2990,11 @@ const Treat = {
         <td>${x.chanDoan ? h(icdName(x.chanDoan)) : '<span class="sub-line">—</span>'}</td>
         <td><b>${h(x.dichVu)}</b></td>
         <td class="r num">${gia ? money(gia) : '<span class="sub-line">chưa có giá</span>'}</td>
-        <td style="white-space:nowrap">${co
-          ? '<span class="pill ok">đã lập hạng mục</span>'
-          : `<button class="btn small primary" onclick="Treat.khDuaVao('${x.rang || ''}','${x.id || ''}')">Đưa vào điều trị</button>`}
+        <td style="white-space:nowrap">${(() => {
+          const hm = x.rang ? Cust.hangMucCua(c, x.rang) : null;
+          if (hm) return `<span class="pill ${trangThaiMau(hm.status)}">${h(hm.status)}</span>`;
+          return `<button class="btn small primary" onclick="Treat.khDuaVao('${x.rang || ''}','${x.id || ''}')">Đưa vào điều trị</button>`;
+        })()}
           <button class="btn small danger" onclick="Treat.khBo('${x.rang || ''}','${x.id || ''}')">Bớt</button></td></tr>`;
     }).join('');
     const tong = ds.reduce((t, x) => t + this.giaCua(x.dichVu), 0);
