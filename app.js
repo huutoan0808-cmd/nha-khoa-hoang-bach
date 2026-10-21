@@ -95,6 +95,7 @@ const TEETH_DN = [48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38];
    thì mất thông tin. Các mặt sâu/trám để trong mảng `mat`. */
 const TOOTH_STATES = [
   ['ok',      'Bình thường'],
+  ['khac',    'Khác — tự ghi'],
   ['sau',     'Sâu răng'],
   ['filled',  'Đã trám'],
   ['noinha',  'Đã nội nha'],
@@ -182,10 +183,16 @@ const TT_CO_NOI_NHA = ['crown', 'crownKL', 'crownTS'];
 /* Hồ sơ cũ ghi 'caries' (sâu răng chưa phân độ). Không tự gán bừa một mức nào —
    giữ nguyên, chỉ cho hiện lại trong ô chọn của đúng cái răng đó, để lỡ mở ra
    lưu lại thì không bị nhảy về "Bình thường". */
-const oTinhTrang = (sNay, them) => {
+/* Ngoài danh sách gợi ý còn cho tự ghi: bảng này không bao giờ phủ hết được mọi thứ
+   gặp ở ghế. Chọn "Khác — tự ghi" rồi gõ vào ô bên cạnh; sơ đồ vẽ răng trung tính
+   còn chữ tự ghi thì hiện nguyên văn ở phần mô tả. */
+const oTinhTrang = (sNay, them, tuGhi) => {
   const v = sChon(sNay);
+  const khac = v === 'khac';
   return `<select name="s"${them || ''}>${TOOTH_STATES
-    .map(([k, l]) => `<option value="${k}"${v === k ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
+      .map(([k, l]) => `<option value="${k}"${v === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
+    <input name="sKhac" value="${h(tuGhi || '')}" placeholder="Tự ghi tình trạng, vd: nứt dọc thân răng"
+      style="margin-top:8px;display:${khac ? '' : 'none'}" id="oTuGhi">`;
 };
 const oLoaiSu = (sNay, tNay) => `<div class="f full" id="oLoaiSu" style="display:${laSu(sNay) ? '' : 'none'}">
   <label>Loại răng sứ</label><div class="check-row">${SU_LOAI.map(([k, l]) =>
@@ -1246,6 +1253,19 @@ const Cust = {
       <div class="form-actions full"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">${id?'Lưu thay đổi':'Thêm khách hàng'}</button></div>
     </form>`);
   },
+  /* Bấm nút Tìm mới lọc, không lọc theo từng phím — danh sách nhảy liên tục trong
+     lúc đang gõ làm người ta bấm nhầm vào hồ sơ khác. */
+  timNgay(){
+    const i = document.getElementById('oTimKH');
+    App.state.custQ = i ? i.value.trim() : '';
+    const o = {};
+    ['ma', 'ten', 'sdt'].forEach(k => { const x = document.getElementById('tim_' + k); o[k] = x ? x.checked : 1; });
+    if (!o.ma && !o.ten && !o.sdt) { App.toast('Chọn ít nhất một mục để tìm'); return; }
+    App.state.custO = o;
+    App.render();
+  },
+  boTim(){ App.state.custQ = ''; App.render(); },
+
   /* Bấm tiêu đề cột: lần đầu sắp tăng dần, bấm lại thì đảo chiều */
   sapXep(k){
     const sx = App.state.custSort || {k:'code', d:1};
@@ -1376,7 +1396,7 @@ const Cust = {
         ${hienTai ? `<br>Sơ đồ trước điều trị đang ghi: <b>${h(Tooth.moTa(n, hienTai))}</b>` : ''}</div>` : ''}
     <form class="form-grid" onsubmit="Cust.toothSave(event,${n},'${lop}')">
       <div class="f full"><label>${st ? 'Tình trạng sau điều trị' : 'Tình trạng hiện tại'}</label>
-        ${oTinhTrang(t.s, ' onchange="Cust.toothMatHien(this.value)"')}</div>
+        ${oTinhTrang(t.s, ' onchange="Cust.toothMatHien(this.value)"', t.sKhac)}</div>
       ${oMucSau(t.s)}
       ${oLoaiSu(t.s, t)}
 
@@ -1691,6 +1711,8 @@ const Cust = {
       chop.style.display = duoc ? '' : 'none';
       if (!duoc) chop.querySelectorAll('input').forEach(x => x.checked = false);
     }
+    const tg = document.getElementById('oTuGhi');
+    if (tg) { tg.style.display = (v === 'khac') ? '' : 'none'; if (v === 'khac') tg.focus(); }
     /* Mất răng, implant, tháo lắp thì không có tủy để nội nha — giấu luôn ô tick,
        và bỏ dấu đã tick kẻo lưu lại một thông tin vô lý. */
     /* Chỉ răng tháo lắp mới hỏi hàm khung */
@@ -1723,7 +1745,8 @@ const Cust = {
         && !(d.dichVu||'').trim() && !(d.chanDoan||'').trim()) delete c[lop][n];
     else {
       const cu = c[lop][n] || {};
-      c[lop][n] = {s:d.s, mat, nn, loDo, sung, note:d.note, dichVu:(d.dichVu||'').trim(),
+      c[lop][n] = {s:d.s, sKhac: d.s === 'khac' ? (d.sKhac||'').trim() : '',
+        mat, nn, loDo, sung, note:d.note, dichVu:(d.dichVu||'').trim(),
         chanRang: d.s === 'thaolap' && !!f.querySelector('[name="chanRang"]:checked'),
         nhipCau: laSu(d.s) && ((f.querySelector('[name="vaiSu"]:checked')||{}).value === 'nhipcau'),
         chanDoan: icdCode((d.chanDoan||'').trim()), dv: cu.dv || []};
@@ -2023,7 +2046,8 @@ const Cust = {
       const cu = c.teeth[n] || {};
       const note = (d.note || '').trim() || (giu ? (cu.note || '') : '');
       if (d.s === 'ok' && !nn && !loDo && !sung && !mat.length && !note) delete c.teeth[n];
-      else c.teeth[n] = {s: d.s, mat, nn, loDo, sung, note,
+      else c.teeth[n] = {s: d.s, sKhac: d.s === 'khac' ? (d.sKhac||'').trim() : '',
+        mat, nn, loDo, sung, note,
         chanRang: d.s === 'thaolap' && !!f.querySelector('[name="chanRang"]:checked'),
         nhipCau: laSu(d.s) && ((f.querySelector('[name="vaiSu"]:checked')||{}).value === 'nhipcau')};
     });
@@ -2388,15 +2412,14 @@ const Cust = {
 
 SCREENS.customers = () => {
   const q = Combo.norm(App.state.custQ);
-  const kieu = App.state.custTim || 'tatca';
+  const o = App.state.custO || {ma: 1, ten: 1, sdt: 1};
   /* Dò theo đúng loại đã chọn. Gõ "36" mà để chế độ tất cả thì ra cả khách tên có
      số 36 lẫn số điện thoại chứa 36 — chọn đúng loại cho gọn. */
   const soHoa = x => String(x || '').replace(/\D/g, '');
   const khopTen = c => Combo.norm(c.name || '').includes(q);
   const khopMa  = c => Combo.norm(c.code || '').includes(q);
   const khopSdt = c => soHoa(q) && soHoa(c.phone).includes(soHoa(q));
-  const loc = {ten: khopTen, ma: khopMa, sdt: khopSdt,
-               tatca: c => khopTen(c) || khopMa(c) || khopSdt(c)}[kieu] || (() => true);
+  const loc = c => (o.ma && khopMa(c)) || (o.ten && khopTen(c)) || (o.sdt && khopSdt(c));
   const filtered = !q ? db.customers.slice() : db.customers.filter(loc);
   /* Sắp xếp theo cột đang chọn, bấm lại tiêu đề cột thì đảo chiều */
   const sx = App.state.custSort || {k:'code', d:1};
@@ -2466,12 +2489,22 @@ SCREENS.customers = () => {
     <button class="btn" onclick="Importer.anhForm()">${IC.cam} Nhập từ ảnh chụp</button>
     <button class="btn primary" onclick="Cust.form()">${IC.plus} Thêm khách hàng</button>
     <div class="sub">${db.customers.length} hồ sơ · thông tin hành chính theo mẫu BA-18</div></div>
-  <div class="searchbar">${IC.search}<input placeholder="${h({tatca:'Tìm theo tên, số điện thoại hoặc mã KH…',
-      ten:'Gõ tên khách…', ma:'Gõ mã khách, vd: RG-12', sdt:'Gõ số điện thoại…'}[kieu])}" value="${h(App.state.custQ)}"
-    oninput="App.state.custQ=this.value;App.render();const i=document.querySelector('.searchbar input');i.focus();i.setSelectionRange(i.value.length,i.value.length)">
-    <select onchange="App.state.custTim=this.value;App.render()" style="flex:none;width:auto;border:0;background:transparent;font-weight:600">
-      ${[['tatca','Tất cả'],['ma','Mã KH'],['ten','Tên'],['sdt','Số điện thoại']].map(([k,l]) =>
-        `<option value="${k}"${kieu===k?' selected':''}>${l}</option>`).join('')}</select></div>
+  <div class="card mb"><div class="card-b">
+    <div class="searchbar" style="margin:0">${IC.search}
+      <input id="oTimKH" placeholder="Gõ rồi bấm Tìm — hoặc nhấn Enter" value="${h(App.state.custQ)}"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();Cust.timNgay()}"></div>
+    <div class="check-row" style="margin-top:10px;align-items:center">
+      <span class="sub-line">Tìm theo:</span>
+      ${[['ma','Mã KH'],['ten','Tên'],['sdt','Số điện thoại']].map(([k,l]) =>
+        `<label><input type="checkbox" id="tim_${k}"${o[k]?' checked':''}> ${l}</label>`).join('')}
+      <span class="spacer"></span>
+      <button class="btn primary" onclick="Cust.timNgay()">${IC.search} Tìm kiếm</button>
+      ${App.state.custQ ? `<button class="btn" onclick="Cust.boTim()">Bỏ tìm</button>` : ''}
+    </div>
+    ${App.state.custQ ? `<div class="sub-line" style="margin-top:8px">Đang tìm <b>${h(App.state.custQ)}</b>
+      theo ${h(['ma','ten','sdt'].filter(k=>o[k]).map(k=>({ma:'mã KH',ten:'tên',sdt:'số điện thoại'})[k]).join(', ') || 'không mục nào')}
+      — ra <b>${filtered.length}</b> hồ sơ.</div>` : ''}
+  </div></div>
   <div class="card mb"><div class="tbl-wrap"><table>
     <thead><tr>${th('name','Khách hàng')}${th('code','Mã')}${th('kham','Khám gần nhất')}${Perm.can('thu')?th('no','Công nợ',1):''}</tr></thead>
     <tbody id="custRows">${rows}</tbody></table></div></div>
@@ -3013,7 +3046,9 @@ const Treat = {
       if (o) o.value = rang;
       if (dichVu) {
         const d = f.querySelector('[name="name"]');
-        if (d) { d.value = dichVu; if (typeof Treat.chonDV === 'function') Treat.chonDV(dichVu); }
+        /* onServicePick mới là chỗ điền đơn giá và nhóm dịch vụ — gán thẳng .value
+           thì không có sự kiện nào chạy, nên giá để trống và người ta phải tự gõ lại. */
+        if (d) { d.value = dichVu; Treat.onServicePick(dichVu, d); }
       }
       if (typeof Treat.tinhLai === 'function') Treat.tinhLai();
     }, 60);
@@ -4900,7 +4935,8 @@ const Tooth = {
   moTa(n, t){
     if (!t || (t.s === 'ok' && !t.nn && !t.loDo && !t.sung && !(t.mat||[]).length && !t.note)) return 'Bình thường';
     const p = [];
-    const ten = TEN_TT[t.s] || (TOOTH_STATES.find(x => x[0] === t.s) || [])[1] || '';
+    const ten = (t.s === 'khac' && (t.sKhac || '').trim())
+      || TEN_TT[t.s] || (TOOTH_STATES.find(x => x[0] === t.s) || [])[1] || '';
     if (t.s && t.s !== 'ok') p.push(ten);
     if ((t.mat||[]).length) p.push((t.s === 'filled' ? 'trám mặt ' : 'mặt ') + t.mat.map(k=>this.tenMat(k).replace(/^Mặt /,'').toLowerCase()).join(', '));
     if (t.nn && TT_CO_NOI_NHA.includes(t.s)) p.push('đã nội nha');
@@ -6482,7 +6518,7 @@ const QT = {
       {b:'tlt_giao', t:'Giao hàm',                       tt:10, p10:1,   p30:3},
       {b:'tlt_dau',  t:'Chỉnh đau',                      tt:5,  p10:0.5, p30:1.5},
      ]},
-    {id:'qt_noinha', ten:'Nội nha', nhom:['Điều trị tủy'], truLab:false, labGY:[],
+    {id:'qt_noinha', ten:'Điều trị tủy', nhom:['Điều trị tủy'], truLab:false, labGY:[],
      buoc:[
       {b:'nn_tv',      t:'Tư vấn',                                  tt:10, p10:1,   p30:3},
       {b:'nn_ssot',    t:'Sửa soạn ống tuỷ (SSOT)',                 tt:50, p10:5,   p30:15},
