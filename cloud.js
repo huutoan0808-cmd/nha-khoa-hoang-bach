@@ -14,7 +14,14 @@ const Cloud = {
     if ((!this.cfg || !this.cfg.url) && typeof CLINIC_CFG !== 'undefined' && CLINIC_CFG && CLINIC_CFG.u && CLINIC_CFG.k) {
       this.cfg = {url: String(CLINIC_CFG.u).replace(/\/+$/, ''), key: String(CLINIC_CFG.k).trim()};
     }
-    try { this.session = JSON.parse(localStorage.getItem(this.CFG_KEY + '_ss') || 'null'); } catch(e){ this.session = null; }
+    /* Phiên đăng nhập để trong sessionStorage chứ không phải localStorage: ĐÓNG app
+       là mất phiên, mở lại phải đăng nhập. localStorage thì sống hàng tháng — máy ở
+       quầy lễ tân ai ngồi vào cũng mở thẳng được hồ sơ bệnh nhân.
+       Tải lại trang (F5) vẫn giữ nguyên phiên, chỉ đóng hẳn mới mất. */
+    try { this.session = JSON.parse(sessionStorage.getItem(this.CFG_KEY + '_ss') || 'null'); } catch(e){ this.session = null; }
+    /* Dọn phiên cũ bản trước còn sót lại trong localStorage, không thì người đang
+       đăng nhập sẵn sẽ ở lại mãi và cài đặt này coi như không có tác dụng. */
+    try { localStorage.removeItem(this.CFG_KEY + '_ss'); } catch(e){}
   },
   /* Dọn URL người dùng dán: bỏ khoảng trắng, bỏ dấu / cuối,
      và tự nhận ra khi dán nhầm link trang quản trị Supabase */
@@ -32,8 +39,12 @@ const Cloud = {
   },
   saveSession(s){
     this.session = s;
-    if (s) localStorage.setItem(this.CFG_KEY + '_ss', JSON.stringify(s));
-    else localStorage.removeItem(this.CFG_KEY + '_ss');
+    /* sessionStorage có thể ném lỗi ở chế độ ẩn danh — hỏng chỗ này mà chặn đăng nhập
+       thì tệ hơn nhiều so với việc phiên không được ghi nhớ. */
+    try {
+      if (s) sessionStorage.setItem(this.CFG_KEY + '_ss', JSON.stringify(s));
+      else sessionStorage.removeItem(this.CFG_KEY + '_ss');
+    } catch(e){}
   },
   configured(){ return !!(this.cfg && this.cfg.url && this.cfg.key); },
   loggedIn(){ return !!(this.session && this.session.access_token); },

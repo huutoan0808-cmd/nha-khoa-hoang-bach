@@ -553,6 +553,7 @@ const NAV = [
   {id:'customers', label:'Khách hàng', icon:IC.cust},
   {id:'calendar', label:'Lịch hẹn', icon:IC.cal},
   {id:'treatment', label:'Điều trị', icon:IC.treat},
+  {id:'benhan', label:'Bệnh án điện tử', icon:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h4"/></svg>'},
   {id:'inventory', label:'Kho', icon:IC.inv},
   {id:'work', label:'Công việc', icon:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 7-7"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>'},
   {id:'hr', label:'Nhân sự', icon:IC.hr},
@@ -831,10 +832,10 @@ const ROLES = {
   trothu: {label:'Trợ thủ'}, letan: {label:'Lễ tân'},
 };
 const ROLE_TABS = {
-  quanly: ['dashboard','customers','calendar','treatment','work','inventory','hr','lab','reports','settings'],
-  bacsi:  ['dashboard','customers','calendar','treatment','work','inventory','hr','lab'],
-  trothu: ['dashboard','customers','calendar','treatment','work','inventory','hr','lab'],
-  letan:  ['dashboard','customers','calendar','treatment','work','inventory','hr','lab'],
+  quanly: ['dashboard','customers','calendar','treatment','benhan','work','inventory','hr','lab','reports','settings'],
+  bacsi:  ['dashboard','customers','calendar','treatment','benhan','work','inventory','hr','lab'],
+  trothu: ['dashboard','customers','calendar','treatment','benhan','work','inventory','hr','lab'],
+  letan:  ['dashboard','customers','calendar','treatment','benhan','work','inventory','hr','lab'],
 };
 /* Đoán vai trò từ chức danh cũ nếu chưa đặt rõ */
 const guessRole = txt => {
@@ -2359,7 +2360,6 @@ SCREENS.customers = () => {
     </div>`;
     })()}
     ${Cal.cardKhachHTML(c)}
-    ${HoSo.cardHTML(c)}
     ${Photo.cardHTML(c)}
     <div class="card">
       <div class="card-h"><h2>Quá trình điều trị</h2><span class="hint">bấm vào một dòng để sửa</span><span class="spacer"></span>
@@ -2380,6 +2380,55 @@ SCREENS.customers = () => {
     <thead><tr>${th('name','Khách hàng')}${th('code','Mã')}${th('kham','Khám gần nhất')}${Perm.can('thu')?th('no','Công nợ',1):''}</tr></thead>
     <tbody id="custRows">${rows}</tbody></table></div></div>
   ${detail}`;
+};
+
+/* ---------- Bệnh án điện tử ----------
+   Tách hẳn khỏi màn Khách hàng. Giấy tờ bệnh án là việc làm theo đợt và theo hạn nộp,
+   không phải việc mỗi lần khách tới; để chung thì ngày nào mở hồ sơ cũng thấy năm cái
+   phiếu "Chưa lập" nằm giữa đường, trong khi lễ tân chỉ cần ghi tình trạng răng.
+   Dữ liệu vẫn là một: màn này đọc thẳng hồ sơ và đợt điều trị đã nhập bên kia. */
+SCREENS.benhan = () => {
+  const cid = App.state.custSel || (db.customers[0] && db.customers[0].id);
+  const c = custById(cid);
+  if (!c) return `<div class="page-head"><h1>Bệnh án điện tử</h1>
+    <div class="sub">Chưa có khách hàng nào — thêm ở tab Khách hàng trước.</div></div>`;
+  App.chonKhach(cid);
+  const r = c.record || {};
+  const ds = Dot.cua(c.id);
+  const ep = Dot.dangChon(c);
+  const thieu = [];
+  if (!r.lyDo) thieu.push('lý do đến khám');
+  if (!r.chanDoan) thieu.push('chẩn đoán');
+  if (!c.dob) thieu.push('ngày sinh');
+  if (!fullAddr(c)) thieu.push('địa chỉ');
+  if (!c.cccd) thieu.push('số CCCD');
+
+  return `
+  <div class="page-head"><h1>Bệnh án điện tử</h1><span class="spacer"></span>
+    <span style="min-width:300px;flex:2;max-width:620px">${Combo.html('cbBACust','baCust', custLabel(c), custOptions(),
+      'Chọn khách: gõ tên, SĐT hoặc mã KH', HoSo.onCustPick)}</span>
+    <div class="sub">Hồ sơ giấy tờ theo mẫu Bộ Y tế — điền trên máy rồi in khổ A4</div></div>
+
+  <div class="card mb"><div class="card-b" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+    <div style="flex:1;min-width:220px">
+      <b style="font-size:15px">${h(c.name)}</b> <span class="sub-line">· ${h(c.code||'')}</span><br>
+      <span class="sub-line">${fmtD(c.dob)||'chưa có ngày sinh'} · ${h(c.phone||'chưa có SĐT')} · ${h(fullAddr(c)||'chưa có địa chỉ')}</span>
+    </div>
+    <button class="btn small" onclick="App.chonKhach('${c.id}');App.go('customers')">Sửa thông tin hành chính →</button>
+  </div></div>
+
+  ${thieu.length ? `<div class="note-block warn-block mb">Bệnh án còn thiếu <b>${h(thieu.join(', '))}</b>.
+    Những mục này lấy từ hồ sơ khách và phần khám — điền bên tab <b>Khách hàng</b> thì ở đây tự có.</div>`
+   : `<div class="note-block mb">Đủ các mục bắt buộc của bệnh án. Dữ liệu lấy thẳng từ hồ sơ khách và đợt điều trị, không nhập lại.</div>`}
+
+  ${ds.length > 1 ? `<div class="card mb"><div class="card-h"><h2>Đợt điều trị</h2>
+      <span class="hint">bốn phiếu dưới thuộc về đợt đang chọn</span></div>
+    <div class="card-b"><select onchange="Dot.chon(this.value);App.render()">
+      ${ds.map(e => `<option value="${e.id}"${ep && ep.id === e.id ? ' selected' : ''}>${
+        fmtD(e.tuNgay)}${e.denNgay ? ' – ' + fmtD(e.denNgay) : ''}${e.lyDo ? ' · ' + h(e.lyDo) : ''}</option>`).join('')}
+    </select></div></div>` : ''}
+
+  ${HoSo.cardHTML(c)}`;
 };
 
 /* ---------- Lịch hẹn ---------- */
@@ -3674,6 +3723,15 @@ const HoSo = {
       <button class="btn small" onclick="PDF.hop('${c.id}')" title="Kết xuất toàn bộ hồ sơ ra một tệp PDF">Xuất PDF</button>
       <button class="btn small" onclick="LT.hop('${c.id}')" title="Xuất tệp XML/JSON theo chuẩn trao đổi của Bộ Y tế">Kết xuất liên thông</button></div>
       <div class="card-b">${this.DS.map(dong).join('')}</div></div>`;
+  },
+
+  /* Đổi khách ở ô tìm trên đầu màn Bệnh án điện tử */
+  onCustPick(v, inp){
+    const c = (db.customers || []).find(x => custLabel(x) === v)
+           || (db.customers || []).find(x => Combo.norm(custLabel(x)) === Combo.norm(v));
+    if (!c) return;
+    App.chonKhach(c.id);
+    App.render();
   },
 
   /* ---------- Hộp thoại điền ---------- */
