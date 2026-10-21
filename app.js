@@ -2428,6 +2428,8 @@ SCREENS.customers = () => {
     code: c => [codeNum(c), String(c.code||'')],
     name: c => [Combo.norm(c.name||'')],
     kham: c => [custLastVisit(c) || ''],
+    sdt:  c => [String(c.phone || '').replace(/\D/g, '') || '\uffff'],
+    diachi: c => [Combo.norm(fullAddr(c) || '\uffff')],
     no:   c => [custDebt(c)],
   };
   const lay = khoa[sx.k] || khoa.code;
@@ -2444,11 +2446,16 @@ SCREENS.customers = () => {
   const rows = list.map(c => {
     const debt = custDebt(c);
     const lastV = custLastVisit(c);
+    const dc = fullAddr(c);
     return `<tr class="clickable ${c.id===App.state.custSel?'sel-row':''}" onclick="Cust.pick('${c.id}')">
-      <td><span class="cell-who"><span class="avatar">${h(c.name.split(' ').slice(-1)[0].slice(0,2))}</span><span><b>${h(c.name)}</b><span>${h(c.phone||'')} · ${c.gender||''}${c.dob?', '+c.dob.slice(0,4):''}</span></span></span></td>
-      <td class="num">${h(c.code)}</td><td class="num">${lastV?fmtD(lastV):'—'}</td>
+      <td class="num"><b>${h(c.code||'—')}</b></td>
+      <td><span class="cell-who"><span class="avatar">${h(c.name.split(' ').slice(-1)[0].slice(0,2))}</span>
+        <span><b>${h(c.name)}</b><span>${h(c.gender||'')}${c.dob?(c.gender?', ':'')+c.dob.slice(0,4):''}${
+          lastV?' · khám '+fmtD(lastV):''}</span></span></span></td>
+      <td class="num">${h(c.phone||'—')}</td>
+      <td>${dc ? h(dc) : '<span class="sub-line">—</span>'}</td>
       ${Perm.can('thu') ? `<td class="r num" ${debt?'style="color:var(--danger);font-weight:600"':''}>${money(debt)}</td>` : ''}</tr>`;
-  }).join('') || '<tr><td colspan="4" class="sub-line">Không tìm thấy khách hàng.</td></tr>';
+  }).join('') || '<tr><td colspan="5" class="sub-line">Không tìm thấy khách hàng.</td></tr>';
 
   const c = custById(App.state.custSel);
   let detail = '';
@@ -2506,7 +2513,7 @@ SCREENS.customers = () => {
       — ra <b>${filtered.length}</b> hồ sơ.</div>` : ''}
   </div></div>
   <div class="card mb"><div class="tbl-wrap"><table>
-    <thead><tr>${th('name','Khách hàng')}${th('code','Mã')}${th('kham','Khám gần nhất')}${Perm.can('thu')?th('no','Công nợ',1):''}</tr></thead>
+    <thead><tr>${th('code','Mã KH')}${th('name','Tên khách hàng')}${th('sdt','Số điện thoại')}${th('diachi','Địa chỉ')}${Perm.can('thu')?th('no','Công nợ',1):''}</tr></thead>
     <tbody id="custRows">${rows}</tbody></table></div></div>
   ${detail}`;
 };
