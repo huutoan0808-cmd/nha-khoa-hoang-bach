@@ -97,6 +97,7 @@ const TOOTH_STATES = [
   ['ok',      'Bình thường'],
   ['khac',    'Khác — tự ghi'],
   ['sau',     'Sâu răng'],
+  ['lunglay', 'Lung lay'],
   ['filled',  'Đã trám'],
   ['noinha',  'Đã nội nha'],
   ['crown',   'Răng sứ'],
@@ -133,6 +134,18 @@ const trangThaiMau = s => s === 'Hoàn tất' ? 'ok' : s === 'Đang điều tr�
    crownTS như cũ, nên sơ đồ, bản in và hồ sơ đã nhập không phải đổi gì. */
 /* "Sâu răng" là một mục lớn; nông hay sâu hay đã vỡ đến tủy là mức độ bên trong,
    hỏi riêng cho gọn danh sách. Lưu xuống vẫn là sauNong / sauSau / sauTuy. */
+/* Độ lung lay theo cách bảng nha chu vẫn ghi: I lắc ngang nhẹ, II lắc ngang rõ,
+   III lắc được cả theo chiều dọc — răng độ III thường là chỉ định nhổ. */
+const LL_MUC = [
+  ['ll1', 'Độ I — lắc ngang nhẹ (dưới 1mm)'],
+  ['ll2', 'Độ II — lắc ngang rõ (trên 1mm)'],
+  ['ll3', 'Độ III — lắc được cả chiều dọc'],
+];
+const laLungLay = s => s === 'lunglay' || s === 'll1' || s === 'll2' || s === 'll3';
+const oMucLungLay = sNay => `<div class="f full" id="oMucLL" style="display:${laLungLay(sNay) ? '' : 'none'}">
+  <label>Độ lung lay</label><div class="check-row">${LL_MUC.map(([k, l]) =>
+    `<label><input type="radio" name="mucLL" value="${k}"${(sNay === k || (!laLungLay(sNay) && k === 'll1')) ? ' checked' : ''}> ${l}</label>`).join('')}</div></div>`;
+
 const SAU_MUC = [
   ['sauNong', 'Sâu ngà nông'],
   ['sauSau',  'Sâu ngà sâu'],
@@ -158,13 +171,14 @@ const TEN_TT = {
   ok: 'Bình thường', filled: 'Đã trám', noinha: 'Đã nội nha', thaolap: 'Răng tháo lắp',
   implant: 'Implant', missing: 'Mất răng', chanrang: 'Chân răng',
   sauNong: 'Sâu ngà nông', sauSau: 'Sâu ngà sâu', sauTuy: 'Sâu đến tủy',
+  ll1: 'Lung lay độ I', ll2: 'Lung lay độ II', ll3: 'Lung lay độ III',
   crownKL: 'Răng sứ kim loại', crownTS: 'Răng sứ toàn sứ',
   caries: 'Sâu răng', pontic: 'Nhịp cầu',
 };
 const laSu = s => s === 'crown' || s === 'crownKL' || s === 'crownTS';
 const laSau = s => s === 'sau' || s === 'sauNong' || s === 'sauSau' || s === 'sauTuy' || s === 'caries';
 /* Giá trị hiện trong ô chọn mục lớn — mọi mức sâu gom về 'sau', mọi loại sứ về 'crown' */
-const sChon = s => laSu(s) ? 'crown' : (laSau(s) ? 'sau' : s);
+const sChon = s => laSu(s) ? 'crown' : (laSau(s) ? 'sau' : (laLungLay(s) ? 'lunglay' : s));
 
 /* Ba mức sâu răng — dùng ở chỗ nào chỉ cần biết "răng này đang sâu" */
 const TT_SAU = ['sau', 'sauNong', 'sauSau', 'sauTuy', 'caries'];
@@ -1398,6 +1412,7 @@ const Cust = {
       <div class="f full"><label>${st ? 'Tình trạng sau điều trị' : 'Tình trạng hiện tại'}</label>
         ${oTinhTrang(t.s, ' onchange="Cust.toothMatHien(this.value)"', t.sKhac)}</div>
       ${oMucSau(t.s)}
+      ${oMucLungLay(t.s)}
       ${oLoaiSu(t.s, t)}
 
       <div class="f full" id="oMat" style="display:${!kh && TT_CO_MAT.includes(t.s)?'':'none'}">
@@ -1711,6 +1726,8 @@ const Cust = {
       chop.style.display = duoc ? '' : 'none';
       if (!duoc) chop.querySelectorAll('input').forEach(x => x.checked = false);
     }
+    const ll = document.getElementById('oMucLL');
+    if (ll) ll.style.display = (v === 'lunglay') ? '' : 'none';
     const tg = document.getElementById('oTuGhi');
     if (tg) { tg.style.display = (v === 'khac') ? '' : 'none'; if (v === 'khac') tg.focus(); }
     /* Mất răng, implant, tháo lắp thì không có tủy để nội nha — giấu luôn ô tick,
@@ -1732,6 +1749,7 @@ const Cust = {
     const d = Object.fromEntries(new FormData(f).entries());
     /* Mục lớn trong ô chọn -> lưu xuống mức/loại cụ thể đã tick */
     if (d.s === 'sau') d.s = ((f.querySelector('[name="mucSau"]:checked') || {}).value) || 'sauNong';
+    if (d.s === 'lunglay') d.s = ((f.querySelector('[name="mucLL"]:checked') || {}).value) || 'll1';
     if (d.s === 'crown') d.s = ((f.querySelector('[name="loaiSu"]:checked') || {}).value) || 'crownTS';
     const mat = TT_CO_MAT.includes(d.s)
       ? [...f.querySelectorAll('[name="mat"]:checked')].map(x => x.value) : [];
@@ -1996,6 +2014,7 @@ const Cust = {
       <div class="f full"><label>Tình trạng</label>
         ${oTinhTrang(s0, ' onchange="Cust.toothMatHien(this.value)"')}</div>
       ${oMucSau(s0)}
+      ${oMucLungLay(s0)}
       ${oLoaiSu(s0, null)}
       <div class="f full" id="oMat" style="display:${TT_CO_MAT.includes(s0)?'':'none'}">
         <label>Mặt răng (áp cho mọi răng đã chọn)</label>
@@ -2033,6 +2052,7 @@ const Cust = {
     const ds = (App.state.rangChon || []).slice().sort((a,b)=>a-b);
     const d = Object.fromEntries(new FormData(f).entries());
     if (d.s === 'sau') d.s = ((f.querySelector('[name="mucSau"]:checked') || {}).value) || 'sauNong';
+    if (d.s === 'lunglay') d.s = ((f.querySelector('[name="mucLL"]:checked') || {}).value) || 'll1';
     if (d.s === 'crown') d.s = ((f.querySelector('[name="loaiSu"]:checked') || {}).value) || 'crownTS';
     const mat = TT_CO_MAT.includes(d.s)
       ? [...f.querySelectorAll('[name="mat"]:checked')].map(x => x.value) : [];
@@ -4916,6 +4936,13 @@ const Tooth = {
   deLen(n, t){
     if (!t) return '';
     const g = [];
+    /* Lung lay: hai mũi tên hai bên cho thấy răng lắc được; càng nặng càng đậm.
+       Không tô kín mặt răng vì răng lung lay vẫn có thể lành lặn, chỉ là mất bám. */
+    if (laLungLay(t.s)) {
+      const d = t.s === 'll3' ? 3.2 : t.s === 'll2' ? 2.4 : 1.6;
+      g.push(`<path d="M5 16h-3M2 16l2.5-2M2 16l2.5 2M27 16h3M30 16l-2.5-2M30 16l-2.5 2"
+        stroke="var(--warn)" stroke-width="${d}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`);
+    }
     if (t.s === 'missing')  g.push(`<line x1="3" y1="3" x2="29" y2="29" stroke="var(--muted)" stroke-width="2.5"/><line x1="29" y1="3" x2="3" y2="29" stroke="var(--muted)" stroke-width="2.5"/>`);
     if (t.s === 'crownKL' && !t.nhipCau) g.push(`<rect x="2" y="2" width="28" height="28" rx="4" fill="none" stroke="var(--ink2)" stroke-width="2.5"/><path d="M4 10h24M4 16h24M4 22h24" stroke="var(--ink2)" stroke-width="1.4" opacity=".5"/>`);
     if (t.s === 'crownTS' && !t.nhipCau) g.push(`<rect x="2" y="2" width="28" height="28" rx="4" fill="none" stroke="var(--accent-ink)" stroke-width="2.5"/>`);
@@ -5050,6 +5077,7 @@ const Tooth = {
       <span><i class="lg-nc"></i>Nhịp cầu (răng sứ treo)</span>
       <span><i class="lg-cr"></i>Chân răng còn sót</span>
       <span><i class="lg-mat"></i>Mất răng</span>
+      <span><i style="background:var(--warn)"></i>↔ Lung lay (mũi tên càng đậm càng nặng)</span>
       <span><i class="lg-lodo"></i>Lỗ dò</span>
       <span><i class="lg-sung"></i>Sưng đáy hành lang</span>
     </div>
