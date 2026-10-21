@@ -1328,7 +1328,18 @@ const Cust = {
   toothClick(n, lop){
     lop = lop || 'teeth';
     if (App.state.rangChon) { this.chonRang(n); return; }
-    const c = custById(App.state.custSel); if (!c) return;
+    /* Sơ đồ chỉ để CHỌN răng. Bấm lần nữa vào răng đang mở thì đóng khung lại. */
+    App.state.rangMo = (App.state.rangMo === n) ? null : n;
+    App.render();
+    setTimeout(() => { const o = document.getElementById('oRangGhi');
+      if (o) o.scrollIntoView({block:'nearest', behavior:'smooth'}); }, 0);
+  },
+  dongRang(){ App.state.rangMo = null; App.render(); },
+  /* Khung ghi cho một răng — trước đây là nội dung của hộp thoại, nay vẽ thẳng
+     xuống dưới sơ đồ nên trả về HTML thay vì tự bật hộp thoại. */
+  rangFormHTML(c, n, lop){
+    lop = lop || 'teeth';
+    if (!c) return '';
     const kh = lop === 'teethKH', st = lop === 'teethST';
     const hienTai = (c.teeth||{})[n];
     /* Trên sơ đồ kế hoạch, răng chưa có kế hoạch thì lấy sẵn tình trạng bên sơ đồ
@@ -1339,8 +1350,7 @@ const Cust = {
       || ((kh || st) && hienTai ? Object.assign({}, hienTai, kh ? {dichVu: ''} : {})
                                 : {s:'ok', mat:[], note:''});
     const mat = t.mat || [];
-    App.modal('Răng ' + n + (Tooth.hamTren(n)?' · hàm trên':' · hàm dưới') + (Tooth.benPhai(n)?' bên phải':' bên trái')
-      + (kh ? ' — SƠ ĐỒ KẾ HOẠCH' : st ? ' — SAU ĐIỀU TRỊ' : ''), `
+    return `
     ${st ? `<div class="ba-muc"><b>Lịch sử điều trị răng ${n}</b>
         <span class="sub-line">gom từ hạng mục điều trị và diễn biến có nhắc R${n}</span></div>
       ${Cust.lichSuRangHTML(c, n)}
@@ -1385,10 +1395,42 @@ const Cust = {
         chọn "Răng sứ" mà vẫn tick được nội nha, sơ đồ hiện cả hai.</div>`}
       <div class="form-actions full">
         ${(c[lop]||{})[n]?`<button type="button" class="btn danger" onclick="Cust.toothXoa(${n},'${lop}')">Xóa đánh dấu</button><span class="spacer"></span>`:''}
-        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+        <button type="button" class="btn" onclick="Cust.dongRang()">Đóng</button>
         ${kh?`<button type="button" class="btn" onclick="Cust.rangSangDieuTri(${n})">Lưu &amp; đưa vào điều trị →</button>`:''}
         <button class="btn primary">Lưu</button></div>
-    </form>`);
+    </form>`;
+  },
+
+  /* ---------- Thanh ba bước của màn khách hàng ---------- */
+  BUOC_KH: [
+    ['hanhchinh', '1. Thông tin hành chính'],
+    ['kham',      '2. Khám & chẩn đoán'],
+    ['kehoach',   '3. Lập kế hoạch điều trị'],
+    ['sau',       'Sau điều trị'],
+  ],
+  LOP_BUOC: {kham:'teeth', kehoach:'teethKH', sau:'teethST'},
+  buocTabsHTML(buoc){
+    return `<div class="subtabs">${this.BUOC_KH.map(([k, l]) =>
+      `<button class="subtab ${buoc === k ? 'active' : ''}" onclick="Cust.doiBuoc('${k}')">${h(l)}</button>`).join('')}</div>`;
+  },
+  doiBuoc(k){
+    App.state.buocKH = k;
+    App.state.rangMo = null;
+    App.state.rangChon = null;
+    App.render();
+  },
+  /* Khối nằm ngay dưới sơ đồ: chưa chọn răng thì chỉ nhắc cách dùng */
+  oGhiRangHTML(c, lop){
+    const n = App.state.rangMo;
+    if (App.state.rangChon) return '';
+    if (!n) return `<div class="note-block" id="oRangGhi" style="margin-top:14px">
+      <b>Bấm vào một răng trên sơ đồ</b> để ghi cho răng đó — khung nhập hiện ngay tại đây,
+      sơ đồ vẫn nằm nguyên phía trên để đối chiếu với các răng bên cạnh.</div>`;
+    const vt = (Tooth.hamTren(n) ? 'hàm trên' : 'hàm dưới') + (Tooth.benPhai(n) ? ' bên phải' : ' bên trái');
+    return `<div class="card mb" id="oRangGhi" style="margin-top:14px;border-color:var(--accent)">
+      <div class="card-h"><h2>Răng ${n}</h2><span class="hint">${h(vt)}</span><span class="spacer"></span>
+        <button class="btn small" onclick="Cust.dongRang()">Đóng</button></div>
+      <div class="card-b">${this.rangFormHTML(c, n, lop)}</div></div>`;
   },
   /* Hàm khung là chuyện của CẢ HÀM, không phải của một cái răng — nhưng chỉ hỏi
      khi răng đang được đánh dấu là răng tháo lắp, vì ngoài lúc đó ra hỏi cũng vô nghĩa.
@@ -1491,7 +1533,7 @@ const Cust = {
   },
   /* Lưu răng rồi tạo luôn hạng mục điều trị từ dịch vụ đã chọn */
   rangSangDieuTri(n){
-    const f = document.querySelector('#modalBody form');
+    const f = document.querySelector('#oRangGhi form') || document.querySelector('#modalBody form');
     if (!f) return;
     const ten = ((f.querySelector('[name="dichVu"]')||{}).value || '').trim();
     if (!ten) { App.toast('Chọn dịch vụ sẽ làm trước đã'); return; }
@@ -1586,7 +1628,7 @@ const Cust = {
       if (lop === 'teethST') c[lop][n].tay = 1;
     }
     this.luuHamKhung(f, c, lop, [n]);
-    save(); App.closeModal(); App.render();
+    save(); App.render();
     App.toast('Đã lưu răng ' + n
       + (lop === 'teethKH' ? ' (kế hoạch) ✓' : lop === 'teethST' ? ' (sau điều trị) ✓' : ' ✓'));
   },
@@ -1594,7 +1636,8 @@ const Cust = {
     lop = lop || 'teeth';
     const c = custById(App.state.custSel);
     if (c[lop]) delete c[lop][n];
-    save(); App.closeModal(); App.render(); App.toast('Đã xóa đánh dấu răng ' + n);
+    App.state.rangMo = null;
+    save(); App.render(); App.toast('Đã xóa đánh dấu răng ' + n);
   },
   /* Hàm khung là chuyện của cả hàm, không gắn vào răng nào */
   hamKhung(lop){
@@ -2240,8 +2283,12 @@ SCREENS.customers = () => {
     if (c.allergy) tags.push(`<span class="pill danger">⚕ ${h(c.allergy)}</span>`);
     const debt = custDebt(c); if (debt) tags.push(`<span class="pill warn">Công nợ ${money(debt)}</span>`);
     if (r.chanDoan) tags.push(`<span class="pill info">${h(icdName(r.chanDoan))}</span>`);
+    const buoc = App.state.buocKH || 'hanhchinh';
+    if (Cust.LOP_BUOC[buoc]) App.state.lopRang = Cust.LOP_BUOC[buoc];
     detail = `
     ${QuyTrinhKham.thanh(c)}
+    ${Cust.buocTabsHTML(buoc)}
+    ${buoc !== 'hanhchinh' ? '' : `
     <div class="card mb" id="custDetail">
       <div class="card-h"><h2>Hồ sơ: ${h(c.name)}</h2><span class="hint">${h(c.code)}</span><span class="spacer"></span>
         <button class="btn small" onclick="Cust.form('${c.id}')">Sửa hồ sơ</button>
@@ -2262,7 +2309,9 @@ SCREENS.customers = () => {
         <div class="check-row" style="margin-top:8px">${tags.join(' ')}</div>
       </div>
     </div>
-    ${(() => {
+    ${Cal.cardKhachHTML(c)}
+    ${Photo.cardHTML(c)}`}
+    ${buoc === 'hanhchinh' ? '' : (() => {
       const lop = App.state.lopRang || 'teeth';
       const coKH = !!(Object.keys(c.teethKH||{}).length || c.hamKhungKH);
       const coST = !!(Object.keys(c.teethST||{}).length || c.hamKhungST);
@@ -2300,10 +2349,7 @@ SCREENS.customers = () => {
         ${sauDT ? `<button class="btn small primary" onclick="Cust.dungST()">Dựng lại từ hạng mục đã hoàn tất</button>
           ${coST?`<button class="btn small danger" onclick="Cust.xoaST()">Xóa sơ đồ</button>`:''}` : ''}</div>
       <div class="card-b">
-        <div class="subtabs">${BUOC.map(b => `
-          <button class="subtab ${b.k === lop ? 'active' : ''}" onclick="Cust.doiLopRang('${b.k}')">
-            ${b.xong ? '✓ ' : ''}${b.ten}</button>`).join('')}</div>
-        <div class="sub-line" style="margin:-6px 0 12px">${h((BUOC.find(b => b.k === lop) || {}).mo || '')}</div>
+        <div class="sub-line" style="margin:0 0 12px">${h((BUOC.find(b => b.k === lop) || {}).mo || '')}</div>
 
         ${lop === 'teeth' ? `<div class="note-block mb">Bấm vào từng răng để ghi <b>tình trạng lúc mới đến khám</b>:
           sâu mặt nào, đã trám, răng sứ, mất răng, lỗ dò… Đây là sơ đồ gốc, hai bước sau đều dựa vào nó
@@ -2325,6 +2371,7 @@ SCREENS.customers = () => {
               keHoach ? 'Thêm dịch vụ cho' : 'Ghi tình trạng cho'} ${App.state.rangChon.length} răng</button>
             <button class="btn small" onclick="Cust.batChonNhieu()">Thoát chọn nhiều</button></div></div>` : ''}
         ${Tooth.hamHTML(c, lop)}
+        ${Cust.oGhiRangHTML(c, lop)}
         ${keHoach ? '' : Cust.khoiNhaChu(c, lop)}
         ${Tooth.tomTatHTML(c, lop)}
         ${keHoach ? (() => {
@@ -2359,8 +2406,6 @@ SCREENS.customers = () => {
       </div>
     </div>`;
     })()}
-    ${Cal.cardKhachHTML(c)}
-    ${Photo.cardHTML(c)}
     <div class="card">
       <div class="card-h"><h2>Quá trình điều trị</h2><span class="hint">bấm vào một dòng để sửa</span><span class="spacer"></span>
         <button class="btn small" onclick="Cust.visitForm('','${c.id}')">${IC.plus} Thêm diễn biến</button></div>
@@ -4755,7 +4800,7 @@ const Tooth = {
       /* Sơ đồ sau điều trị: nhấn răng nào đã từng được làm gì đó */
       const khac = (lop === 'teethKH' && !!(t && t.dichVu))
         || (lop === 'teethST' && Cust.lichSuRang(c, n).length > 0);
-      const dangChon = (App.state.rangChon || []).includes(n);
+      const dangChon = (App.state.rangChon || []).includes(n) || App.state.rangMo === n;
       return `<button class="tooth ${co?'co-van-de':''} ${khac?'doi-theo-kh':''} ${dangChon?'dang-chon':''}"
         onclick="Cust.toothClick(${n},'${lop}')" title="Răng ${n} — ${h(this.moTa(n,t))}">
         <span class="tooth-svg">${this.svg(n,t)}${this.deLen(n,t)}</span>
