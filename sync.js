@@ -255,6 +255,38 @@ const Sync = {
   },
 
   /* ---------- Chạy đồng bộ ---------- */
+  /* ---------- Tự đồng bộ ----------
+     Trước đây chỉ đồng bộ lúc mở app và khi bấm nút ⟳. Lễ tân nhập xong khách mới thì
+     máy bác sĩ không thấy gì cho tới khi có người bấm nút hoặc tải lại trang — cả buổi
+     mỗi máy ngồi trên một bản dữ liệu khác nhau. */
+  TU_DONG_MS: 60000,           /* định kỳ kéo về */
+  CHO_SAU_KHI_LUU_MS: 4000,    /* gõ xong một lúc mới đẩy, khỏi đẩy theo từng phím */
+  _hen: null, _timer: null,
+  /* Đang gõ dở thì hoãn: run() gọi App.render() vẽ lại cả màn hình, chữ đang gõ trong
+     khung ghi răng bay sạch. Hộp thoại nằm ngoài #mainArea nên không sao. */
+  dangGo(){
+    const a = document.activeElement;
+    return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.closest('#mainArea'));
+  },
+  khoiDongTuDong(){
+    if (this._timer) return;
+    this._timer = setInterval(() => {
+      if (!document.hidden && !this.dangGo()) this.run(true);
+    }, this.TU_DONG_MS);
+    /* Quay lại tab sau khi làm việc khác thì kéo về ngay, đừng đợi hết chu kỳ */
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && !this.busy) this.run(true);
+    });
+  },
+  /* Gọi sau mỗi lần lưu. Gom nhiều lần lưu liên tiếp thành một lần đẩy.
+     Bỏ qua khi đang đồng bộ, vì pull/push cũng gọi save() — không thì nó tự hẹn
+     lại chính mình mãi không dứt. */
+  hen(){
+    if (this.busy || !Cloud.configured() || !Cloud.loggedIn()) return;
+    clearTimeout(this._hen);
+    this._hen = setTimeout(() => { if (!this.dangGo()) this.run(true); }, this.CHO_SAU_KHI_LUU_MS);
+  },
+
   async run(quiet){
     if (!Cloud.configured() || !Cloud.loggedIn() || this.busy) return null;
     /* Chưa mở khóa thì trong bộ nhớ đang là dữ liệu rỗng — đẩy lên là ghi đè bảng
@@ -280,7 +312,7 @@ const Sync = {
       this.snapshot();
       save(); this.lastAt = Date.now();
       if (!quiet) App.toast(`Đồng bộ xong ✓ (thêm ${r.added}, cập nhật ${r.updated}${r.removed?', xóa '+r.removed:''})`);
-      App.render();
+      if (!quiet || r.added || r.updated || r.removed) App.render();
       return r;
     } catch(e){
       if (!quiet) App.toast('Đồng bộ lỗi: ' + e.message);

@@ -194,12 +194,14 @@ const oLoaiSu = (sNay, tNay) => `<div class="f full" id="oLoaiSu" style="display
     `<label><input type="radio" name="vaiSu" value="${k}"${((tNay && tNay.nhipCau ? 'nhipcau' : 'tru') === k) ? ' checked' : ''}> ${l}</label>`).join('')}</div></div>`;
 
 /* 6 mặt răng. k = mã lưu, l = tên đầy đủ, z = vùng vẽ trên sơ đồ */
+/* Mặt nhai đứng đầu vì sâu mặt nhai là thứ gặp nhiều nhất — để cuối thì lần nào
+   cũng phải rê mắt qua năm mặt khác mới tới. */
 const TOOTH_SURF = [
+  ['NH', 'Mặt nhai',  'nhai'],
   ['G',  'Mặt gần',   'gan'],
   ['X',  'Mặt xa',    'xa'],
   ['N',  'Mặt ngoài', 'ngoai'],
   ['T',  'Mặt trong', 'trong'],
-  ['NH', 'Mặt nhai',  'nhai'],
   ['C',  'Cổ răng',   'co'],
 ];
 const APPT_STATUS = ['Chờ xác nhận','Đã xác nhận','Đang điều trị','Hoàn tất','Hủy'];
@@ -271,6 +273,8 @@ function save() {
   /* Ghi vết trước khi lưu: quet() so dữ liệu với bản chụp lần trước rồi thêm dòng
      vào db.vet, nên phải chạy trước khi đóng gói db xuống localStorage. */
   if (typeof Vet !== 'undefined') { try { Vet.quet(); } catch(e){} }
+  /* Hẹn đẩy lên đám mây — gom nhiều lần lưu liên tiếp thành một lần */
+  if (typeof Sync !== 'undefined' && Sync.hen) { try { Sync.hen(); } catch(e){} }
   const chuoi = JSON.stringify(db);
   if (typeof Mahoa !== 'undefined' && Mahoa.bat()) { Mahoa.ghi(chuoi); return; }
   try {
@@ -1325,8 +1329,18 @@ const Cust = {
     }, 0);
   },
 
-  toothClick(n, lop){
+  toothClick(n, lop, ev){
     lop = lop || 'teeth';
+    /* Giữ Ctrl (hoặc ⌘) bấm từng răng, giữ Shift bấm răng cuối để lấy cả dải —
+       khỏi phải vào nút "Chọn nhiều răng" trước rồi mới bấm được. */
+    if (ev && (ev.ctrlKey || ev.metaKey || ev.shiftKey)) {
+      ev.preventDefault();
+      if (!App.state.rangChon) App.state.rangChon = [];
+      App.state.rangMo = null;
+      if (ev.shiftKey && App.state.rangCuoi != null) this.chonDai(App.state.rangCuoi, n);
+      else this.chonRang(n);
+      return;
+    }
     if (App.state.rangChon) { this.chonRang(n); return; }
     /* Sơ đồ chỉ để CHỌN răng. Bấm lần nữa vào răng đang mở thì đóng khung lại. */
     App.state.rangMo = (App.state.rangMo === n) ? null : n;
@@ -1365,18 +1379,7 @@ const Cust = {
         ${oTinhTrang(t.s, ' onchange="Cust.toothMatHien(this.value)"')}</div>
       ${oMucSau(t.s)}
       ${oLoaiSu(t.s, t)}
-      ${(kh || lop === 'teeth') ? `<div class="f full"><label>Chẩn đoán</label>
-        ${Combo.html('cbRangDX','chanDoan', icdName((lop === 'teeth' ? ((c.teethKH||{})[n]||{}).chanDoan : t.chanDoan) || '')||'',
-          Cust.icdHopVoi(t.s, hienTai),
-          'Gõ tên bệnh hoặc mã ICD', null, 'Mã hợp với tình trạng răng được xếp lên đầu; gõ để tra cả bảng ICD.')}</div>
-      <div class="f full"><label>Dịch vụ điều trị</label>
-        ${Combo.html('cbRangDV','dichVu', (lop === 'teeth' ? ((c.teethKH||{})[n]||{}).dichVu : t.dichVu) || '',
-          Svc.goiY(1), 'Gõ tên dịch vụ, vd: boc su, noi nha',
-          null, 'Gợi ý lấy từ bảng giá phòng khám, kèm giá. Lưu xong bấm "Đưa vào điều trị" để tạo hạng mục.')}</div>
-      <div class="f full"><label>Dịch vụ gợi ý cho tình trạng trên</label>
-        <div class="check-row" id="dvGoiY" data-rang="${n}">${Cust.dvHopVoi(t.s, hienTai).map(x =>
-          `<button type="button" class="btn small" onclick="Combo.pick('cbRangDV',this.dataset.v)" data-v="${h(x)}">${h(x)}</button>`).join('')
-          || '<span class="sub-line">Chọn kế hoạch ở ô trên để thấy gợi ý.</span>'}</div></div>` : ''}
+
       <div class="f full" id="oMat" style="display:${!kh && TT_CO_MAT.includes(t.s)?'':'none'}">
         <label>Mặt răng (chọn được nhiều mặt)</label>
         <div class="check-row">${TOOTH_SURF.map(([k,l])=>
@@ -1393,6 +1396,14 @@ const Cust = {
         <label><input type="checkbox" name="loDo"${t.loDo?' checked':''}> Lỗ dò</label>
         <label><input type="checkbox" name="sung"${t.sung?' checked':''}> Sưng đáy hành lang</label></div></div>
       <div class="f full" style="display:${kh?'none':''}"><label>Ghi chú</label><input name="note" value="${h(t.note||'')}" placeholder="Vd: sâu ngà sâu, còn ê buốt…"></div>
+      ${(kh || lop === 'teeth') ? `<div class="f full"><label>Chẩn đoán</label>
+        ${Combo.html('cbRangDX','chanDoan', icdName((lop === 'teeth' ? ((c.teethKH||{})[n]||{}).chanDoan : t.chanDoan) || '')||'',
+          Cust.icdHopVoi(t.s, hienTai),
+          'Gõ tên bệnh hoặc mã ICD', null, 'Mã hợp với tình trạng răng được xếp lên đầu; gõ để tra cả bảng ICD.')}</div>
+      <div class="f full"><label>Dịch vụ điều trị</label>
+        ${Combo.html('cbRangDV','dichVu', (lop === 'teeth' ? ((c.teethKH||{})[n]||{}).dichVu : t.dichVu) || '',
+          Svc.goiY(1), 'Gõ tên dịch vụ, vd: boc su, noi nha',
+          null, 'Gợi ý lấy từ bảng giá phòng khám, kèm giá. Lưu xong bấm "Đưa vào điều trị" để tạo hạng mục.')}</div>` : ''}
       ${kh ? '' : `<div class="note-block full">Nội nha để riêng vì răng <b>đã nội nha rồi bọc sứ</b> là chuyện thường —
         chọn "Răng sứ" mà vẫn tick được nội nha, sơ đồ hiện cả hai.</div>`}
       <div class="form-actions full">
@@ -1525,7 +1536,8 @@ const Cust = {
     if (App.state.rangChon) return '';
     if (!n) return `<div class="note-block" id="oRangGhi" style="margin-top:14px">
       <b>Bấm vào một răng trên sơ đồ</b> để ghi cho răng đó — khung nhập hiện ngay tại đây,
-      sơ đồ vẫn nằm nguyên phía trên để đối chiếu với các răng bên cạnh.</div>`;
+      sơ đồ vẫn nằm nguyên phía trên để đối chiếu với các răng bên cạnh.<br>
+      Nhiều răng cùng lúc: giữ <b>Ctrl</b> bấm từng răng, hoặc giữ <b>Shift</b> bấm răng cuối để lấy cả dải.</div>`;
     const vt = (Tooth.hamTren(n) ? 'hàm trên' : 'hàm dưới') + (Tooth.benPhai(n) ? ' bên phải' : ' bên trái');
     return `<div class="card mb" id="oRangGhi" style="margin-top:14px;border-color:var(--accent)">
       <div class="card-h"><h2>Răng ${n}</h2><span class="hint">${h(vt)}</span><span class="spacer"></span>
@@ -1678,15 +1690,6 @@ const Cust = {
       const duoc = TT_CO_CHOP.includes(v);
       chop.style.display = duoc ? '' : 'none';
       if (!duoc) chop.querySelectorAll('input').forEach(x => x.checked = false);
-    }
-    /* Trên sơ đồ kế hoạch: đổi kết quả mong muốn thì đổi luôn danh sách dịch vụ gợi ý */
-    const gy = document.getElementById('dvGoiY');
-    if (gy) {
-      const c = custById(App.state.custSel);
-      const n = +(gy.dataset.rang || 0);
-      const ds = this.dvHopVoi(v, c && (c.teeth||{})[n]);
-      gy.innerHTML = ds.map(x => `<button type="button" class="btn small" onclick="Combo.pick('cbRangDV',this.dataset.v)" data-v="${h(x)}">${h(x)}</button>`).join('')
-        || '<span class="sub-line">Không có dịch vụ nào hợp — cứ gõ tự do ở ô trên.</span>';
     }
     /* Mất răng, implant, tháo lắp thì không có tủy để nội nha — giấu luôn ô tick,
        và bỏ dấu đã tick kẻo lưu lại một thông tin vô lý. */
@@ -1932,7 +1935,24 @@ const Cust = {
     const ds = App.state.rangChon || [];
     const i = ds.indexOf(n);
     if (i < 0) ds.push(n); else ds.splice(i, 1);
-    App.state.rangChon = ds; App.render();
+    App.state.rangChon = ds;
+    App.state.rangCuoi = n;
+    App.render();
+  },
+  /* Cả dải răng giữa hai lần bấm, tính theo thứ tự in trên sơ đồ chứ không theo số —
+       số răng nhảy quãng giữa hai phần hàm (18…11 rồi 21…28). */
+  chonDai(tu, den){
+    const hang = Tooth.hamTren(tu) === Tooth.hamTren(den)
+      ? (Tooth.hamTren(tu) ? TEETH_UP : TEETH_DN) : null;
+    if (!hang) { this.chonRang(den); return; }
+    let a = hang.indexOf(tu), b = hang.indexOf(den);
+    if (a < 0 || b < 0) { this.chonRang(den); return; }
+    if (a > b) { const t = a; a = b; b = t; }
+    const ds = App.state.rangChon || [];
+    hang.slice(a, b + 1).forEach(x => { if (!ds.includes(x)) ds.push(x); });
+    App.state.rangChon = ds;
+    App.state.rangCuoi = den;
+    App.render();
   },
   /* Lập một hạng mục điều trị chung cho tất cả răng đang chọn */
   /* Bước 1 — ghi một tình trạng cho cả nhóm răng. Mất nhiều răng liền nhau,
@@ -1972,6 +1992,12 @@ const Cust = {
         <input name="note" placeholder="Vd: cao răng nhiều, nướu sưng đỏ…"></div>
       <div class="f full"><div class="check-row">
         <label><input type="checkbox" name="giuGhiChu" checked> Giữ ghi chú cũ của những răng đã có</label></div></div>
+      <div class="f full"><label>Chẩn đoán</label>
+        ${Combo.html('cbNhieuDX2','chanDoan', '', icdOptions(), 'Gõ tên bệnh hoặc mã ICD',
+          null, 'Ghi chung cho các răng vừa chọn. Bỏ trống cũng được.')}</div>
+      <div class="f full"><label>Dịch vụ điều trị</label>
+        ${Combo.html('cbNhieuDV2','dichVu', '', Svc.goiY(1), 'Gõ tên dịch vụ, vd: boc su, tram',
+          null, 'Chọn thì mỗi răng được ghi một dòng kế hoạch. Bỏ trống thì chỉ ghi tình trạng.')}</div>
       <div class="form-actions full">
         <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
         <button class="btn primary">Ghi cho ${ds.length} răng</button></div>
@@ -2001,11 +2027,20 @@ const Cust = {
         chanRang: d.s === 'thaolap' && !!f.querySelector('[name="chanRang"]:checked'),
         nhipCau: laSu(d.s) && ((f.querySelector('[name="vaiSu"]:checked')||{}).value === 'nhipcau')};
     });
+    /* Chẩn đoán và dịch vụ chảy sang sơ đồ KẾ HOẠCH, y như khi ghi từng răng một */
+    const dv = (d.dichVu || '').trim(), icd = icdCode((d.chanDoan || '').trim());
+    if (dv || icd) {
+      c.teethKH = c.teethKH || {};
+      ds.forEach(n => {
+        const nen = c.teethKH[n] || Object.assign({}, c.teeth[n] || {s: d.s, mat: []});
+        c.teethKH[n] = Object.assign({}, nen, {s: d.s, mat, nn, dichVu: dv, chanDoan: icd});
+      });
+    }
     this.luuHamKhung(f, c, 'teeth', ds);
     c._up = Date.now();
     App.state.rangChon = null;
     save(); App.closeModal(); App.render();
-    App.toast('Đã ghi tình trạng cho ' + ds.length + ' răng ✓');
+    App.toast('Đã ghi cho ' + ds.length + ' răng ✓' + (dv ? ' — đã thêm vào kế hoạch' : ''));
   },
 
   keHoachNhieu(){
@@ -2353,11 +2388,16 @@ const Cust = {
 
 SCREENS.customers = () => {
   const q = Combo.norm(App.state.custQ);
-  /* Tìm theo tên, số điện thoại hoặc mã KH */
-  const filtered = !q ? db.customers.slice() : db.customers.filter(c =>
-    Combo.norm(c.name).includes(q)
-    || (c.phone||'').replace(/\D/g,'').includes(q.replace(/\D/g,'')) && /\d/.test(q)
-    || Combo.norm(c.code||'').includes(q));
+  const kieu = App.state.custTim || 'tatca';
+  /* Dò theo đúng loại đã chọn. Gõ "36" mà để chế độ tất cả thì ra cả khách tên có
+     số 36 lẫn số điện thoại chứa 36 — chọn đúng loại cho gọn. */
+  const soHoa = x => String(x || '').replace(/\D/g, '');
+  const khopTen = c => Combo.norm(c.name || '').includes(q);
+  const khopMa  = c => Combo.norm(c.code || '').includes(q);
+  const khopSdt = c => soHoa(q) && soHoa(c.phone).includes(soHoa(q));
+  const loc = {ten: khopTen, ma: khopMa, sdt: khopSdt,
+               tatca: c => khopTen(c) || khopMa(c) || khopSdt(c)}[kieu] || (() => true);
+  const filtered = !q ? db.customers.slice() : db.customers.filter(loc);
   /* Sắp xếp theo cột đang chọn, bấm lại tiêu đề cột thì đảo chiều */
   const sx = App.state.custSort || {k:'code', d:1};
   const codeNum = c => { const m = String(c.code||'').match(/(\d+)/); return m ? +m[1] : Infinity; };
@@ -2426,8 +2466,12 @@ SCREENS.customers = () => {
     <button class="btn" onclick="Importer.anhForm()">${IC.cam} Nhập từ ảnh chụp</button>
     <button class="btn primary" onclick="Cust.form()">${IC.plus} Thêm khách hàng</button>
     <div class="sub">${db.customers.length} hồ sơ · thông tin hành chính theo mẫu BA-18</div></div>
-  <div class="searchbar">${IC.search}<input placeholder="Tìm theo tên, số điện thoại, mã KH..." value="${h(App.state.custQ)}"
-    oninput="App.state.custQ=this.value;App.render();const i=document.querySelector('.searchbar input');i.focus();i.setSelectionRange(i.value.length,i.value.length)"></div>
+  <div class="searchbar">${IC.search}<input placeholder="${h({tatca:'Tìm theo tên, số điện thoại hoặc mã KH…',
+      ten:'Gõ tên khách…', ma:'Gõ mã khách, vd: RG-12', sdt:'Gõ số điện thoại…'}[kieu])}" value="${h(App.state.custQ)}"
+    oninput="App.state.custQ=this.value;App.render();const i=document.querySelector('.searchbar input');i.focus();i.setSelectionRange(i.value.length,i.value.length)">
+    <select onchange="App.state.custTim=this.value;App.render()" style="flex:none;width:auto;border:0;background:transparent;font-weight:600">
+      ${[['tatca','Tất cả'],['ma','Mã KH'],['ten','Tên'],['sdt','Số điện thoại']].map(([k,l]) =>
+        `<option value="${k}"${kieu===k?' selected':''}>${l}</option>`).join('')}</select></div>
   <div class="card mb"><div class="tbl-wrap"><table>
     <thead><tr>${th('name','Khách hàng')}${th('code','Mã')}${th('kham','Khám gần nhất')}${Perm.can('thu')?th('no','Công nợ',1):''}</tr></thead>
     <tbody id="custRows">${rows}</tbody></table></div></div>
@@ -2807,8 +2851,8 @@ const Treat = {
       <div class="f full"><label>Dịch vụ</label>
         ${Combo.html('cbKHDv', 'dichVu', '', Svc.goiY(1), 'Gõ tên dịch vụ, vd: cao voi, tay trang', null,
           'Gợi ý lấy từ bảng giá phòng khám, kèm giá.')}</div>
-      <div class="f"><label>Răng (bỏ trống nếu không thuộc răng nào)</label>
-        <input name="rang" placeholder="Vd: 36"></div>
+      <div class="f full"><label>Chọn răng trên sơ đồ</label>
+        ${Tooth.chonSoHTML('rang')}</div>
       <div class="f full"><label>Chẩn đoán</label>
         ${Combo.html('cbKHDx', 'chanDoan', '', Cust.icdHopVoi('ok', null), 'Gõ tên bệnh hoặc mã ICD')}</div>
       <div class="note-block full">Dịch vụ gắn vào một răng thì nó hiện luôn trên <b>sơ đồ kế hoạch</b>.
@@ -2824,18 +2868,21 @@ const Treat = {
     const d = Object.fromEntries(new FormData(ev.target).entries());
     const ten = (d.dichVu || '').trim();
     if (!ten) { App.toast('Chưa chọn dịch vụ'); return; }
-    const n = parseInt(String(d.rang || '').replace(/\D/g, ''), 10);
+    const ds = String(d.rang || '').split(/[^0-9]+/).map(x => parseInt(x, 10)).filter(x => x > 0);
     const icd = icdCode((d.chanDoan || '').trim());
-    if (n) {
+    if (ds.length) {
       /* Gắn vào răng thì lấy sẵn tình trạng bên sơ đồ khám làm nền, giống khi bấm vào răng */
       c.teethKH = c.teethKH || {};
-      const nen = c.teethKH[n] || Object.assign({}, (c.teeth || {})[n] || {s: 'ok', mat: []});
-      c.teethKH[n] = Object.assign({}, nen, {dichVu: ten, chanDoan: icd});
+      ds.forEach(n => {
+        const nen = c.teethKH[n] || Object.assign({}, (c.teeth || {})[n] || {s: 'ok', mat: []});
+        c.teethKH[n] = Object.assign({}, nen, {dichVu: ten, chanDoan: icd});
+      });
     } else {
       c.keHoachKhac = c.keHoachKhac || [];
       c.keHoachKhac.push({id: uid(), dichVu: ten, chanDoan: icd});
     }
-    save(); App.closeModal(); App.render(); App.toast('Đã thêm vào kế hoạch ✓');
+    save(); App.closeModal(); App.render();
+    App.toast('Đã thêm vào kế hoạch ✓' + (ds.length > 1 ? ' (' + ds.length + ' răng)' : ''));
   },
   khBo(rang, id){
     const c = custById(App.state.treatCust || App.state.custSel); if (!c) return;
@@ -4909,7 +4956,7 @@ const Tooth = {
         || (lop === 'teethST' && Cust.lichSuRang(c, n).length > 0);
       const dangChon = (App.state.rangChon || []).includes(n) || App.state.rangMo === n;
       return `<button class="tooth ${co?'co-van-de':''} ${khac?'doi-theo-kh':''} ${dangChon?'dang-chon':''}"
-        onclick="Cust.toothClick(${n},'${lop}')" title="Răng ${n} — ${h(this.moTa(n,t))}">
+        onclick="Cust.toothClick(${n},'${lop}',event)" title="Răng ${n} — ${h(this.moTa(n,t))}">
         <span class="tooth-svg">${this.svg(n,t)}${this.deLen(n,t)}</span>
         <span class="tooth-no num">${n}</span></button>`;
     }).join('');
@@ -4917,6 +4964,27 @@ const Tooth = {
       <div class="arch" style="margin-bottom:10px">${hang(TEETH_UP.slice(0,8))}<span class="gap-mid"></span>${hang(TEETH_UP.slice(8))}</div>
       <div class="arch">${hang(TEETH_DN.slice(0,8))}<span class="gap-mid"></span>${hang(TEETH_DN.slice(8))}</div>
       <div class="arch-lb"><span>Hàm dưới · phải bệnh nhân</span><span>trái bệnh nhân</span></div>`;
+  },
+  /* Lưới chọn số răng cho các hộp thoại không gắn với sơ đồ của một khách cụ thể
+     (vd: thêm dịch vụ vào kế hoạch). Bấm để chọn / bỏ chọn, có thể chọn nhiều răng. */
+  chonSoHTML(ten){
+    const hang = ds => ds.map(n => `<button type="button" class="btn small chon-rang" data-n="${n}"
+      onclick="Tooth.chonSo(this,'${ten}')" style="min-width:38px">${n}</button>`).join('');
+    const d = 'display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:4px 0';
+    return `<input type="hidden" name="${ten}" value="">
+      <div style="${d}">${hang(TEETH_UP.slice(0,8))}<span style="width:14px"></span>${hang(TEETH_UP.slice(8))}</div>
+      <div style="${d}">${hang(TEETH_DN.slice(0,8))}<span style="width:14px"></span>${hang(TEETH_DN.slice(8))}</div>
+      <div class="combo-hint">Đang chọn: <b id="soRangDaChon">chưa chọn răng nào</b> —
+        bấm lần nữa để bỏ chọn. Không chọn răng nào thì dịch vụ tính cho cả hàm.</div>`;
+  },
+  chonSo(btn, ten){
+    btn.classList.toggle('primary');
+    const f = btn.closest('form'); if (!f) return;
+    const ds = [...f.querySelectorAll('.chon-rang.primary')].map(b => +b.dataset.n).sort((a, b) => a - b);
+    const o = f.querySelector('[name="' + ten + '"]');
+    if (o) o.value = ds.join(', ');
+    const nhan = f.querySelector('#soRangDaChon');
+    if (nhan) nhan.textContent = ds.length ? ds.map(n => 'R' + n).join(', ') : 'chưa chọn răng nào';
   },
   tomTatHTML(c, lop){
     const {dong, khung, note} = this.tomTat(c, lop);
@@ -8030,6 +8098,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   /* Có kết nối sẵn thì lặng lẽ đồng bộ khi mở app */
   if (Cloud.configured() && Cloud.loggedIn()) setTimeout(() => { Sync.run(true).then(() => Att.sync()); }, 800);
+  /* Từ nay máy nào nhập gì thì máy khác thấy trong vòng một phút, khỏi bấm nút ⟳ */
+  if (typeof Sync !== 'undefined') Sync.khoiDongTuDong();
   /* Sao lưu: đọc trạng thái để vẽ đúng ô trong Cài đặt, rồi chụp bản của ngày hôm
      nay nếu chưa có. Để chậm một nhịp cho màn hình hiện ra trước. */
   setTimeout(() => {
