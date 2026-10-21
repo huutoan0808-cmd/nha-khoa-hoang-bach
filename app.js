@@ -1358,7 +1358,7 @@ const Cust = {
         ${Combo.html('cbRangDX','chanDoan', icdName(t.chanDoan||'')||'', Cust.icdHopVoi(t.s, hienTai),
           'Gõ tên bệnh hoặc mã ICD', null, 'Mã hợp với tình trạng răng được xếp lên đầu; gõ để tra cả bảng ICD.')}</div>
       <div class="f full"><label>Kế hoạch điều trị</label>
-        ${Combo.html('cbRangDV','dichVu', t.dichVu||'', Svc.goiYTen(), 'Gõ tên dịch vụ, vd: boc su, noi nha',
+        ${Combo.html('cbRangDV','dichVu', t.dichVu||'', Svc.goiY(1), 'Gõ tên dịch vụ, vd: boc su, noi nha',
           null, 'Gợi ý lấy từ bảng giá phòng khám. Lưu xong bấm "Đưa vào điều trị" để tạo hạng mục.')}</div>
       <div class="f full"><label>Dịch vụ gợi ý cho tình trạng trên</label>
         <div class="check-row" id="dvGoiY" data-rang="${n}">${Cust.dvHopVoi(t.s, hienTai).map(x =>
@@ -1863,7 +1863,7 @@ const Cust = {
         ${Combo.html('cbNhieuDX','chanDoan', '', icdOptions(), 'Gõ tên bệnh hoặc mã ICD',
           null, 'Ghi chung cho các răng vừa chọn.')}</div>
       <div class="f full"><label>Kế hoạch điều trị (dịch vụ)</label>
-        ${Combo.html('cbNhieuDV','dichVu', '', Svc.goiYTen(), 'Gõ tên dịch vụ, vd: boc su, tram',
+        ${Combo.html('cbNhieuDV','dichVu', '', Svc.goiY(1), 'Gõ tên dịch vụ, vd: boc su, tram',
           null, 'Gợi ý lấy từ bảng giá phòng khám.')}</div>
       <div class="f"><label>Giảm giá (%)</label><input type="number" name="giamPct" min="0" max="100" step="0.5" placeholder="0"></div>
       <div class="f"><label>Giảm thêm (₫)</label>${Tien.o('giamTien','')}</div>
@@ -2240,6 +2240,7 @@ SCREENS.customers = () => {
     const debt = custDebt(c); if (debt) tags.push(`<span class="pill warn">Công nợ ${money(debt)}</span>`);
     if (r.chanDoan) tags.push(`<span class="pill info">${h(icdName(r.chanDoan))}</span>`);
     detail = `
+    ${QuyTrinhKham.thanh(c)}
     <div class="card mb" id="custDetail">
       <div class="card-h"><h2>Hồ sơ: ${h(c.name)}</h2><span class="hint">${h(c.code)}</span><span class="spacer"></span>
         <button class="btn small" onclick="Cust.form('${c.id}')">Sửa hồ sơ</button>
@@ -2298,11 +2299,10 @@ SCREENS.customers = () => {
         ${sauDT ? `<button class="btn small primary" onclick="Cust.dungST()">Dựng lại từ hạng mục đã hoàn tất</button>
           ${coST?`<button class="btn small danger" onclick="Cust.xoaST()">Xóa sơ đồ</button>`:''}` : ''}</div>
       <div class="card-b">
-        <div class="quy-trinh">${BUOC.map((b, i) => `${i ? '<span class="qt-noi"></span>' : ''}
-          <button class="buoc ${b.k === lop ? 'dang' : ''} ${b.xong ? 'xong' : ''}" onclick="Cust.doiLopRang('${b.k}')">
-            <span class="buoc-so">${b.xong && b.k !== lop ? '✓' : b.so}</span>
-            <span class="buoc-chu"><b>${b.ten}</b><span class="buoc-mo">${h(b.mo)}</span></span>
-          </button>`).join('')}</div>
+        <div class="subtabs">${BUOC.map(b => `
+          <button class="subtab ${b.k === lop ? 'active' : ''}" onclick="Cust.doiLopRang('${b.k}')">
+            ${b.xong ? '✓ ' : ''}${b.ten}</button>`).join('')}</div>
+        <div class="sub-line" style="margin:-6px 0 12px">${h((BUOC.find(b => b.k === lop) || {}).mo || '')}</div>
 
         ${lop === 'teeth' ? `<div class="note-block mb">Bấm vào từng răng để ghi <b>tình trạng lúc mới đến khám</b>:
           sâu mặt nào, đã trám, răng sứ, mất răng, lỗ dò… Đây là sơ đồ gốc, hai bước sau đều dựa vào nó
@@ -2419,8 +2419,11 @@ const Cal = {
       : isoAdd(this.khoang(App.state.calDate,'thang').den, 1);
     App.render();
   },
-  form(id){
-    const a = id ? db.appointments.find(x=>x.id===id) : {date:App.state.calDate, time:'09:00', dur:30, status:'Chờ xác nhận'};
+  /* cid: đặt lịch sẵn cho một khách — dùng khi bấm bước "Hẹn lần sau" ở thanh quy trình */
+  form(id, cid){
+    const a = id ? db.appointments.find(x=>x.id===id)
+                 : {date:App.state.calDate || todayISO(), time:'09:00', dur:30,
+                    status:'Chờ xác nhận', customerId: cid || ''};
     const labOpts = db.labs.filter(l=>!l.received).map(l=>`<option value="${l.id}"${a.labOrderId===l.id?' selected':''}>${h(l.type)} ${h(l.teeth)} — ${h(custById(l.customerId)?custById(l.customerId).name:'')}</option>`).join('');
     App.modal(id?'Sửa lịch hẹn':'Đặt lịch hẹn', `
     <form class="form-grid" onsubmit="Cal.save(event,'${id||''}')">
@@ -2436,7 +2439,7 @@ const Cal = {
         ${Combo.html('cbApptSvc','service', a.service||'', Svc.goiY(),
           'Gõ tên dịch vụ, vd: cao voi, implant', null,
           'Gợi ý lấy từ bảng giá phòng khám. Gõ tự do cũng được.')}</div>
-      <div class="f"><label>Bác sĩ</label><select name="doctorId">${db.staff.filter(s=>s.role.includes('Bác sĩ')).map(s=>`<option value="${s.id}"${a.doctorId===s.id?' selected':''}>${h(s.name)}</option>`).join('')}</select></div>
+      <div class="f"><label>Bác sĩ</label><select name="doctorId">${db.staff.filter(s=>(s.role||'').includes('Bác sĩ')).map(s=>`<option value="${s.id}"${a.doctorId===s.id?' selected':''}>${h(s.name)}</option>`).join('')}</select></div>
       <div class="f"><label>Trạng thái</label><select name="status">${APPT_STATUS.map(s=>`<option${a.status===s?' selected':''}>${s}</option>`).join('')}</select></div>
       <div class="f full"><label>Chờ hàng lab (nếu có)</label><select name="labOrderId"><option value="">— không —</option>${labOpts}</select></div>
       <div class="form-actions full">
@@ -2883,7 +2886,7 @@ const Treat = {
       <div class="f full"><label>Nội dung</label><input name="desc" required placeholder="Vd: Trả góp đợt 2 — bọc sứ R36"></div>
       <div class="f"><label>Số tiền (₫)</label>${Tien.o('amount', debt, 'required')}</div>
       <div class="f"><label>Hình thức</label><select name="method">${PAY_METHODS.map(m=>`<option>${m}</option>`).join('')}</select></div>
-      <div class="f"><label>Bác sĩ thực hiện</label><select name="doctorId">${db.staff.filter(s=>s.role.includes('Bác sĩ')).map(s=>`<option value="${s.id}">${h(s.name)}</option>`).join('')}</select></div>
+      <div class="f"><label>Bác sĩ thực hiện</label><select name="doctorId">${db.staff.filter(s=>(s.role||'').includes('Bác sĩ')).map(s=>`<option value="${s.id}">${h(s.name)}</option>`).join('')}</select></div>
       <div class="f"><label>Nhóm dịch vụ (tính hoa hồng)</label><select name="group">${SERVICE_GROUPS.concat(['Khác']).map(g=>`<option>${g}</option>`).join('')}</select></div>
       <div class="f"><label>Người thu tiền</label><select name="staffId">
         ${db.staff.filter(s=>s.active!==false).map(s=>{const me=Att.myStaff();
@@ -3038,6 +3041,7 @@ SCREENS.treatment = () => {
     </div>
     <button class="btn small" onclick="Cust.moHoSo('${c.id}')">Xem hồ sơ đầy đủ →</button>
   </div></div>
+  ${QuyTrinhKham.thanh(c)}
   <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
     <div class="card kpi"><div class="k-label">Tổng kế hoạch (đã duyệt)</div><div class="k-value num">${money(total)}</div><div class="k-note">${items.length} hạng mục · ${items.filter(t=>t.status==='Báo giá').length} đang báo giá</div></div>
     <div class="card kpi"><div class="k-label">Đã thanh toán</div><div class="k-value num" style="color:var(--ok)">${money(paid)}</div><div class="k-note">${total?Math.min(100,Math.round(paid/total*100)):0}% kế hoạch</div></div>
@@ -4497,6 +4501,81 @@ Object.assign(HoSo, {
    Gần–xa đổi bên theo phần hàm: răng bên phải bệnh nhân nằm nửa trái sơ đồ nên mặt
    gần (phía đường giữa) là phía PHẢI ô; bên trái thì ngược lại. Ngoài–trong đổi theo
    hàm trên / hàm dưới, đúng như nhìn vào miệng bệnh nhân. */
+/* ================= Thanh quy trình một lần khám =================
+   Sáu bước đúng theo trình tự ở ghế. Mỗi bước tự biết đã xong chưa bằng cách đọc
+   dữ liệu thật của khách, không bắt ai bấm "đánh dấu hoàn thành" — bắt bấm thì
+   người ta quên, rồi thanh này nói dối. Bấm vào một bước là nhảy thẳng tới đúng
+   chỗ làm việc đó. */
+const QuyTrinhKham = {
+  buoc(c){
+    const dt   = (db.treatments || []).filter(t => t.customerId === c.id);
+    const lam  = dt.filter(t => t.status !== 'Báo giá');
+    const r    = c.record || {};
+    const kho  = c.teeth || {};
+    const soRang = Object.keys(kho).filter(n => Tooth.moTa(n, kho[n]) !== 'Bình thường').length;
+    const khoKH  = c.teethKH || {};
+    const soKH   = Object.keys(khoKH).filter(n => khoKH[n] && khoKH[n].dichVu).length;
+    const xong   = lam.filter(t => t.status === 'Hoàn tất').length;
+    const dang   = lam.filter(t => t.status === 'Đang điều trị').length;
+    const no     = custDebt(c);
+    const soThu  = (db.receipts || []).filter(x => x.customerId === c.id).length;
+    const hen    = (db.appointments || []).filter(a => a.customerId === c.id
+                     && (a.date || '') >= todayISO() && !/hủy|không đến/i.test(a.status || '')).length;
+    return [
+      {k:'kham', so:1, ten:'Khám', xong: soRang > 0,
+       mo: soRang ? soRang + ' răng đã ghi' : 'ghi tình trạng răng'},
+      {k:'chandoan', so:2, ten:'Chẩn đoán', xong: !!r.chanDoan,
+       mo: r.chanDoan ? icdName(r.chanDoan) : 'chưa ghi trong bệnh án'},
+      {k:'kehoach', so:3, ten:'Kế hoạch điều trị', xong: dt.length > 0,
+       mo: dt.length ? dt.length + ' hạng mục' : (soKH ? soKH + ' răng có kế hoạch, chưa lập hạng mục' : 'thêm dịch vụ sẽ làm')},
+      {k:'dieutri', so:4, ten:'Điều trị', xong: lam.length > 0 && xong === lam.length,
+       mo: lam.length ? xong + '/' + lam.length + ' xong' + (dang ? ' · ' + dang + ' đang làm' : '') : 'chưa có hạng mục'},
+      {k:'thutien', so:5, ten:'Thu tiền', xong: soThu > 0 && !no,
+       mo: no ? 'còn nợ ' + money(no) : (soThu ? 'đã thu đủ' : 'chưa thu đồng nào')},
+      {k:'hen', so:6, ten:'Hẹn lần sau', xong: hen > 0,
+       mo: hen ? hen + ' lịch hẹn sắp tới' : 'chưa đặt'},
+    ];
+  },
+  /* Bước đang làm = bước chưa xong đầu tiên. Xong hết thì không tô bước nào. */
+  dangO(ds){ const i = ds.findIndex(b => !b.xong); return i < 0 ? null : ds[i].k; },
+  thanh(c){
+    if (!c) return '';
+    const ds = this.buoc(c), dang = this.dangO(ds);
+    const soXong = ds.filter(b => b.xong).length;
+    return `<div class="card mb"><div class="card-h"><h2>Quy trình khám</h2>
+      <span class="hint">bấm vào một bước để làm bước đó</span><span class="spacer"></span>
+      <span class="pill ${soXong === ds.length ? 'ok' : 'mutedp'}">${soXong}/${ds.length} bước</span></div>
+      <div class="card-b"><div class="quy-trinh">${ds.map((b, i) => `${i ? '<span class="qt-noi"></span>' : ''}
+        <button class="buoc ${b.k === dang ? 'dang' : ''} ${b.xong ? 'xong' : ''}"
+                onclick="QuyTrinhKham.di('${b.k}','${c.id}')">
+          <span class="buoc-so">${b.xong ? '✓' : b.so}</span>
+          <span class="buoc-chu"><b>${h(b.ten)}</b><span class="buoc-mo">${h(b.mo)}</span></span>
+        </button>`).join('')}</div></div></div>`;
+  },
+  /* Mỗi bước nhảy tới đúng chỗ đã có sẵn, không dựng màn hình mới */
+  di(k, cid){
+    App.chonKhach(cid);
+    if (k === 'kham' || k === 'kehoach') {
+      App.state.lopRang = (k === 'kham') ? 'teeth' : 'teethKH';
+      App.state.rangChon = null;
+      App.go('customers');
+      return;
+    }
+    if (k === 'chandoan') {
+      App.go('customers');
+      setTimeout(() => { try { HoSo.dien('ba18'); } catch(e){ App.toast('Không mở được bệnh án'); } }, 0);
+      return;
+    }
+    if (k === 'dieutri' || k === 'thutien') {
+      App.state.treatCust = cid;
+      App.go('treatment');
+      if (k === 'thutien') setTimeout(() => { try { Treat.payForm(); } catch(e){} }, 0);
+      return;
+    }
+    if (k === 'hen') Cal.form('', cid);
+  },
+};
+
 const Tooth = {
   hamTren(n){ const q = Math.floor(n/10); return q === 1 || q === 2; },
   benPhai(n){ const q = Math.floor(n/10); return q === 1 || q === 4; },   /* nửa trái sơ đồ */
@@ -6223,7 +6302,20 @@ const QT = {
   cua(t){
     if (!t) return null;
     if (t.qtId) { const q = this.boId(t.qtId); return (q && !q.an) ? q : null; }
+    /* Danh mục gán tay THẮNG nhóm dịch vụ. Nhổ răng khôn mọc lệch nằm trong nhóm
+       "Nhổ răng" nhưng ăn hoa hồng theo kỹ thuật Tiểu phẫu — đoán theo nhóm thì
+       không bao giờ ra đúng. Gán theo nhóm chỉ là lưới hứng cho phần còn lại. */
+    const ten = Combo.norm(t.name || '');
+    if (ten) {
+      const q = this.ds().find(x => (x.dv || []).some(y => Combo.norm(y) === ten));
+      if (q) return q;
+    }
     return this.ds().find(q => (q.nhom||[]).includes(t.group)) || null;
+  },
+  /* Danh mục nào đang thuộc kỹ thuật khác — để cảnh báo, một dịch vụ chỉ nên thuộc một */
+  chuCua(ten, tru){
+    const k = Combo.norm(ten);
+    return this.ds().find(x => x.id !== tru && (x.dv || []).some(y => Combo.norm(y) === k)) || null;
   },
   buocCua(q, b){ return q ? (q.buoc||[]).find(x => x.b === b) : null; },
   /* Tỷ lệ áp cho một người ở một bước. Tiền từng công đoạn dùng CHUNG cho cả phòng
@@ -6441,7 +6533,8 @@ const QT = {
       ${this.ds().length ? '' : '<div class="note-block warn-block mb">Chưa có kỹ thuật nào. Bấm <b>Thêm kỹ thuật</b> để tạo, không thì không tính được hoa hồng theo công đoạn.</div>'}
       ${this.ds().map(q => `<div class="rx mb"><div class="rx-head">
           <b>${h(q.ten)}</b> <span class="sub-line">${q.truLab?'· trừ tiền lab trước':''}
-          ${(q.nhom||[]).length?'· nhóm: '+h(q.nhom.join(', ')):'· chưa gắn nhóm dịch vụ'}</span>
+          ${(q.nhom||[]).length?'· nhóm: '+h(q.nhom.join(', ')):'· chưa gắn nhóm dịch vụ'}${
+          (q.dv||[]).length?' · '+q.dv.length+' danh mục riêng':''}</span>
           <span class="spacer"></span><span class="pill ${this.tongPct(q)>100?'danger':'mutedp'}">${this.tongPct(q)}%</span></div>
         <div class="card-b">${(q.buoc||[]).length ? `<div class="tbl-wrap"><table style="min-width:520px">
           <thead><tr><th>Công đoạn</th><th class="r">Tỷ trọng</th><th class="r">Lương 10%</th><th class="r">Lương 30%</th><th></th></tr></thead>
@@ -6586,8 +6679,34 @@ const QT = {
     save(); this.bang(); App.toast('Đã xóa');
   },
   /* Thêm mới hoặc sửa một kỹ thuật. Không truyền qid thì là thêm mới. */
+  _dvTam: [],
+  /* Danh sách danh mục đang sửa giữ tạm ở đây, chốt xuống q.dv lúc bấm Lưu */
+  dvThem(){
+    const o = document.querySelector('#cbQTDv .combo-input');
+    const ten = ((o || {}).value || '').trim();
+    if (!ten) { App.toast('Gõ tên dịch vụ trước đã'); return; }
+    if (this._dvTam.some(x => Combo.norm(x) === Combo.norm(ten))) { App.toast('Đã có trong danh sách'); return; }
+    this._dvTam.push(ten);
+    if (o) o.value = '';
+    this.veDv();
+  },
+  dvBo(i){ this._dvTam.splice(i, 1); this.veDv(); },
+  veDv(qid){
+    const o = document.getElementById('qtDvList'); if (!o) return;
+    o.innerHTML = this._dvTam.length
+      ? this._dvTam.map((x, i) => {
+          const chu = this.chuCua(x, qid || (this._dvQid || ''));
+          return `<span class="pill ${chu ? 'warn' : 'mutedp'}" style="margin:0 6px 6px 0;display:inline-block">
+            ${h(x)}${chu ? ' — đang thuộc ' + h(chu.ten) : ''}
+            <button type="button" class="link-btn" onclick="QT.dvBo(${i})">✕</button></span>`;
+        }).join('')
+      : '<span class="sub-line">Chưa gán danh mục nào — kỹ thuật này chỉ áp theo nhóm dịch vụ ở trên.</span>';
+  },
   qtForm(qid){
     const q = (qid && this.boId(qid)) || {};
+    this._dvTam = (q.dv || []).slice();
+    this._dvQid = qid || '';
+    setTimeout(() => this.veDv(qid), 0);
     App.modal((qid ? 'Sửa kỹ thuật — ' + q.ten : 'Thêm kỹ thuật'), `
     <form class="form-grid" onsubmit="QT.qtSave(event,'${qid||''}')">
       <div class="f full"><label>Tên kỹ thuật</label>
@@ -6600,6 +6719,14 @@ const QT = {
         }).join('')}</div>
         <div class="combo-hint">Một nhóm chỉ thuộc được một kỹ thuật. Tick vào nhóm đang thuộc kỹ thuật khác
           thì nhóm đó được chuyển hẳn sang đây.</div></div>
+      <div class="f full"><label>Danh mục riêng thuộc kỹ thuật này</label>
+        ${Combo.html('cbQTDv', '', '', Svc.goiY(1), 'Gõ tên dịch vụ rồi bấm Thêm…', null, '')}
+        <div class="form-actions" style="justify-content:flex-start;margin-top:6px">
+          <button type="button" class="btn small" onclick="QT.dvThem()">${IC.plus} Thêm danh mục</button></div>
+        <div id="qtDvList" style="margin-top:8px"></div>
+        <div class="combo-hint">Dùng khi một dịch vụ <b>không ăn theo nhóm của nó</b> — ví dụ
+          "Nhổ răng khôn mọc lệch" nằm trong nhóm Nhổ răng nhưng phải tính theo kỹ thuật Tiểu phẫu.
+          Danh mục gán ở đây <b>được ưu tiên hơn</b> cách gán theo nhóm.</div></div>
       <div class="f full"><div class="check-row">
         <label><input type="checkbox" name="truLab"${q.truLab?' checked':''}> Trừ tiền lab trước khi tính %</label></div>
         <div class="combo-hint">Bật cho phục hình sứ, tháo lắp — những món phải trả tiền cho labo.</div></div>
@@ -6616,9 +6743,18 @@ const QT = {
     if (!ten) { App.toast('Phải đặt tên kỹ thuật'); return; }
     const nhom = [...f.querySelectorAll('[name="nhom"]:checked')].map(x => x.value);
     const truLab = !!f.querySelector('[name="truLab"]:checked');
+    const dv = (this._dvTam || []).slice();
     let q = qid && this.boId(qid);
-    if (q) Object.assign(q, {ten, nhom, truLab});
-    else { q = {id: 'qt' + uid(), ten, nhom, truLab, labGY: [], buoc: []}; db.quyTrinh.push(q); }
+    if (q) Object.assign(q, {ten, nhom, truLab, dv});
+    else { q = {id: 'qt' + uid(), ten, nhom, truLab, dv, labGY: [], buoc: []}; db.quyTrinh.push(q); }
+    /* Một danh mục chỉ thuộc một kỹ thuật, cùng lý do với nhóm dịch vụ */
+    let goDV = 0;
+    this.ds().forEach(x => {
+      if (x.id === q.id) return;
+      const truoc = (x.dv || []).length;
+      x.dv = (x.dv || []).filter(y => !dv.some(z => Combo.norm(z) === Combo.norm(y)));
+      goDV += truoc - x.dv.length;
+    });
     /* cua() lấy kỹ thuật ĐẦU TIÊN khớp nhóm, nên để hai kỹ thuật cùng ôm một nhóm là
        hoa hồng chạy theo cái nào xếp trước — khó lần ra. Gỡ nhóm khỏi những cái kia. */
     let go = 0;
@@ -6630,7 +6766,7 @@ const QT = {
     });
     save(); this.bang();
     App.toast((qid ? 'Đã lưu kỹ thuật ✓' : 'Đã thêm kỹ thuật ✓')
-      + (go ? ' — đã chuyển ' + go + ' nhóm từ kỹ thuật khác sang' : ''));
+      + (go ? ' — chuyển ' + go + ' nhóm' : '') + (goDV ? ' — chuyển ' + goDV + ' danh mục' : ''));
   },
   qtDel(qid){
     const q = this.boId(qid); if (!q) return;
