@@ -1365,12 +1365,14 @@ const Cust = {
         ${oTinhTrang(t.s, ' onchange="Cust.toothMatHien(this.value)"')}</div>
       ${oMucSau(t.s)}
       ${oLoaiSu(t.s, t)}
-      ${kh ? `<div class="f full"><label>Chẩn đoán</label>
-        ${Combo.html('cbRangDX','chanDoan', icdName(t.chanDoan||'')||'', Cust.icdHopVoi(t.s, hienTai),
+      ${(kh || lop === 'teeth') ? `<div class="f full"><label>Chẩn đoán</label>
+        ${Combo.html('cbRangDX','chanDoan', icdName((lop === 'teeth' ? ((c.teethKH||{})[n]||{}).chanDoan : t.chanDoan) || '')||'',
+          Cust.icdHopVoi(t.s, hienTai),
           'Gõ tên bệnh hoặc mã ICD', null, 'Mã hợp với tình trạng răng được xếp lên đầu; gõ để tra cả bảng ICD.')}</div>
-      <div class="f full"><label>Kế hoạch điều trị</label>
-        ${Combo.html('cbRangDV','dichVu', t.dichVu||'', Svc.goiY(1), 'Gõ tên dịch vụ, vd: boc su, noi nha',
-          null, 'Gợi ý lấy từ bảng giá phòng khám. Lưu xong bấm "Đưa vào điều trị" để tạo hạng mục.')}</div>
+      <div class="f full"><label>Dịch vụ điều trị</label>
+        ${Combo.html('cbRangDV','dichVu', (lop === 'teeth' ? ((c.teethKH||{})[n]||{}).dichVu : t.dichVu) || '',
+          Svc.goiY(1), 'Gõ tên dịch vụ, vd: boc su, noi nha',
+          null, 'Gợi ý lấy từ bảng giá phòng khám, kèm giá. Lưu xong bấm "Đưa vào điều trị" để tạo hạng mục.')}</div>
       <div class="f full"><label>Dịch vụ gợi ý cho tình trạng trên</label>
         <div class="check-row" id="dvGoiY" data-rang="${n}">${Cust.dvHopVoi(t.s, hienTai).map(x =>
           `<button type="button" class="btn small" onclick="Combo.pick('cbRangDV',this.dataset.v)" data-v="${h(x)}">${h(x)}</button>`).join('')
@@ -1396,9 +1398,107 @@ const Cust = {
       <div class="form-actions full">
         ${(c[lop]||{})[n]?`<button type="button" class="btn danger" onclick="Cust.toothXoa(${n},'${lop}')">Xóa đánh dấu</button><span class="spacer"></span>`:''}
         <button type="button" class="btn" onclick="Cust.dongRang()">Đóng</button>
-        ${kh?`<button type="button" class="btn" onclick="Cust.rangSangDieuTri(${n})">Lưu &amp; đưa vào điều trị →</button>`:''}
+        ${(kh || lop === 'teeth')?`<button type="button" class="btn" onclick="Cust.rangSangDieuTri(${n})">Lưu &amp; đưa vào điều trị →</button>`:''}
         <button class="btn primary">Lưu</button></div>
     </form>`;
+  },
+
+  /* Thẻ sơ đồ răng — nay nằm ở tab Điều trị, trang "Khám · Chẩn đoán · Kế hoạch".
+     Tách ra khỏi màn Khách hàng để tab đó chỉ còn việc hành chính. */
+  soDoCardHTML(c){
+      const lop = App.state.lopRang || 'teeth';
+      const coKH = !!(Object.keys(c.teethKH||{}).length || c.hamKhungKH);
+      const coST = !!(Object.keys(c.teethST||{}).length || c.hamKhungST);
+      const keHoach = lop === 'teethKH', sauDT = lop === 'teethST';
+      const xongCount = (db.treatments||[]).filter(t => t.customerId === c.id
+        && t.status === 'Hoàn tất' && Tooth.rangCua(t).length).length;
+      /* Ba bước của một ca điều trị, đi theo đúng thứ tự công việc thật ở ghế:
+         khám ghi hiện trạng -> bàn với khách rồi vạch kế hoạch -> làm xong thì
+         chốt lại tình trạng mới. Trước đây ba cái này là ba tab ngang hàng nên
+         không ai biết nên bắt đầu từ đâu. */
+      const soHT = Object.keys(c.teeth || {}).filter(n => Tooth.moTa(n, c.teeth[n]) !== 'Bình thường').length;
+      const khoKH = c.teethKH || {};
+      const soKH = Object.keys(khoKH).filter(n => khoKH[n] && khoKH[n].dichVu).length;
+      const tienKH = Object.keys(khoKH).filter(n => khoKH[n] && khoKH[n].dichVu).reduce((t, n) => {
+        const dv = (db.services || []).find(x => Combo.norm(x.name || '') === Combo.norm(khoKH[n].dichVu));
+        return t + (dv ? (dv.price || 0) : 0);
+      }, 0);
+      const soST = Object.keys(c.teethST || {}).filter(n => Tooth.moTa(n, c.teethST[n]) !== 'Bình thường').length;
+
+      const BUOC = [
+        {k: 'teeth',   so: 1, ten: 'Tình trạng ban đầu',
+         mo: soHT ? soHT + ' răng đã ghi' : 'chưa ghi răng nào', xong: soHT > 0},
+        {k: 'teethKH', so: 2, ten: 'Kế hoạch điều trị',
+         mo: soKH ? soKH + ' răng · ' + money(tienKH) : 'chưa có kế hoạch', xong: soKH > 0},
+        {k: 'teethST', so: 3, ten: 'Tình trạng sau điều trị',
+         mo: soST ? soST + ' răng đã xong' : 'chưa có gì', xong: soST > 0},
+      ];
+      return `<div class="card mb">
+      <div class="card-h"><h2>Sơ đồ răng</h2>
+        <span class="hint">${sauDT ? 'nhấn vào răng để xem lịch sử điều trị của răng đó' : 'nhấn vào răng để ghi tình trạng'}</span><span class="spacer"></span>
+        ${sauDT ? '' : `<button class="btn small ${App.state.rangChon?'primary':''}" onclick="Cust.batChonNhieu()">
+            ${App.state.rangChon ? 'Xong chọn nhiều răng' : 'Chọn nhiều răng cùng lúc'}</button>`}
+        ${keHoach ? `<button class="btn small" onclick="Cust.chepSangKH()">Chép lại từ hiện trạng</button>
+          ${coKH?`<button class="btn small danger" onclick="Cust.xoaKH()">Xóa kế hoạch</button>`:''}` : ''}
+        ${sauDT ? `<button class="btn small primary" onclick="Cust.dungST()">Dựng lại từ hạng mục đã hoàn tất</button>
+          ${coST?`<button class="btn small danger" onclick="Cust.xoaST()">Xóa sơ đồ</button>`:''}` : ''}</div>
+      <div class="card-b">
+        <div class="sub-line" style="margin:0 0 12px">${h((BUOC.find(b => b.k === lop) || {}).mo || '')}</div>
+
+        ${lop === 'teeth' ? `<div class="note-block mb">Bấm vào từng răng để ghi <b>tình trạng lúc mới đến khám</b>:
+          sâu mặt nào, đã trám, răng sứ, mất răng, lỗ dò… Đây là sơ đồ gốc, hai bước sau đều dựa vào nó
+          và không sửa ngược lại nó.
+          ${App.state.rangChon ? '' : '<br>Nhiều răng <b>cùng một tình trạng</b> (mất nhiều răng, cao răng cả hàm) thì bấm <b>Chọn nhiều răng cùng lúc</b> ở góc trên.'}</div>` : ''}
+        ${keHoach ? `<div class="note-block mb">Bấm vào răng cần làm: ô <b>Tình trạng hiện tại</b> đã lấy sẵn từ bước 1,
+          bạn chỉ cần chọn <b>chẩn đoán</b> và <b>dịch vụ sẽ làm</b>.
+          ${App.state.rangChon ? '' : '<br>Làm <b>cùng một dịch vụ cho nhiều răng</b> (cầu răng, niềng, tháo lắp) thì bấm <b>Chọn nhiều răng cùng lúc</b> ở góc trên — phần mềm gộp thành một hạng mục có số lượng.'}</div>` : ''}
+        ${sauDT ? `<div class="note-block mb">Sơ đồ này ghi <b>tình trạng răng sau khi đã điều trị</b>.
+          Bấm <b>Dựng lại từ hạng mục đã hoàn tất</b> để phần mềm tự vẽ theo những dịch vụ đã xong
+          (${xongCount} hạng mục có ghi số răng), rồi bấm vào từng răng để xem <b>lịch sử điều trị</b> và sửa lại nếu cần.
+          Răng đã sửa tay thì lần dựng sau không bị ghi đè.</div>` : ''}
+        ${App.state.rangChon ? `<div class="note-block mb" style="border-color:var(--accent)">
+          Đang <b>chọn nhiều răng</b> — bấm vào từng răng để chọn hoặc bỏ chọn.
+          Đã chọn <b>${App.state.rangChon.length} răng</b>${App.state.rangChon.length?': '+App.state.rangChon.slice().sort((a,b)=>a-b).map(n=>'R'+n).join(', '):''}.
+          <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
+            <button class="btn small primary" ${App.state.rangChon.length?'':'disabled'}
+              onclick="${keHoach ? 'Cust.keHoachNhieu()' : 'Cust.khamNhieu()'}">${
+              keHoach ? 'Thêm dịch vụ cho' : 'Ghi tình trạng cho'} ${App.state.rangChon.length} răng</button>
+            <button class="btn small" onclick="Cust.batChonNhieu()">Thoát chọn nhiều</button></div></div>` : ''}
+        ${Tooth.hamHTML(c, lop)}
+        ${Cust.oGhiRangHTML(c, lop)}
+        ${keHoach ? '' : Cust.khoiNhaChu(c, lop)}
+        ${Tooth.tomTatHTML(c, lop)}
+        ${keHoach ? (() => {
+          const kho = c.teethKH || {};
+          const ds = Object.keys(kho).map(Number).filter(n => !isNaN(n) && kho[n] && kho[n].dichVu).sort((a,b)=>a-b);
+          const tong = ds.reduce((s, n) => {
+            const dv = (db.services||[]).find(x => Combo.norm(x.name||'') === Combo.norm(kho[n].dichVu));
+            return s + (dv ? (dv.price||0) : 0);
+          }, 0);
+          return `<div class="tooth-info" style="border-color:var(--accent)"><b>Kế hoạch điều trị:</b><br>
+            ${ds.length ? ds.map(n => `R${n}: ${h(Tooth.moTa(n, kho[n]))}${
+              kho[n].chanDoan ? ' · <i>' + h(icdName(kho[n].chanDoan)) + '</i>' : ''} → <b>${h(kho[n].dichVu)}</b>`).join('<br>')
+                        : 'Chưa răng nào có kế hoạch — bấm vào răng rồi chọn dịch vụ sẽ làm.'}
+            ${tong ? `<br><br>Tạm tính <b>${money(tong)}</b> cho ${ds.length} răng` : ''}</div>`;
+        })() : ''}
+        ${sauDT ? (() => {
+          const co = [];
+          TEETH_UP.concat(TEETH_DN).forEach(n => {
+            const ls = Cust.lichSuRang(c, n).filter(x => x.loai === 'dv');
+            if (ls.length) co.push({n, ls});
+          });
+          if (!co.length) return `<div class="tooth-info" style="border-color:var(--accent)">
+            <b>Lịch sử điều trị theo răng:</b><br>Chưa có hạng mục điều trị nào ghi số răng.
+            Vào tab <b>Điều trị</b>, mở từng hạng mục và điền ô <b>Răng</b> (vd: 36, 37).</div>`;
+          return `<div class="tooth-info" style="border-color:var(--accent)"><b>Lịch sử điều trị theo răng:</b><br>
+            ${co.map(x => `R${x.n}: ` + x.ls.map(v =>
+              `${h(v.ten)} <span class="sub-line">(${fmtD(v.ngay)}${v.status ? ' · ' + h(v.status) : ''}${
+                v.bs ? ' · ' + h(v.bs) : ''})</span>`).join(' → ')).join('<br>')}
+            <br><br><span class="sub-line">${co.length} răng đã được điều trị · bấm vào răng để xem chi tiết.</span></div>`;
+        })() : ''}
+        ${Tooth.chuThichHTML()}
+      </div>
+    </div>`;
   },
 
   /* ---------- Thanh ba bước của màn khách hàng ---------- */
@@ -1626,6 +1726,19 @@ const Cust = {
         chanDoan: icdCode((d.chanDoan||'').trim()), dv: cu.dv || []};
       /* Đánh dấu "sửa tay" để lần dựng lại sơ đồ sau điều trị không ghi đè */
       if (lop === 'teethST') c[lop][n].tay = 1;
+    }
+    /* Khám và lập kế hoạch nay làm trên cùng một khung, nên chẩn đoán và dịch vụ gõ ở
+       lớp "tình trạng ban đầu" phải chảy sang sơ đồ KẾ HOẠCH — đó mới là chỗ bảng kế
+       hoạch và hạng mục điều trị đọc tới. Tình trạng răng thì vẫn nằm ở lớp ban đầu. */
+    if (lop === 'teeth') {
+      const dv = (d.dichVu || '').trim(), icd = icdCode((d.chanDoan || '').trim());
+      if (dv || icd) {
+        c.teethKH = c.teethKH || {};
+        const nen = c.teethKH[n] || Object.assign({}, (c.teeth || {})[n] || {s: d.s, mat: []});
+        c.teethKH[n] = Object.assign({}, nen, {s: d.s, mat, nn, dichVu: dv, chanDoan: icd});
+      } else if (c.teethKH && c.teethKH[n]) {
+        c.teethKH[n].dichVu = ''; c.teethKH[n].chanDoan = '';
+      }
     }
     this.luuHamKhung(f, c, lop, [n]);
     save(); App.render();
@@ -2224,7 +2337,6 @@ const Cust = {
     }).join('');
   },
 
-
   del(id){
     const c = custById(id);
     if (!confirm('Xóa hồ sơ khách hàng "' + c.name + '"? Toàn bộ điều trị, phiếu thu, đơn thuốc liên quan sẽ bị xóa. Không thể hoàn tác.')) return;
@@ -2283,16 +2395,11 @@ SCREENS.customers = () => {
     if (c.allergy) tags.push(`<span class="pill danger">⚕ ${h(c.allergy)}</span>`);
     const debt = custDebt(c); if (debt) tags.push(`<span class="pill warn">Công nợ ${money(debt)}</span>`);
     if (r.chanDoan) tags.push(`<span class="pill info">${h(icdName(r.chanDoan))}</span>`);
-    const buoc = App.state.buocKH || 'hanhchinh';
-    if (Cust.LOP_BUOC[buoc]) App.state.lopRang = Cust.LOP_BUOC[buoc];
     detail = `
-    ${QuyTrinhKham.thanh(c)}
-    ${Cust.buocTabsHTML(buoc)}
-    ${buoc !== 'hanhchinh' ? '' : `
     <div class="card mb" id="custDetail">
       <div class="card-h"><h2>Hồ sơ: ${h(c.name)}</h2><span class="hint">${h(c.code)}</span><span class="spacer"></span>
         <button class="btn small" onclick="Cust.form('${c.id}')">Sửa hồ sơ</button>
-        <button class="btn small" onclick="App.chonKhach('${c.id}');App.go('treatment')">Điều trị &amp; thu tiền →</button>
+        <button class="btn small primary" onclick="App.chonKhach('${c.id}');Treat.trang='kham';App.go('treatment')">Khám · chẩn đoán · kế hoạch →</button>
         ${Perm.only('xoa', `<button class="btn small danger" onclick="Cust.del('${c.id}')">Xóa</button>`)}</div>
       <div class="card-b">
         <div class="form-grid" style="gap:8px 16px">
@@ -2310,107 +2417,7 @@ SCREENS.customers = () => {
       </div>
     </div>
     ${Cal.cardKhachHTML(c)}
-    ${Photo.cardHTML(c)}`}
-    ${buoc === 'hanhchinh' ? '' : (() => {
-      const lop = App.state.lopRang || 'teeth';
-      const coKH = !!(Object.keys(c.teethKH||{}).length || c.hamKhungKH);
-      const coST = !!(Object.keys(c.teethST||{}).length || c.hamKhungST);
-      const keHoach = lop === 'teethKH', sauDT = lop === 'teethST';
-      const xongCount = (db.treatments||[]).filter(t => t.customerId === c.id
-        && t.status === 'Hoàn tất' && Tooth.rangCua(t).length).length;
-      /* Ba bước của một ca điều trị, đi theo đúng thứ tự công việc thật ở ghế:
-         khám ghi hiện trạng -> bàn với khách rồi vạch kế hoạch -> làm xong thì
-         chốt lại tình trạng mới. Trước đây ba cái này là ba tab ngang hàng nên
-         không ai biết nên bắt đầu từ đâu. */
-      const soHT = Object.keys(c.teeth || {}).filter(n => Tooth.moTa(n, c.teeth[n]) !== 'Bình thường').length;
-      const khoKH = c.teethKH || {};
-      const soKH = Object.keys(khoKH).filter(n => khoKH[n] && khoKH[n].dichVu).length;
-      const tienKH = Object.keys(khoKH).filter(n => khoKH[n] && khoKH[n].dichVu).reduce((t, n) => {
-        const dv = (db.services || []).find(x => Combo.norm(x.name || '') === Combo.norm(khoKH[n].dichVu));
-        return t + (dv ? (dv.price || 0) : 0);
-      }, 0);
-      const soST = Object.keys(c.teethST || {}).filter(n => Tooth.moTa(n, c.teethST[n]) !== 'Bình thường').length;
-
-      const BUOC = [
-        {k: 'teeth',   so: 1, ten: 'Tình trạng ban đầu',
-         mo: soHT ? soHT + ' răng đã ghi' : 'chưa ghi răng nào', xong: soHT > 0},
-        {k: 'teethKH', so: 2, ten: 'Kế hoạch điều trị',
-         mo: soKH ? soKH + ' răng · ' + money(tienKH) : 'chưa có kế hoạch', xong: soKH > 0},
-        {k: 'teethST', so: 3, ten: 'Tình trạng sau điều trị',
-         mo: soST ? soST + ' răng đã xong' : 'chưa có gì', xong: soST > 0},
-      ];
-      return `<div class="card mb">
-      <div class="card-h"><h2>Sơ đồ răng</h2>
-        <span class="hint">${sauDT ? 'nhấn vào răng để xem lịch sử điều trị của răng đó' : 'nhấn vào răng để ghi tình trạng'}</span><span class="spacer"></span>
-        ${sauDT ? '' : `<button class="btn small ${App.state.rangChon?'primary':''}" onclick="Cust.batChonNhieu()">
-            ${App.state.rangChon ? 'Xong chọn nhiều răng' : 'Chọn nhiều răng cùng lúc'}</button>`}
-        ${keHoach ? `<button class="btn small" onclick="Cust.chepSangKH()">Chép lại từ hiện trạng</button>
-          ${coKH?`<button class="btn small danger" onclick="Cust.xoaKH()">Xóa kế hoạch</button>`:''}` : ''}
-        ${sauDT ? `<button class="btn small primary" onclick="Cust.dungST()">Dựng lại từ hạng mục đã hoàn tất</button>
-          ${coST?`<button class="btn small danger" onclick="Cust.xoaST()">Xóa sơ đồ</button>`:''}` : ''}</div>
-      <div class="card-b">
-        <div class="sub-line" style="margin:0 0 12px">${h((BUOC.find(b => b.k === lop) || {}).mo || '')}</div>
-
-        ${lop === 'teeth' ? `<div class="note-block mb">Bấm vào từng răng để ghi <b>tình trạng lúc mới đến khám</b>:
-          sâu mặt nào, đã trám, răng sứ, mất răng, lỗ dò… Đây là sơ đồ gốc, hai bước sau đều dựa vào nó
-          và không sửa ngược lại nó.
-          ${App.state.rangChon ? '' : '<br>Nhiều răng <b>cùng một tình trạng</b> (mất nhiều răng, cao răng cả hàm) thì bấm <b>Chọn nhiều răng cùng lúc</b> ở góc trên.'}</div>` : ''}
-        ${keHoach ? `<div class="note-block mb">Bấm vào răng cần làm: ô <b>Tình trạng hiện tại</b> đã lấy sẵn từ bước 1,
-          bạn chỉ cần chọn <b>chẩn đoán</b> và <b>dịch vụ sẽ làm</b>.
-          ${App.state.rangChon ? '' : '<br>Làm <b>cùng một dịch vụ cho nhiều răng</b> (cầu răng, niềng, tháo lắp) thì bấm <b>Chọn nhiều răng cùng lúc</b> ở góc trên — phần mềm gộp thành một hạng mục có số lượng.'}</div>` : ''}
-        ${sauDT ? `<div class="note-block mb">Sơ đồ này ghi <b>tình trạng răng sau khi đã điều trị</b>.
-          Bấm <b>Dựng lại từ hạng mục đã hoàn tất</b> để phần mềm tự vẽ theo những dịch vụ đã xong
-          (${xongCount} hạng mục có ghi số răng), rồi bấm vào từng răng để xem <b>lịch sử điều trị</b> và sửa lại nếu cần.
-          Răng đã sửa tay thì lần dựng sau không bị ghi đè.</div>` : ''}
-        ${App.state.rangChon ? `<div class="note-block mb" style="border-color:var(--accent)">
-          Đang <b>chọn nhiều răng</b> — bấm vào từng răng để chọn hoặc bỏ chọn.
-          Đã chọn <b>${App.state.rangChon.length} răng</b>${App.state.rangChon.length?': '+App.state.rangChon.slice().sort((a,b)=>a-b).map(n=>'R'+n).join(', '):''}.
-          <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
-            <button class="btn small primary" ${App.state.rangChon.length?'':'disabled'}
-              onclick="${keHoach ? 'Cust.keHoachNhieu()' : 'Cust.khamNhieu()'}">${
-              keHoach ? 'Thêm dịch vụ cho' : 'Ghi tình trạng cho'} ${App.state.rangChon.length} răng</button>
-            <button class="btn small" onclick="Cust.batChonNhieu()">Thoát chọn nhiều</button></div></div>` : ''}
-        ${Tooth.hamHTML(c, lop)}
-        ${Cust.oGhiRangHTML(c, lop)}
-        ${keHoach ? '' : Cust.khoiNhaChu(c, lop)}
-        ${Tooth.tomTatHTML(c, lop)}
-        ${keHoach ? (() => {
-          const kho = c.teethKH || {};
-          const ds = Object.keys(kho).map(Number).filter(n => !isNaN(n) && kho[n] && kho[n].dichVu).sort((a,b)=>a-b);
-          const tong = ds.reduce((s, n) => {
-            const dv = (db.services||[]).find(x => Combo.norm(x.name||'') === Combo.norm(kho[n].dichVu));
-            return s + (dv ? (dv.price||0) : 0);
-          }, 0);
-          return `<div class="tooth-info" style="border-color:var(--accent)"><b>Kế hoạch điều trị:</b><br>
-            ${ds.length ? ds.map(n => `R${n}: ${h(Tooth.moTa(n, kho[n]))}${
-              kho[n].chanDoan ? ' · <i>' + h(icdName(kho[n].chanDoan)) + '</i>' : ''} → <b>${h(kho[n].dichVu)}</b>`).join('<br>')
-                        : 'Chưa răng nào có kế hoạch — bấm vào răng rồi chọn dịch vụ sẽ làm.'}
-            ${tong ? `<br><br>Tạm tính <b>${money(tong)}</b> cho ${ds.length} răng` : ''}</div>`;
-        })() : ''}
-        ${sauDT ? (() => {
-          const co = [];
-          TEETH_UP.concat(TEETH_DN).forEach(n => {
-            const ls = Cust.lichSuRang(c, n).filter(x => x.loai === 'dv');
-            if (ls.length) co.push({n, ls});
-          });
-          if (!co.length) return `<div class="tooth-info" style="border-color:var(--accent)">
-            <b>Lịch sử điều trị theo răng:</b><br>Chưa có hạng mục điều trị nào ghi số răng.
-            Vào tab <b>Điều trị</b>, mở từng hạng mục và điền ô <b>Răng</b> (vd: 36, 37).</div>`;
-          return `<div class="tooth-info" style="border-color:var(--accent)"><b>Lịch sử điều trị theo răng:</b><br>
-            ${co.map(x => `R${x.n}: ` + x.ls.map(v =>
-              `${h(v.ten)} <span class="sub-line">(${fmtD(v.ngay)}${v.status ? ' · ' + h(v.status) : ''}${
-                v.bs ? ' · ' + h(v.bs) : ''})</span>`).join(' → ')).join('<br>')}
-            <br><br><span class="sub-line">${co.length} răng đã được điều trị · bấm vào răng để xem chi tiết.</span></div>`;
-        })() : ''}
-        ${Tooth.chuThichHTML()}
-      </div>
-    </div>`;
-    })()}
-    <div class="card">
-      <div class="card-h"><h2>Quá trình điều trị</h2><span class="hint">bấm vào một dòng để sửa</span><span class="spacer"></span>
-        <button class="btn small" onclick="Cust.visitForm('','${c.id}')">${IC.plus} Thêm diễn biến</button></div>
-      <div class="card-b"><div class="timeline">${Cust.timelineHTML(c)}</div></div>
-    </div>`;
+    ${Photo.cardHTML(c)}`;
   }
 
   return `
@@ -2478,6 +2485,21 @@ SCREENS.benhan = () => {
 
 /* ---------- Lịch hẹn ---------- */
 const Cal = {
+  /* Lịch hẹn của riêng một khách — dùng cho trang "Hẹn lần sau" trong tab Điều trị */
+  dsKhachHTML(c){
+    const ds = (db.appointments || []).filter(a => a.customerId === c.id)
+      .sort((a, b) => ((a.date || '') + (a.time || '')) < ((b.date || '') + (b.time || '')) ? 1 : -1);
+    if (!ds.length) return `<div class="sub-line">Chưa có lịch hẹn nào cho khách này.</div>`;
+    const nay = todayISO();
+    return `<div class="tbl-wrap"><table style="min-width:560px">
+      <thead><tr><th>Ngày giờ</th><th>Nội dung</th><th>Bác sĩ</th><th>Trạng thái</th><th></th></tr></thead>
+      <tbody>${ds.map(a => `<tr${(a.date || '') < nay ? ' style="opacity:.6"' : ''}>
+        <td class="num">${fmtD(a.date)}<br><span class="sub-line num">${h(a.time || '')}${a.dur ? ' · ' + a.dur + ' phút' : ''}</span></td>
+        <td>${h(a.note || a.lyDo || '—')}</td>
+        <td>${h((staffById(a.doctorId) || {}).name || '—')}</td>
+        <td><span class="pill ${/hủy|không đến/i.test(a.status || '') ? 'danger' : (a.date || '') < nay ? 'mutedp' : 'info'}">${h(a.status || '')}</span></td>
+        <td><button class="btn small" onclick="Cal.form('${a.id}')">Sửa</button></td></tr>`).join('')}</tbody></table></div>`;
+  },
   setDate(v){ App.state.calDate = v || todayISO(); App.render(); },
   shift(d){ App.state.calDate = isoAdd(App.state.calDate, d); App.render(); },
   doiKieu(k){ App.state.calView = k; App.render(); },
@@ -2735,6 +2757,108 @@ SCREENS.calendar = () => {
 
 /* ---------- Điều trị & thanh toán ---------- */
 const Treat = {
+  trang: 'kham',
+  doiTrang(k){ this.trang = k; App.state.rangMo = null; App.state.rangChon = null; App.render(); },
+  /* ---------- Kế hoạch điều trị ----------
+     Hai nguồn: dịch vụ gắn vào từng răng trên sơ đồ kế hoạch (c.teethKH), và dịch vụ
+     không thuộc răng nào — cạo vôi, tẩy trắng, niềng — để riêng ở c.keHoachKhac. */
+  keHoachDS(c){
+    const kho = c.teethKH || {};
+    const theoRang = Object.keys(kho).map(Number)
+      .filter(n => !isNaN(n) && kho[n] && kho[n].dichVu).sort((a, b) => a - b)
+      .map(n => ({rang: n, dichVu: kho[n].dichVu, chanDoan: kho[n].chanDoan, tt: Tooth.moTa(n, kho[n])}));
+    const khac = (c.keHoachKhac || []).map(x => ({id: x.id, dichVu: x.dichVu, chanDoan: x.chanDoan, tt: ''}));
+    return theoRang.concat(khac);
+  },
+  giaCua(ten){
+    const dv = (db.services || []).find(x => Combo.norm(x.name || '') === Combo.norm(ten || ''));
+    return dv ? (+dv.price || 0) : 0;
+  },
+  keHoachHTML(c){
+    const ds = this.keHoachDS(c);
+    if (!ds.length) return `<div class="sub-line">Chưa có dịch vụ nào trong kế hoạch. Bấm vào răng trên sơ đồ
+      rồi chọn <b>Dịch vụ điều trị</b>, hoặc bấm <b>Thêm dịch vụ</b> cho những việc không thuộc răng nào.</div>`;
+    const daCo = n => (db.treatments || []).some(t => t.customerId === c.id
+      && String(t.tooth || '').split(/[^0-9]+/).includes(String(n)));
+    const rows = ds.map(x => {
+      const gia = this.giaCua(x.dichVu);
+      const co = x.rang ? daCo(x.rang) : false;
+      return `<tr><td class="num">${x.rang ? 'R' + x.rang : '<span class="sub-line">cả hàm</span>'}</td>
+        <td>${h(x.tt || '—')}</td>
+        <td>${x.chanDoan ? h(icdName(x.chanDoan)) : '<span class="sub-line">—</span>'}</td>
+        <td><b>${h(x.dichVu)}</b></td>
+        <td class="r num">${gia ? money(gia) : '<span class="sub-line">chưa có giá</span>'}</td>
+        <td style="white-space:nowrap">${co
+          ? '<span class="pill ok">đã lập hạng mục</span>'
+          : `<button class="btn small primary" onclick="Treat.khDuaVao('${x.rang || ''}','${x.id || ''}')">Đưa vào điều trị</button>`}
+          <button class="btn small danger" onclick="Treat.khBo('${x.rang || ''}','${x.id || ''}')">Bớt</button></td></tr>`;
+    }).join('');
+    const tong = ds.reduce((t, x) => t + this.giaCua(x.dichVu), 0);
+    return `<div class="tbl-wrap"><table style="min-width:680px">
+      <thead><tr><th>Răng</th><th>Tình trạng</th><th>Chẩn đoán</th><th>Dịch vụ sẽ làm</th><th class="r">Giá</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+      ${tong ? `<div class="note-block" style="margin-top:10px">Tạm tính <b>${money(tong)}</b> cho ${ds.length} dịch vụ —
+        giá chốt theo hạng mục điều trị chứ không theo bảng này.</div>` : ''}`;
+  },
+  khThem(){
+    const c = custById(App.state.treatCust || App.state.custSel); if (!c) return;
+    App.modal('Thêm dịch vụ vào kế hoạch — ' + c.name, `
+    <form class="form-grid" onsubmit="Treat.khThemSave(event)">
+      <div class="f full"><label>Dịch vụ</label>
+        ${Combo.html('cbKHDv', 'dichVu', '', Svc.goiY(1), 'Gõ tên dịch vụ, vd: cao voi, tay trang', null,
+          'Gợi ý lấy từ bảng giá phòng khám, kèm giá.')}</div>
+      <div class="f"><label>Răng (bỏ trống nếu không thuộc răng nào)</label>
+        <input name="rang" placeholder="Vd: 36"></div>
+      <div class="f full"><label>Chẩn đoán</label>
+        ${Combo.html('cbKHDx', 'chanDoan', '', Cust.icdHopVoi('ok', null), 'Gõ tên bệnh hoặc mã ICD')}</div>
+      <div class="note-block full">Dịch vụ gắn vào một răng thì nó hiện luôn trên <b>sơ đồ kế hoạch</b>.
+        Để trống ô răng cho những việc của cả hàm: cạo vôi, tẩy trắng, niềng.</div>
+      <div class="form-actions full">
+        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+        <button class="btn primary">Thêm vào kế hoạch</button></div>
+    </form>`);
+  },
+  khThemSave(ev){
+    ev.preventDefault();
+    const c = custById(App.state.treatCust || App.state.custSel); if (!c) return;
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    const ten = (d.dichVu || '').trim();
+    if (!ten) { App.toast('Chưa chọn dịch vụ'); return; }
+    const n = parseInt(String(d.rang || '').replace(/\D/g, ''), 10);
+    const icd = icdCode((d.chanDoan || '').trim());
+    if (n) {
+      /* Gắn vào răng thì lấy sẵn tình trạng bên sơ đồ khám làm nền, giống khi bấm vào răng */
+      c.teethKH = c.teethKH || {};
+      const nen = c.teethKH[n] || Object.assign({}, (c.teeth || {})[n] || {s: 'ok', mat: []});
+      c.teethKH[n] = Object.assign({}, nen, {dichVu: ten, chanDoan: icd});
+    } else {
+      c.keHoachKhac = c.keHoachKhac || [];
+      c.keHoachKhac.push({id: uid(), dichVu: ten, chanDoan: icd});
+    }
+    save(); App.closeModal(); App.render(); App.toast('Đã thêm vào kế hoạch ✓');
+  },
+  khBo(rang, id){
+    const c = custById(App.state.treatCust || App.state.custSel); if (!c) return;
+    const n = parseInt(rang, 10);
+    const ten = n ? ((c.teethKH || {})[n] || {}).dichVu
+                  : ((c.keHoachKhac || []).find(x => x.id === id) || {}).dichVu;
+    if (!confirm('Bỏ "' + (ten || '') + '" khỏi kế hoạch?\n\nHạng mục điều trị đã lập thì không bị đụng tới.')) return;
+    if (n) {
+      /* Chỉ gỡ phần kế hoạch, giữ nguyên tình trạng răng đã ghi */
+      if (c.teethKH && c.teethKH[n]) { c.teethKH[n].dichVu = ''; c.teethKH[n].chanDoan = ''; }
+    } else {
+      c.keHoachKhac = (c.keHoachKhac || []).filter(x => x.id !== id);
+    }
+    save(); App.render(); App.toast('Đã bớt khỏi kế hoạch');
+  },
+  khDuaVao(rang, id){
+    const c = custById(App.state.treatCust || App.state.custSel); if (!c) return;
+    const n = parseInt(rang, 10);
+    const x = n ? (c.teethKH || {})[n] : ((c.keHoachKhac || []).find(y => y.id === id) || null);
+    if (!x || !x.dichVu) return;
+    App.chonKhach(c.id);
+    this.themChoRang(n ? String(n) : '', x.dichVu);
+  },
   setCust(id){ App.chonKhach(id); App.render(); },
   onCustPick(v){
     const code = String(v).split('·').pop().trim();
@@ -2831,13 +2955,20 @@ const Treat = {
     const n = this.rangCua(t)[0];
     if (n) this.rangClick(n);
   },
-  themChoRang(rang){
+  /* dichVu: điền sẵn luôn tên dịch vụ, dùng khi đưa một dòng kế hoạch thành hạng mục */
+  themChoRang(rang, dichVu){
     App.closeModal();
     setTimeout(() => {
       this.itemForm();
       const f = document.querySelector('#modalBody form');
-      const o = f && f.querySelector('[name="tooth"]');
-      if (o) { o.value = rang; if (typeof Treat.tinhLai === 'function') Treat.tinhLai(); }
+      if (!f) return;
+      const o = f.querySelector('[name="tooth"]');
+      if (o) o.value = rang;
+      if (dichVu) {
+        const d = f.querySelector('[name="name"]');
+        if (d) { d.value = dichVu; if (typeof Treat.chonDV === 'function') Treat.chonDV(dichVu); }
+      }
+      if (typeof Treat.tinhLai === 'function') Treat.tinhLai();
     }, 60);
   },
   /* Đổi trạng thái hàng loạt cho những răng đang chọn */
@@ -3122,11 +3253,43 @@ SCREENS.treatment = () => {
       <div class="tbl-wrap"><table style="min-width:460px"><thead><tr><th>Thuốc</th><th>SL</th><th>Cách dùng</th></tr></thead>
       <tbody>${r.items.map(it=>`<tr><td><b>${h(it.drug)}</b></td><td class="num">${h(it.qty)}</td><td>${h(it.use)}</td></tr>`).join('')}</tbody></table></div></div>`).join('') || '<span class="sub-line">Chưa có đơn thuốc.</span>';
 
-  return `
+  const trang = Treat.trang || 'kham';
+  const soHM = items.length, soXong = items.filter(t => t.status === 'Hoàn tất').length;
+  const TRANG = [
+    ['kham',    '1. Khám · Chẩn đoán · Kế hoạch'],
+    ['dichvu',  '2. Dịch vụ & quá trình điều trị' + (soHM ? ' (' + soXong + '/' + soHM + ')' : '')],
+    ['thutien', '3. Thu tiền' + (debt ? ' · nợ ' + money(debt) : '')],
+    ['hen',     '4. Hẹn lần sau'],
+  ];
+  const dauTrang = `<div class="subtabs">${TRANG.map(([k, l]) =>
+    `<button class="subtab ${trang === k ? 'active' : ''}" onclick="Treat.doiTrang('${k}')">${h(l)}</button>`).join('')}</div>`;
+
+  /* Trang 1 gom đúng ba việc liền nhau của một lần khám: ghi tình trạng răng,
+     chốt chẩn đoán, rồi vạch dịch vụ sẽ làm. Trước đây ba việc này nằm ở tab
+     Khách hàng còn hạng mục nằm ở đây, nên khám xong phải nhảy qua lại hai tab. */
+  if (trang === 'kham') return `
+  <div class="page-head"><h1>Điều trị</h1><span class="spacer"></span>
+    <span style="min-width:300px;flex:2;max-width:620px">${Combo.html('cbTreatCust','treatCust', custLabel(c), custOptions(),
+      'Đổi khách: gõ tên, SĐT hoặc mã KH', Treat.onCustPick)}</span>
+    <div class="sub">${h(c.name)} · ${h(c.code||'')}${c.allergy?' · ⚕ '+h(c.allergy):''}</div></div>
+  ${dauTrang}
+  ${Cust.soDoCardHTML(c)}
+  <div class="card mb"><div class="card-h"><h2>Chẩn đoán</h2>
+    <span class="hint">vấn đề đứng đầu in vào dòng Bệnh chính của bệnh án</span><span class="spacer"></span>
+    <button class="btn small primary" onclick="Cust.vanDeForm()">${IC.plus} Thêm chẩn đoán</button></div>
+    <div class="card-b">${Cust.vanDeHTML(c)}</div></div>
+  <div class="card"><div class="card-h"><h2>Kế hoạch điều trị</h2>
+    <span class="hint">thêm bớt thoải mái — chưa phải hạng mục chính thức</span><span class="spacer"></span>
+    <button class="btn small primary" onclick="Treat.khThem()">${IC.plus} Thêm dịch vụ</button>
+    <button class="btn small" onclick="Treat.doiTrang('dichvu')">Sang dịch vụ &amp; điều trị →</button></div>
+    <div class="card-b">${Treat.keHoachHTML(c)}</div></div>`;
+
+  const dau = `
   <div class="page-head"><h1>Điều trị & thanh toán</h1><span class="spacer"></span>
     <span style="min-width:300px;flex:2;max-width:620px">${Combo.html('cbTreatCust','treatCust', custLabel(c), custOptions(),
       'Đổi khách: gõ tên, SĐT hoặc mã KH', Treat.onCustPick)}</span>
     <button class="btn primary" onclick="Treat.payForm()">Thu tiền</button></div>
+  ${dauTrang}
   <div class="card mb"><div class="card-b" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
     <div style="flex:1;min-width:200px">
       <b style="font-size:15px">${h(c.name)}</b> <span class="sub-line">· ${h(c.code||'')}</span><br>
@@ -3135,12 +3298,18 @@ SCREENS.treatment = () => {
     </div>
     <button class="btn small" onclick="Cust.moHoSo('${c.id}')">Xem hồ sơ đầy đủ →</button>
   </div></div>
-  ${QuyTrinhKham.thanh(c)}
-  <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
-    <div class="card kpi"><div class="k-label">Tổng kế hoạch (đã duyệt)</div><div class="k-value num">${money(total)}</div><div class="k-note">${items.length} hạng mục · ${items.filter(t=>t.status==='Báo giá').length} đang báo giá</div></div>
-    <div class="card kpi"><div class="k-label">Đã thanh toán</div><div class="k-value num" style="color:var(--ok)">${money(paid)}</div><div class="k-note">${total?Math.min(100,Math.round(paid/total*100)):0}% kế hoạch</div></div>
-    <div class="card kpi"><div class="k-label">Còn lại</div><div class="k-value num" ${debt?'style="color:var(--danger)"':''}>${money(debt)}</div><div class="k-note">${debt?'nhắc khách theo lịch trả góp':'không còn công nợ'}</div></div>
-  </div>
+`;
+
+  /* Trang 2: những dịch vụ đã lên kế hoạch, sửa thêm bớt ở đây, rồi tiến trình
+     điều trị bám theo đúng những dịch vụ đó. */
+  if (trang === 'dichvu') return dau + `
+  <div class="card mb"><div class="card-h"><h2>Dịch vụ đã lên kế hoạch</h2>
+    <span class="hint">thêm bớt thoải mái — chưa phải hạng mục chính thức</span><span class="spacer"></span>
+    <button class="btn small primary" onclick="Treat.khThem()">${IC.plus} Thêm dịch vụ</button></div>
+    <div class="card-b">${Treat.keHoachHTML(c)}</div></div>
+  <div class="card mb"><div class="card-h"><h2>Hạng mục điều trị</h2><span class="hint">đã chốt giá, vào công nợ</span><span class="spacer"></span>
+    <button class="btn small" onclick="Treat.itemForm()">${IC.plus} Thêm hạng mục</button></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Hạng mục</th><th>Răng</th><th>Bác sĩ · người phụ</th><th>Trạng thái</th><th class="r">Đơn giá</th><th>Công đoạn</th></tr></thead><tbody>${itemRows}</tbody></table></div></div>
   <div class="card mb"><div class="card-h"><h2>Sơ đồ tiến trình điều trị</h2>
     <span class="hint">bấm vào răng để đổi trạng thái · màu răng nói về tiến độ, không phải bệnh lý</span>
     <span class="spacer"></span>
@@ -3158,17 +3327,29 @@ SCREENS.treatment = () => {
            Răng nào hoàn tất sẽ tự hiện lên sơ đồ <b>Sau điều trị</b> ở tab Khách hàng.</div>`}
       ${Treat.soDoHTML(c)}
     </div></div>
-  <div class="card mb"><div class="card-h"><h2>Kế hoạch điều trị — ${h(c.name)}</h2><span class="spacer"></span>
-    <button class="btn small" onclick="Treat.itemForm()">${IC.plus} Thêm hạng mục</button></div>
-    <div class="tbl-wrap"><table><thead><tr><th>Hạng mục</th><th>Răng</th><th>Bác sĩ · người phụ</th><th>Trạng thái</th><th class="r">Đơn giá</th><th>Công đoạn</th></tr></thead><tbody>${itemRows}</tbody></table></div></div>
   <div class="card mb"><div class="card-h"><h2>Quá trình điều trị</h2><span class="hint">bấm vào một dòng để sửa</span><span class="spacer"></span>
     <button class="btn small" onclick="Cust.visitForm('','${c.id}')">${IC.plus} Thêm diễn biến</button></div>
     <div class="card-b"><div class="timeline">${Cust.timelineHTML(c)}</div></div></div>
   <div class="card mb"><div class="card-h"><h2>Đơn thuốc</h2><span class="hint">liên thông Đơn thuốc quốc gia</span><span class="spacer"></span>
     <button class="btn small" onclick="Treat.rxForm()">${IC.plus} Kê đơn mới</button></div>
-    <div class="card-b">${rxBlocks}</div></div>
+    <div class="card-b">${rxBlocks}</div></div>`;
+
+  /* Trang 3: thu tiền */
+  if (trang === 'thutien') return dau + `
+  <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
+    <div class="card kpi"><div class="k-label">Tổng kế hoạch (đã duyệt)</div><div class="k-value num">${money(total)}</div><div class="k-note">${items.length} hạng mục · ${items.filter(t=>t.status==='Báo giá').length} đang báo giá</div></div>
+    <div class="card kpi"><div class="k-label">Đã thanh toán</div><div class="k-value num" style="color:var(--ok)">${money(paid)}</div><div class="k-note">${total?Math.min(100,Math.round(paid/total*100)):0}% kế hoạch</div></div>
+    <div class="card kpi"><div class="k-label">Còn lại</div><div class="k-value num" ${debt?'style="color:var(--danger)"':''}>${money(debt)}</div><div class="k-note">${debt?'nhắc khách theo lịch trả góp':'không còn công nợ'}</div></div>
+  </div>
   <div class="card"><div class="card-h"><h2>Phiếu thu</h2><span class="hint">hóa đơn điện tử Viettel SInvoice</span></div>
     <div class="tbl-wrap"><table><thead><tr><th>Ngày / Số</th><th>Nội dung</th><th class="r">Số tiền</th><th>Hóa đơn điện tử</th><th></th></tr></thead><tbody>${recRows}</tbody></table></div></div>`;
+
+  /* Trang 4: hẹn ngày tiếp theo */
+  return dau + `
+  <div class="card"><div class="card-h"><h2>Hẹn ngày tiếp theo</h2>
+    <span class="hint">lịch hẹn của riêng khách này</span><span class="spacer"></span>
+    <button class="btn small primary" onclick="Cal.form('','${c.id}')">${IC.plus} Đặt lịch hẹn</button></div>
+    <div class="card-b">${Cal.dsKhachHTML(c)}</div></div>`;
 };
 
 /* ================= Đợt điều trị & Bệnh án điện tử =================
@@ -4604,80 +4785,6 @@ Object.assign(HoSo, {
    Gần–xa đổi bên theo phần hàm: răng bên phải bệnh nhân nằm nửa trái sơ đồ nên mặt
    gần (phía đường giữa) là phía PHẢI ô; bên trái thì ngược lại. Ngoài–trong đổi theo
    hàm trên / hàm dưới, đúng như nhìn vào miệng bệnh nhân. */
-/* ================= Thanh quy trình một lần khám =================
-   Sáu bước đúng theo trình tự ở ghế. Mỗi bước tự biết đã xong chưa bằng cách đọc
-   dữ liệu thật của khách, không bắt ai bấm "đánh dấu hoàn thành" — bắt bấm thì
-   người ta quên, rồi thanh này nói dối. Bấm vào một bước là nhảy thẳng tới đúng
-   chỗ làm việc đó. */
-const QuyTrinhKham = {
-  buoc(c){
-    const dt   = (db.treatments || []).filter(t => t.customerId === c.id);
-    const lam  = dt.filter(t => t.status !== 'Báo giá');
-    const r    = c.record || {};
-    const kho  = c.teeth || {};
-    const soRang = Object.keys(kho).filter(n => Tooth.moTa(n, kho[n]) !== 'Bình thường').length;
-    const khoKH  = c.teethKH || {};
-    const soKH   = Object.keys(khoKH).filter(n => khoKH[n] && khoKH[n].dichVu).length;
-    const xong   = lam.filter(t => t.status === 'Hoàn tất').length;
-    const dang   = lam.filter(t => t.status === 'Đang điều trị').length;
-    const no     = custDebt(c);
-    const soThu  = (db.receipts || []).filter(x => x.customerId === c.id).length;
-    const hen    = (db.appointments || []).filter(a => a.customerId === c.id
-                     && (a.date || '') >= todayISO() && !/hủy|không đến/i.test(a.status || '')).length;
-    return [
-      {k:'kham', so:1, ten:'Khám', xong: soRang > 0,
-       mo: soRang ? soRang + ' răng đã ghi' : 'ghi tình trạng răng'},
-      {k:'chandoan', so:2, ten:'Chẩn đoán', xong: !!r.chanDoan,
-       mo: r.chanDoan ? icdName(r.chanDoan) : 'chưa ghi trong bệnh án'},
-      {k:'kehoach', so:3, ten:'Kế hoạch điều trị', xong: dt.length > 0,
-       mo: dt.length ? dt.length + ' hạng mục' : (soKH ? soKH + ' răng có kế hoạch, chưa lập hạng mục' : 'thêm dịch vụ sẽ làm')},
-      {k:'dieutri', so:4, ten:'Điều trị', xong: lam.length > 0 && xong === lam.length,
-       mo: lam.length ? xong + '/' + lam.length + ' xong' + (dang ? ' · ' + dang + ' đang làm' : '') : 'chưa có hạng mục'},
-      {k:'thutien', so:5, ten:'Thu tiền', xong: soThu > 0 && !no,
-       mo: no ? 'còn nợ ' + money(no) : (soThu ? 'đã thu đủ' : 'chưa thu đồng nào')},
-      {k:'hen', so:6, ten:'Hẹn lần sau', xong: hen > 0,
-       mo: hen ? hen + ' lịch hẹn sắp tới' : 'chưa đặt'},
-    ];
-  },
-  /* Bước đang làm = bước chưa xong đầu tiên. Xong hết thì không tô bước nào. */
-  dangO(ds){ const i = ds.findIndex(b => !b.xong); return i < 0 ? null : ds[i].k; },
-  thanh(c){
-    if (!c) return '';
-    const ds = this.buoc(c), dang = this.dangO(ds);
-    const soXong = ds.filter(b => b.xong).length;
-    return `<div class="card mb"><div class="card-h"><h2>Quy trình khám</h2>
-      <span class="hint">bấm vào một bước để làm bước đó</span><span class="spacer"></span>
-      <span class="pill ${soXong === ds.length ? 'ok' : 'mutedp'}">${soXong}/${ds.length} bước</span></div>
-      <div class="card-b"><div class="quy-trinh">${ds.map((b, i) => `${i ? '<span class="qt-noi"></span>' : ''}
-        <button class="buoc ${b.k === dang ? 'dang' : ''} ${b.xong ? 'xong' : ''}"
-                onclick="QuyTrinhKham.di('${b.k}','${c.id}')">
-          <span class="buoc-so">${b.xong ? '✓' : b.so}</span>
-          <span class="buoc-chu"><b>${h(b.ten)}</b><span class="buoc-mo">${h(b.mo)}</span></span>
-        </button>`).join('')}</div></div></div>`;
-  },
-  /* Mỗi bước nhảy tới đúng chỗ đã có sẵn, không dựng màn hình mới */
-  di(k, cid){
-    App.chonKhach(cid);
-    if (k === 'kham' || k === 'kehoach') {
-      App.state.lopRang = (k === 'kham') ? 'teeth' : 'teethKH';
-      App.state.rangChon = null;
-      App.go('customers');
-      return;
-    }
-    if (k === 'chandoan') {
-      App.go('customers');
-      setTimeout(() => { try { HoSo.dien('ba18'); } catch(e){ App.toast('Không mở được bệnh án'); } }, 0);
-      return;
-    }
-    if (k === 'dieutri' || k === 'thutien') {
-      App.state.treatCust = cid;
-      App.go('treatment');
-      if (k === 'thutien') setTimeout(() => { try { Treat.payForm(); } catch(e){} }, 0);
-      return;
-    }
-    if (k === 'hen') Cal.form('', cid);
-  },
-};
 
 const Tooth = {
   hamTren(n){ const q = Math.floor(n/10); return q === 1 || q === 2; },
