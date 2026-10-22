@@ -3410,16 +3410,35 @@ const Treat = {
     db.treatments = db.treatments.filter(x=>x.id!==id);
     save(); App.closeModal(); App.render(); App.toast('Đã xóa');
   },
+  /* Số tiền của một hạng mục còn thiếu bao nhiêu */
+  conThieu(t){
+    return Math.max(0, (+t.price || 0) - (typeof QT !== 'undefined' ? QT.daThu(t) : 0));
+  },
   payForm(){
     const c = custById(App.state.treatCust);
     const debt = custDebt(c);
+    /* Nội dung phiếu thu lấy thẳng từ hạng mục đã nhập: tick món nào thu món đó.
+       Khỏi gõ tay tên dịch vụ, và phần mềm biết chính xác tiền này trả cho hạng mục
+       nào nên chia hoa hồng đúng người, không phải đoán theo nhóm. */
+    const muc = (db.treatments || []).filter(t => t.customerId === c.id && t.status !== 'Báo giá'
+      && Treat.conThieu(t) > 0);
     App.modal('Thu tiền — ' + c.name, `
     <form class="form-grid" onsubmit="Treat.paySave(event)">
-      <div class="f full"><label>Nội dung</label><input name="desc" required placeholder="Vd: Trả góp đợt 2 — bọc sứ R36"></div>
+      ${muc.length ? `<div class="f full"><label>Thu cho dịch vụ nào</label>
+        <div class="check-list" id="dsMucThu">${muc.map(t => `<label>
+          <input type="checkbox" name="muc" value="${t.id}" checked onchange="Treat.doiMucThu()">
+          ${h(t.name)}${t.tooth ? ' · R' + h(t.tooth) : ''}
+          <span class="sub-line">còn ${money(Treat.conThieu(t))}${
+            QT.daThu(t) ? ' / đã trả ' + money(QT.daThu(t)) : ''}</span></label>`).join('')}</div>
+        <div class="combo-hint">Bỏ tick món nào thì tiền và nội dung tự trừ món đó ra.</div></div>`
+       : `<div class="note-block full">Khách không còn hạng mục nào chưa thu đủ — cứ gõ nội dung tự do bên dưới.</div>`}
+      <div class="f full"><label>Nội dung</label>
+        <input name="desc" required placeholder="Vd: Trả góp đợt 2 — bọc sứ R36"
+               value="${h(muc.map(t => t.name + (t.tooth ? ' R' + t.tooth : '')).join(', '))}">
+        <div class="combo-hint">Điền sẵn theo mấy món đã tick — sửa hoặc gõ thêm thoải mái.</div></div>
       <div class="f"><label>Số tiền (₫)</label>${Tien.o('amount', debt, 'required')}</div>
       <div class="f"><label>Hình thức</label><select name="method">${PAY_METHODS.map(m=>`<option>${m}</option>`).join('')}</select></div>
       <div class="f"><label>Bác sĩ thực hiện</label><select name="doctorId">${db.staff.filter(s=>(s.role||'').includes('Bác sĩ')).map(s=>`<option value="${s.id}">${h(s.name)}</option>`).join('')}</select></div>
-      <div class="f"><label>Nhóm dịch vụ (tính hoa hồng)</label><select name="group">${SERVICE_GROUPS.concat(['Khác']).map(g=>`<option>${g}</option>`).join('')}</select></div>
       <div class="f"><label>Người thu tiền</label><select name="staffId">
         ${db.staff.filter(s=>s.active!==false).map(s=>{const me=Att.myStaff();
           return `<option value="${s.id}"${me&&me.id===s.id?' selected':''}>${h(s.name)}${s.role?' · '+h(s.role):''}</option>`;}).join('')}</select></div>
@@ -3427,11 +3446,33 @@ const Treat = {
       <div class="form-actions full"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lập phiếu thu</button></div>
     </form>`);
   },
+  /* Tick / bỏ tick một món thì nội dung và số tiền chạy theo */
+  doiMucThu(){
+    const f = document.querySelector('#modalBody form'); if (!f) return;
+    const ids = [...f.querySelectorAll('[name="muc"]:checked')].map(x => x.value);
+    const ds = ids.map(id => (db.treatments || []).find(t => t.id === id)).filter(Boolean);
+    const o = f.querySelector('[name="desc"]'), a = f.querySelector('[name="amount"]');
+    if (o) o.value = ds.map(t => t.name + (t.tooth ? ' R' + t.tooth : '')).join(', ');
+    if (a) a.value = Tien.dinh(String(ds.reduce((s, t) => s + this.conThieu(t), 0)));
+  },
   paySave(ev){
     ev.preventDefault();
-    const d = Object.fromEntries(new FormData(ev.target).entries());
+    const f = ev.target;
+    const d = Object.fromEntries(new FormData(f).entries());
     const me = Att.myStaff();
-    const r = {id:uid(), no:'PT-'+(db.seq.receipt++), date:todayISO(), customerId:App.state.treatCust, desc:d.desc, method:d.method, amount:num(d.amount), staffId:d.staffId || (me?me.id:''), doctorId:d.doctorId, group:d.group, invoice:null};
+    const ids = [...f.querySelectorAll('[name="muc"]:checked')].map(x => x.value);
+    /* Nhóm dịch vụ suy ra từ chính mấy món đã tick — món nào nhiều tiền nhất thì lấy
+       nhóm của món đó. Bảng lương theo nhóm và việc rải tiền đều đọc ô này. */
+    let nhom = '';
+    if (ids.length) {
+      const tong = {};
+      ids.forEach(id => {
+        const t = (db.treatments || []).find(x => x.id === id); if (!t) return;
+        tong[t.group || 'Khác'] = (tong[t.group || 'Khác'] || 0) + this.conThieu(t);
+      });
+      nhom = Object.keys(tong).sort((a, b) => tong[b] - tong[a])[0] || '';
+    }
+    const r = {id:uid(), no:'PT-'+(db.seq.receipt++), date:todayISO(), customerId:App.state.treatCust, desc:d.desc, method:d.method, amount:num(d.amount), staffId:d.staffId || (me?me.id:''), doctorId:d.doctorId, group:nhom, mucIds: ids, invoice:null};
     db.receipts.push(r);
     save(); App.closeModal(); App.render(); App.toast('Đã lập ' + r.no + ' ✓');
     /* Lập xong mở luôn cửa sổ in khổ A5 — khách còn ngồi đó, khỏi phải tìm nút In */
@@ -6928,6 +6969,9 @@ const QT = {
           const lay = Math.min(con, Math.max(0, (+t.price || 0) - m[t.id]));
           m[t.id] += lay; con -= lay;
         });
+        /* Phiếu thu có ghi rõ thu cho hạng mục nào thì rải đúng vào đó trước — chính
+           xác hơn hẳn việc đoán theo nhóm dịch vụ như trước. */
+        if ((r.mucIds || []).length) rai(muc.filter(t => r.mucIds.includes(t.id)));
         if (r.group) rai(muc.filter(t => t.group === r.group));
         rai(muc);
       });
