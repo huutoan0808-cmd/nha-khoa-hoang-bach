@@ -437,6 +437,43 @@ function migrate() {
     db.donCD = 1;
     if (dem) setTimeout(() => App.toast('Đã đưa ' + dem + ' chẩn đoán cũ trên sơ đồ vào bảng Chẩn đoán'), 1200);
   }
+  /* Kế hoạch lập trước v129 chưa có hạng mục điều trị, vì hồi đó còn phải bấm "Đưa
+     vào điều trị" từng dòng. Nay nút đó bỏ rồi nên phải dựng nốt cho hồ sơ cũ, không
+     thì mấy dòng đó mắc kẹt mãi trong kế hoạch mà không vào được công nợ. */
+  if (!db.donHM) {
+    let them = 0;
+    (db.customers || []).forEach(c => {
+      const kho = c.teethKH || {};
+      Object.keys(kho).forEach(n => {
+        const ten = kho[n] && kho[n].dichVu;
+        if (!ten) return;
+        if (Cust.hangMucCua(c, n)) return;
+        /* Nút cũ tạo hạng mục KHÔNG kèm dấu tuRang — nhận lại chính nó thay vì đẻ bản sao */
+        const cu = (db.treatments || []).find(t => t.customerId === c.id && !t.tuRang
+          && String(t.tooth || '') === String(n) && Combo.norm(t.name || '') === Combo.norm(ten));
+        if (cu) { cu.tuRang = String(n); return; }
+        const dv = (db.services || []).find(x => Combo.norm(x.name || '') === Combo.norm(ten));
+        const gia = dv ? (+dv.price || 0) : 0;
+        db.treatments.push({id: uid(), customerId: c.id, tuRang: String(n), tooth: String(n),
+          name: dv ? dv.name : ten, group: dv ? dv.group : 'Khác', serviceId: dv ? dv.id : '',
+          donGia: gia, sl: 1, giamPct: 0, giamTien: 0, price: gia,
+          status: 'Chưa điều trị', doctorId: '', assistantId: '', date: todayISO(), cd: []});
+        them++;
+      });
+      (c.keHoachKhac || []).forEach(k => {
+        if (!k.dichVu || Cust.hangMucKH(c, k.id)) return;
+        const dv = (db.services || []).find(x => Combo.norm(x.name || '') === Combo.norm(k.dichVu));
+        const gia = dv ? (+dv.price || 0) : 0;
+        db.treatments.push({id: uid(), customerId: c.id, tuKH: k.id, tooth: '',
+          name: dv ? dv.name : k.dichVu, group: dv ? dv.group : 'Khác', serviceId: dv ? dv.id : '',
+          donGia: gia, sl: 1, giamPct: 0, giamTien: 0, price: gia,
+          status: 'Chưa điều trị', doctorId: '', assistantId: '', date: todayISO(), cd: []});
+        them++;
+      });
+    });
+    db.donHM = 1;
+    if (them) setTimeout(() => App.toast('Đã lập ' + them + ' hạng mục điều trị cho kế hoạch cũ'), 1800);
+  }
   /* Sổ ghi nhận sự việc và phiếu đánh giá thưởng hiệu quả tháng (danhgia.js) */
   if (!db.ghiNhan) db.ghiNhan = [];
   if (!db.danhGia) db.danhGia = [];
@@ -3030,10 +3067,9 @@ const Treat = {
         <td class="r num">${gia ? money(gia) : '<span class="sub-line">chưa có giá</span>'}</td>
         <td style="white-space:nowrap">${(() => {
           const hm = x.rang ? Cust.hangMucCua(c, x.rang) : Cust.hangMucKH(c, x.id);
-          if (hm) return `<span class="pill ${trangThaiMau(hm.status)}">${h(hm.status)}</span>`;
-          return `<button class="btn small primary" onclick="Treat.khDuaVao('${x.rang || ''}','${x.id || ''}')">Đưa vào điều trị</button>`;
+          return hm ? `<span class="pill ${trangThaiMau(hm.status)}">${h(hm.status)}</span>` : '';
         })()}
-          <button class="btn small danger" onclick="Treat.khBo('${x.rang || ''}','${x.id || ''}')">Bớt</button></td></tr>`;
+          <button class="btn small danger" onclick="Treat.khBo('${x.rang || ''}','${x.id || ''}')">Xóa</button></td></tr>`;
     }).join('');
     const tong = ds.reduce((t, x) => t + this.giaCua(x.dichVu), 0);
     return `<div class="tbl-wrap"><table style="min-width:680px">
@@ -3135,14 +3171,6 @@ const Treat = {
       c.keHoachKhac = (c.keHoachKhac || []).filter(x => x.id !== id);
     }
     save(); App.render(); App.toast('Đã bớt khỏi kế hoạch');
-  },
-  khDuaVao(rang, id){
-    const c = custById(App.state.treatCust || App.state.custSel); if (!c) return;
-    const n = parseInt(rang, 10);
-    const x = n ? (c.teethKH || {})[n] : ((c.keHoachKhac || []).find(y => y.id === id) || null);
-    if (!x || !x.dichVu) return;
-    App.chonKhach(c.id);
-    this.themChoRang(n ? String(n) : '', x.dichVu);
   },
   setCust(id){ App.chonKhach(id); App.render(); },
   onCustPick(v){
@@ -3317,14 +3345,6 @@ const Treat = {
       <div class="f"><label>Giảm giá (%)</label><input type="number" name="giamPct" min="0" max="100" step="0.5" value="${t.giamPct||''}" placeholder="0" oninput="Treat.tinhLai()"></div>
       <div class="f"><label>Giảm thêm (₫)</label>${Tien.o('giamTien', t.giamTien, 'oninput="Treat.tinhLai()"')}</div>
       <div class="f full"><div class="note-block" id="thanhTien"></div></div>
-      <div class="f"><label>Bác sĩ</label><select name="doctorId">
-        <option value="">— chưa phân —</option>
-        ${db.staff.filter(s=>s.active!==false && (Perm.roleOf(s)==='bacsi' || /bác sĩ/i.test(s.role||'')))
-          .map(s=>`<option value="${s.id}"${t.doctorId===s.id?' selected':''}>${h(s.name)}</option>`).join('')}</select></div>
-      <div class="f"><label>Người phụ (trợ thủ)</label><select name="assistantId">
-        <option value="">— không có —</option>
-        ${db.staff.filter(s=>s.active!==false && s.id!==t.doctorId)
-          .map(s=>`<option value="${s.id}"${t.assistantId===s.id?' selected':''}>${h(s.name)}${s.role?' · '+h(s.role):''}</option>`).join('')}</select></div>
       <div class="f"><label>Trạng thái</label><select name="status">${TREAT_STATUS.map(s=>`<option${t.status===s?' selected':''}>${s}</option>`).join('')}</select></div>
       <div class="form-actions full">
         ${id?`<button type="button" class="btn danger" onclick="Treat.itemDel('${id}')">Xóa</button>
@@ -3514,7 +3534,14 @@ SCREENS.treatment = () => {
     const q = QT.cua(t), xong = (t.cd||[]).length;
     return `<tr class="clickable" onclick="Treat.itemForm('${t.id}')"><td><b>${h(t.name)}</b><br><span class="sub-line">${h(t.group)}</span></td>
     <td class="num">${h(t.tooth||'—')}</td>
-    <td>${h((staffById(t.doctorId)||{}).name||'—')}${phu?`<br><span class="sub-line">phụ: ${h(phu.name)}</span>`:''}</td>
+    <td>${(() => {
+      /* Ai làm thì lấy từ công đoạn đã ghi — form hạng mục không còn hỏi bác sĩ nữa.
+         Hạng mục cũ đã gán tay thì vẫn hiện tên đó. */
+      const ds = [...new Set((t.cd || []).map(x => (staffById(x.s) || {}).name).filter(Boolean))];
+      if (ds.length) return h(ds.join(', '));
+      const bs = (staffById(t.doctorId) || {}).name;
+      return bs ? h(bs) + (phu ? `<br><span class="sub-line">phụ: ${h(phu.name)}</span>` : '') : '<span class="sub-line">—</span>';
+    })()}</td>
     <td><span class="pill ${st}">${t.status}</span></td>
     <td class="r num">${money(t.price)}${(t.sl>1||t.giamPct||t.giamTien)?`<br><span class="sub-line">${money(t.donGia!=null?t.donGia:t.price)}${t.sl>1?' × '+t.sl:''}${(t.giamPct||t.giamTien)?' · giảm'+(t.giamPct?' '+t.giamPct+'%':'')+(t.giamTien?' '+money(t.giamTien):''):''}</span>`:''}</td>
     <td onclick="event.stopPropagation()">${q
