@@ -48,7 +48,6 @@ const Tien = {
 };
 
 /* ================= Danh mục ================= */
-const SERVICE_GROUPS = ['Phục hình sứ','Phục hình tháo lắp','Trám răng','Nhổ răng','Điều trị tủy','Implant','Chỉnh nha','Nha chu','Thẩm mỹ'];
 
 /* Danh mục ICD-10 thường dùng trong răng hàm mặt */
 const ICD = [
@@ -5343,9 +5342,20 @@ const Tooth = {
 /* Thứ tự nhóm đi theo mạch điều trị thật: khám → nha chu → trám → nội nha → nhổ →
    phục hình → implant → chỉnh nha → trẻ em → thẩm mỹ. Trước đây Nhổ răng chen vào
    giữa Trám răng và Điều trị tủy, tách đôi hai việc vốn đi liền nhau. */
-const NHOM_DV = ['Chẩn đoán hình ảnh','Nha chu','Trám răng','Điều trị tủy','Nhổ răng',
+/* Nhóm dịch vụ — bảng mặc định khi phòng khám chưa tự đặt. Thứ tự ở đây cũng là
+   thứ tự hiện trong bảng giá và trong ô chọn nhóm. */
+const NHOM_DV_MAC_DINH = ['Chẩn đoán hình ảnh','Nha chu','Trám răng','Điều trị tủy','Nhổ răng',
                  'Phục hình sứ','Phục hình tháo lắp','Implant','Chỉnh nha',
                  'Răng trẻ em','Thẩm mỹ','Khác'];
+/* NHOM_DV đọc thẳng từ dữ liệu phòng khám. Để là thuộc tính của window chứ không
+   phải const, vì mọi chỗ trong app đang dùng nó như một mảng — làm cách này thì
+   không phải sửa chỗ nào mà vẫn sửa được danh sách từ màn Cài đặt. */
+Object.defineProperty(window, 'NHOM_DV', {
+  get(){
+    const ds = (typeof db !== 'undefined' && db && db.nhomDV) || null;
+    return (Array.isArray(ds) && ds.length) ? ds : NHOM_DV_MAC_DINH;
+  },
+});
 const Svc = {
   /* Gợi ý dịch vụ dùng chung cho ô đặt lịch và ô lập hạng mục: bỏ trùng tên,
      xếp theo nhóm rồi theo tên, ghi kèm nhóm và giá ở bên phải. */
@@ -5405,6 +5415,7 @@ const Svc = {
     App.modal('Bảng giá dịch vụ', `
       ${sua ? `<div class="form-actions" style="justify-content:flex-start;margin-bottom:10px">
         <button class="btn primary" onclick="Svc.form()">${IC.plus} Thêm dịch vụ</button>
+        <button class="btn" onclick="Svc.nhomBang()">Nhóm dịch vụ</button>
         <button class="btn" onclick="Svc.napBangGia()">Nạp bảng giá phòng khám</button>
         ${(() => { const n = Svc.nhomTrung().length;
           return `<button class="btn ${n?'danger':''}" onclick="Svc.donTrung()">Dọn trùng lặp${n?` (${n} nhóm)`:''}</button>`; })()}
@@ -5545,6 +5556,108 @@ const Svc = {
 
   /* Nạp toàn bộ bảng giá chính thức của phòng khám (từ hai file PDF).
      Không đụng tới hồ sơ điều trị: hạng mục đã lập giữ nguyên tên và giá lúc chốt. */
+  /* ---------- Quản lý nhóm dịch vụ ----------
+     Đổi tên nhóm phải sửa luôn mọi chỗ đang trỏ tới tên cũ: dịch vụ, hạng mục điều
+     trị, phiếu thu và phần gắn nhóm của kỹ thuật tính hoa hồng. Chỉ đổi mỗi danh
+     sách thì những thứ kia trỏ vào một cái tên không còn tồn tại. */
+  nhomBang(){
+    if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới sửa được nhóm dịch vụ'); return; }
+    const ds = NHOM_DV;
+    const dem = g => (db.services || []).filter(s => s.group === g).length;
+    const rows = ds.map((g, i) => `<tr>
+      <td class="num">${i + 1}</td>
+      <td><b>${h(g)}</b></td>
+      <td class="r num">${dem(g)}</td>
+      <td>${(() => {
+        const q = QT.ds().find(x => (x.nhom||[]).includes(g));
+        const n = q ? (q.buoc||[]).length : 0;
+        return `${n ? `<b>${n} công đoạn</b> · tổng tỷ trọng ${QT.tongPct(q)}%`
+                    : '<span class="pill warn">chưa có công đoạn</span>'}
+          <br><button class="btn small ${n?'':'primary'}" onclick="QT.bangNhom('${h(g).replace(/'/g,"\\'")}')">
+            ${n ? 'Sửa công đoạn & hoa hồng' : 'Đặt công đoạn & hoa hồng'}</button>`;
+      })()}</td>
+      <td style="white-space:nowrap">
+        <button class="btn small" ${i === 0 ? 'disabled' : ''} onclick="Svc.nhomDoiCho(${i},-1)">↑</button>
+        <button class="btn small" ${i === ds.length - 1 ? 'disabled' : ''} onclick="Svc.nhomDoiCho(${i},1)">↓</button>
+        <button class="btn small" onclick="Svc.nhomSua(${i})">Đổi tên</button>
+        <button class="btn small danger" onclick="Svc.nhomXoa(${i})">Xóa</button></td></tr>`).join('');
+    App.modal('Nhóm dịch vụ', `
+      <div class="note-block mb">Đây là nhóm dùng để <b>xếp bảng giá</b>, <b>gắn kỹ thuật tính hoa hồng</b>
+        và <b>lọc báo cáo</b>. Thứ tự trong bảng này cũng là thứ tự hiện ngoài bảng giá.</div>
+      <div class="tbl-wrap"><table style="min-width:620px">
+        <thead><tr><th>#</th><th>Tên nhóm</th><th class="r">Số dịch vụ</th><th>Công đoạn &amp; hoa hồng</th><th></th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+      <div class="form-actions" style="margin-top:12px">
+        <button class="btn primary" onclick="Svc.nhomThem()">${IC.plus} Thêm nhóm</button>
+        <button class="btn" onclick="Svc.nhomDatLai()">Nạp lại bảng mặc định</button>
+        <span class="spacer"></span>
+        <button class="btn" onclick="Svc.bang()">Xong</button></div>`);
+  },
+  nhomGhi(ds){ db.nhomDV = ds.slice(); save(); this.nhomBang(); },
+  nhomDoiCho(i, huong){
+    const ds = NHOM_DV.slice(), j = i + huong;
+    if (j < 0 || j >= ds.length) return;
+    const t = ds[i]; ds[i] = ds[j]; ds[j] = t;
+    this.nhomGhi(ds);
+  },
+  nhomThem(){
+    const ten = (prompt('Tên nhóm mới:') || '').trim();
+    if (!ten) return;
+    const ds = NHOM_DV.slice();
+    if (ds.some(x => Combo.norm(x) === Combo.norm(ten))) { App.toast('Đã có nhóm tên này'); return; }
+    ds.push(ten);
+    this.nhomGhi(ds);
+    App.toast('Đã thêm nhóm "' + ten + '" ✓');
+  },
+  nhomSua(i){
+    const ds = NHOM_DV.slice(), cu = ds[i];
+    const ten = (prompt('Đổi tên nhóm "' + cu + '" thành:', cu) || '').trim();
+    if (!ten || ten === cu) return;
+    if (ds.some((x, k) => k !== i && Combo.norm(x) === Combo.norm(ten))) { App.toast('Đã có nhóm tên này'); return; }
+    const n = this.doiTenNhom(cu, ten);
+    ds[i] = ten;
+    this.nhomGhi(ds);
+    App.toast('Đã đổi tên ✓' + (n ? ' — cập nhật ' + n + ' chỗ đang dùng tên cũ' : ''));
+  },
+  /* Đổi tên ở mọi nơi đang trỏ tới nhóm cũ */
+  doiTenNhom(cu, moi){
+    let n = 0;
+    (db.services || []).forEach(x => { if (x.group === cu) { x.group = moi; x._up = Date.now(); n++; } });
+    (db.treatments || []).forEach(x => { if (x.group === cu) { x.group = moi; x._up = Date.now(); n++; } });
+    (db.receipts || []).forEach(x => { if (x.group === cu) { x.group = moi; x._up = Date.now(); n++; } });
+    (db.quyTrinh || []).forEach(q => {
+      const i = (q.nhom || []).indexOf(cu);
+      if (i >= 0) { q.nhom[i] = moi; q._up = Date.now(); n++; }
+    });
+    return n;
+  },
+  nhomXoa(i){
+    const ds = NHOM_DV.slice(), g = ds[i];
+    const dung = (db.services || []).filter(s => s.group === g);
+    if (dung.length) {
+      const con = ds.filter((x, k) => k !== i);
+      const sang = (prompt(dung.length + ' dịch vụ đang thuộc nhóm "' + g + '".\n'
+        + 'Gõ tên nhóm muốn chuyển chúng sang:\n\n' + con.join(' · '), con[0] || '') || '').trim();
+      if (!sang) return;
+      const dich = con.find(x => Combo.norm(x) === Combo.norm(sang));
+      if (!dich) { App.toast('Không có nhóm tên "' + sang + '"'); return; }
+      this.doiTenNhom(g, dich);
+      App.toast('Đã chuyển ' + dung.length + ' dịch vụ sang "' + dich + '"');
+    } else if (!confirm('Xóa nhóm "' + g + '"?')) return;
+    /* Gỡ nhóm khỏi các kỹ thuật tính hoa hồng, không thì chúng trỏ vào tên đã mất */
+    (db.quyTrinh || []).forEach(q => {
+      if ((q.nhom || []).includes(g)) { q.nhom = q.nhom.filter(x => x !== g); q._up = Date.now(); }
+    });
+    this.nhomGhi(ds.filter((x, k) => k !== i));
+  },
+  nhomDatLai(){
+    if (!confirm('Nạp lại ' + NHOM_DV_MAC_DINH.length + ' nhóm mặc định?\n\n'
+      + 'Nhóm tự thêm sẽ biến khỏi danh sách; dịch vụ thuộc nhóm đó vẫn còn nhưng '
+      + 'nằm ở mục "(chưa xếp nhóm)" cuối bảng giá.')) return;
+    this.nhomGhi(NHOM_DV_MAC_DINH);
+    App.toast('Đã nạp lại bảng mặc định ✓');
+  },
+
   napBangGia(){
     if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới nạp được bảng giá'); return; }
     if (typeof BANG_GIA === 'undefined') { App.toast('Chưa nạp được dữ liệu bảng giá'); return; }
@@ -7120,6 +7233,54 @@ const QT = {
                            : 'Đã lưu công đoạn ✓');
   },
 
+  /* ---------- Công đoạn của MỘT nhóm dịch vụ ----------
+     Cách phòng khám muốn quản lý: nhóm dịch vụ mang bộ công đoạn, dịch vụ nào nằm
+     trong nhóm thì ăn theo bộ đó. Bên trong vẫn là một "kỹ thuật" gắn với nhóm —
+     chưa có thì tạo luôn, khỏi bắt người dùng hiểu thêm một khái niệm nữa. */
+  choNhom(g){
+    let q = this.ds().find(x => (x.nhom || []).includes(g));
+    if (!q) {
+      q = {id: 'qt' + uid(), ten: g, nhom: [g], dv: [], labGY: [], buoc: [],
+           truLab: /sứ|tháo lắp|implant/i.test(g)};
+      db.quyTrinh.push(q);
+      save();
+    }
+    return q;
+  },
+  bangNhom(g){
+    if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới sửa được'); return; }
+    const q = this.choNhom(g);
+    this._veNhom = g;
+    const dv = (db.services || []).filter(x => x.group === g);
+    const tong = this.tongPct(q);
+    App.modal('Công đoạn & hoa hồng — ' + g, `
+      <div class="note-block mb"><b>${dv.length} dịch vụ</b> trong nhóm này đều ăn theo bộ công đoạn dưới đây.
+        Ai làm công đoạn nào thì hưởng phần đó; một ca chia được cho nhiều người.
+        ${q.truLab ? 'Nhóm này <b>trừ tiền lab trước rồi mới tính %</b>.' : ''}</div>
+      ${(q.buoc || []).length ? `<div class="tbl-wrap"><table style="min-width:520px">
+        <thead><tr><th>Công đoạn</th><th class="r">Tỷ trọng</th><th class="r">Lương 10%</th><th class="r">Lương 30%</th><th></th></tr></thead>
+        <tbody>${q.buoc.map(b => `<tr><td>${h(b.t)}</td>
+          <td class="r num">${b.tien != null ? '—' : (b.tt != null ? b.tt + '%' : '—')}</td>
+          <td class="r num">${b.tien != null ? money(b.tien) : (b.p10 != null ? b.p10 : (b.p || 0)) + '%'}</td>
+          <td class="r num">${b.tien != null ? money(b.tien) : (b.p30 != null ? b.p30 : (b.p || 0)) + '%'}</td>
+          <td><button class="btn small" onclick="QT.buocForm('${q.id}','${b.b}')">Sửa</button></td></tr>`).join('')}</tbody>
+        <tfoot><tr><td><b>Cộng</b></td><td class="r num"><b>${tong}%</b></td><td class="r num">${+(tong*0.1).toFixed(1)}%</td>
+          <td class="r num">${+(tong*0.3).toFixed(1)}%</td><td></td></tr></tfoot></table></div>`
+        : '<div class="note-block warn-block">Chưa có công đoạn nào — mọi dịch vụ trong nhóm này hiện <b>không chia hoa hồng cho ai</b>.</div>'}
+      <div class="form-actions" style="margin-top:12px;flex-wrap:wrap;gap:6px">
+        <button class="btn primary" onclick="QT.buocForm('${q.id}')">${IC.plus} Thêm công đoạn</button>
+        <button class="btn" onclick="QT.truLabDoi('${q.id}')">${q.truLab ? 'Bỏ trừ tiền lab' : 'Trừ tiền lab trước khi tính %'}</button>
+        <span class="spacer"></span>
+        <button class="btn" onclick="QT._veNhom=null;Svc.nhomBang()">Xong</button></div>
+      ${dv.length ? `<div class="sub-line" style="margin-top:10px">Áp cho: ${dv.slice(0,10).map(x=>h(x.name)).join(' · ')}${dv.length>10?' … và '+(dv.length-10)+' dịch vụ nữa':''}</div>` : ''}`);
+  },
+  truLabDoi(qid){
+    const q = this.boId(qid); if (!q) return;
+    q.truLab = !q.truLab; q._up = Date.now();
+    save();
+    if (this._veNhom) this.bangNhom(this._veNhom); else this.bang();
+  },
+
   /* ---------- Cài đặt quy trình (quản lý) ---------- */
   bang(){
     if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới sửa được quy trình'); return; }
@@ -7187,7 +7348,7 @@ const QT = {
         tư vấn implant, làm tẩy trắng, phụ implant.</div>
       <div class="form-actions full">
         ${bid?`<button type="button" class="btn danger" onclick="QT.buocDel('${qid}','${bid}')">Xóa</button><span class="spacer"></span>`:''}
-        <button type="button" class="btn" onclick="QT.bang()">Quay lại</button><button class="btn primary">Lưu</button></div>
+        <button type="button" class="btn" onclick="QT._veNhom?QT.bangNhom(QT._veNhom):QT.bang()">Quay lại</button><button class="btn primary">Lưu</button></div>
     </form>`);
   },
   /* Gõ tỷ trọng thì điền sẵn hai ô nhóm lương — đỡ phải bấm máy tính */
@@ -7217,7 +7378,9 @@ const QT = {
     let b = bid && this.buocCua(q, bid);
     if (b) { delete b.p; delete b.p10; delete b.p30; delete b.tt; delete b.tien; Object.assign(b, o); }
     else q.buoc.push(Object.assign({b: 'b' + uid()}, o));
-    save(); this.bang(); App.toast('Đã lưu công đoạn ✓');
+    save();
+    if (this._veNhom) this.bangNhom(this._veNhom); else this.bang();
+    App.toast('Đã lưu công đoạn ✓');
   },
 
   /* ---------- Quy tắc trừ (Bảng 1 của tài liệu) ---------- */
@@ -7241,7 +7404,7 @@ const QT = {
       <div class="note-block full">Bảng gốc không nói rõ ca giảm trong khoảng <b>trên 30% tới dưới 50%</b> thì sao,
         nên phần mềm đang xếp chung với nhóm "giảm nhiều" — tức hạ về ${r.mucKhiGiam}%. Muốn khác thì sửa ô trên.</div>
       <div class="form-actions full">
-        <button type="button" class="btn" onclick="QT.bang()">Quay lại</button><button class="btn primary">Lưu</button></div>
+        <button type="button" class="btn" onclick="QT._veNhom?QT.bangNhom(QT._veNhom):QT.bang()">Quay lại</button><button class="btn primary">Lưu</button></div>
     </form>`);
   },
   quyTacSave(ev){
@@ -7280,7 +7443,9 @@ const QT = {
     const dung = db.treatments.filter(t => (t.cd||[]).some(x => x.b === bid)).length;
     if (!confirm('Xóa công đoạn "' + b.t + '"?' + (dung ? '\n\n' + dung + ' hạng mục đã ghi công đoạn này, phần hoa hồng đó sẽ không còn được tính.' : ''))) return;
     q.buoc = q.buoc.filter(x => x.b !== bid);
-    save(); this.bang(); App.toast('Đã xóa');
+    save();
+    if (this._veNhom) this.bangNhom(this._veNhom); else this.bang();
+    App.toast('Đã xóa');
   },
   /* Thêm mới hoặc sửa một kỹ thuật. Không truyền qid thì là thêm mới. */
   _dvTam: [],
@@ -7337,7 +7502,7 @@ const QT = {
       ${qid ? '' : '<div class="note-block full">Tạo xong thì nhớ <b>thêm công đoạn</b> cho nó, chưa có công đoạn thì chưa chia hoa hồng được.</div>'}
       <div class="form-actions full">
         ${qid ? `<button type="button" class="btn danger" onclick="QT.qtDel('${qid}')">Bỏ kỹ thuật này</button><span class="spacer"></span>` : ''}
-        <button type="button" class="btn" onclick="QT.bang()">Quay lại</button><button class="btn primary">Lưu</button></div>
+        <button type="button" class="btn" onclick="QT._veNhom?QT.bangNhom(QT._veNhom):QT.bang()">Quay lại</button><button class="btn primary">Lưu</button></div>
     </form>`);
   },
   qtSave(ev, qid){
