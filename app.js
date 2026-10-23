@@ -5571,6 +5571,8 @@ const Svc = {
       <td>${(() => {
         const q = QT.ds().find(x => (x.nhom||[]).includes(g));
         const n = q ? (q.buoc||[]).length : 0;
+        if (q && q.khongChia) return `<span class="pill mutedp">không chia hoa hồng</span>
+          <br><button class="btn small" onclick="QT.bangNhom('${h(g).replace(/'/g,"\\'")}')">Sửa</button>`;
         return `${n ? `<b>${n} công đoạn</b> · tổng tỷ trọng ${QT.tongPct(q)}%`
                     : '<span class="pill warn">chưa có công đoạn</span>'}
           <br><button class="btn small ${n?'':'primary'}" onclick="QT.bangNhom('${h(g).replace(/'/g,"\\'")}')">
@@ -6928,6 +6930,24 @@ const QT = {
       {b:'nn_tramchot',t:'Trám kết thúc CÓ ĐẶT CHỐT (đổi vật liệu)',tt:20, p10:2,   p30:6},
       {b:'nn_tk',      t:'Tái khám + chụp phim kiểm tra sau 6 tháng',tt:5, p10:0.5, p30:1.5},
      ]},
+    {id:'qt_tram', ten:'Trám răng', nhom:['Trám răng'], truLab:false, labGY:[],
+     buoc:[
+      {b:'tr_tv',   t:'Tư vấn',                     tt:10, p10:1,   p30:3},
+      {b:'tr_xoang',t:'Tạo xoang',                   tt:20, p10:2,   p30:6},
+      {b:'tr_hinh', t:'Tạo hình',                    tt:55, p10:5.5, p30:16.5},
+      {b:'tr_bong', t:'Chỉnh khớp và đánh bóng',     tt:10, p10:1,   p30:3},
+     ]},
+    {id:'qt_nho', ten:'Nhổ răng', nhom:['Nhổ răng'], truLab:false, labGY:[],
+     buoc:[
+      {b:'nh_tv',   t:'Tư vấn',    tt:10, p10:1,   p30:3},
+      {b:'nh_te',   t:'Gây tê',    tt:20, p10:2,   p30:6},
+      {b:'nh_nho',  t:'Nhổ răng',  tt:55, p10:5.5, p30:16.5},
+      {b:'nh_dan',  t:'Dặn dò',    tt:15, p10:1.5, p30:4.5},
+     ]},
+    /* Chụp phim tính doanh thu chung cho phòng khám, không chia cho ai — nên nhóm này
+       bật cờ khongChia và không cần công đoạn nào. */
+    {id:'qt_cdha', ten:'Chẩn đoán hình ảnh', nhom:['Chẩn đoán hình ảnh'], truLab:false,
+     khongChia:true, labGY:[], buoc:[]},
     {id:'qt_caovoi', ten:'Cạo vôi răng', nhom:['Nha chu'], truLab:false, labGY:[],
      buoc:[
       {b:'cv_l1', t:'Lần 1', tt:50, p10:5, p30:15},
@@ -7106,6 +7126,9 @@ const QT = {
       (t.cd || []).forEach(x => {
         if (!x.d || monthOf(x.d) !== month) return;
         if (staffId && x.s !== staffId) return;
+        /* Nhóm đánh dấu "không chia" thì doanh thu tính chung cho phòng khám,
+           không ai được hoa hồng — kể cả khi lỡ ghi công đoạn. */
+        if (q.khongChia) return;
         const buoc = this.buocCua(q, x.b); if (!buoc) return;
         const st = staffById(x.s);
         ra.push({t, q, buoc, staffId: x.s, date: x.d, tien: this.tienBuoc(t, q, buoc, st)});
@@ -7128,6 +7151,15 @@ const QT = {
           <select id="qtChon">${this.ds().map(x=>`<option value="${x.id}">${h(x.ten)}</option>`).join('')}</select></div>
         <div class="form-actions full"><button class="btn" onclick="App.closeModal()">Hủy</button>
           <button class="btn primary" onclick="QT.ganQT('${tid}')">Áp dụng</button></div>`);
+      return;
+    }
+    if (q.khongChia) {
+      App.modal('Công đoạn — ' + t.name, `
+        <div class="note-block">Nhóm <b>${h(t.group || q.ten)}</b> được đặt là
+          <b>không chia hoa hồng</b> — doanh thu tính chung cho cả phòng khám, không cần ghi tên bác sĩ.</div>
+        <div class="note-block">Muốn đổi thì vào <b>Cài đặt → Bảng giá dịch vụ → Nhóm dịch vụ</b>,
+          mở nhóm này rồi bỏ đánh dấu.</div>
+        <div class="form-actions"><button class="btn primary" onclick="App.closeModal()">Đã hiểu</button></div>`);
       return;
     }
     const daLam = t.cd || [];
@@ -7173,6 +7205,16 @@ const QT = {
         ${Tien.o('tienLab', t.tienLab||0, `oninput="QT.tinhLai('${tid}')"`)}
         ${(() => { const gy = GiaLab.goiY().length ? GiaLab.goiY() : q.labGY; return gy.length?`<div class="combo-hint">Mức thường dùng: ${gy.map(([n,v])=>
           `<button type="button" class="link-btn" onclick="this.form.tienLab.value=Tien.dinh('${v}')">${h(n)} ${money(v)}</button>`).join(' · ')}</div>`:''; })()}</div>`:''}
+      <div class="f full"><label>Làm xong hết trong một lần hẹn?</label>
+        <div class="form-actions" style="justify-content:flex-start;gap:6px;flex-wrap:wrap">
+          <select id="nguoiTatCa" style="max-width:260px">
+            <option value="">— chọn người làm tất cả —</option>
+            ${nv.map(s => `<option value="${s.id}">${h(s.name)}${s.nhomHH != null && s.nhomHH !== '' ? ' — ' + QT.mucCua(s) + '%' : ''}</option>`).join('')}
+          </select>
+          <button type="button" class="btn" onclick="QT.chonTatCa('${tid}')">Chọn tất cả công đoạn</button>
+          <button type="button" class="btn" onclick="QT.boTatCa('${tid}')">Bỏ chọn hết</button></div>
+        <div class="combo-hint">Ca làm gọn trong một buổi thì chọn người rồi bấm <b>Chọn tất cả</b> —
+          khỏi tick từng dòng. Chọn xong vẫn sửa lại từng dòng được.</div></div>
       <div class="full"><div class="tbl-wrap"><table style="min-width:560px">
         <thead><tr><th>Công đoạn</th><th>Người làm</th><th>Ngày</th><th class="r">Đủ 100%</th><th class="r">Thực nhận</th></tr></thead>
         <tbody>${rows}</tbody></table></div></div>
@@ -7183,6 +7225,24 @@ const QT = {
         <button class="btn primary">Lưu công đoạn</button></div>
     </form>`);
   },
+  /* Ca làm gọn một buổi: tick hết công đoạn và gán cùng một người, khỏi bấm từng dòng */
+  chonTatCa(tid){
+    const f = document.querySelector('#modalBody form'); if (!f) return;
+    const ai = (document.getElementById('nguoiTatCa') || {}).value || '';
+    if (!ai) { App.toast('Chọn người làm trước đã'); return; }
+    f.querySelectorAll('[name="lam"]').forEach(x => { x.checked = true; });
+    f.querySelectorAll('select[name^="ng_"]').forEach(x => { x.value = ai; });
+    this.tinhLai(tid);
+    App.toast('Đã gán cả ' + f.querySelectorAll('[name="lam"]').length + ' công đoạn cho '
+      + ((staffById(ai) || {}).name || ''));
+  },
+  boTatCa(tid){
+    const f = document.querySelector('#modalBody form'); if (!f) return;
+    f.querySelectorAll('[name="lam"]').forEach(x => { x.checked = false; });
+    f.querySelectorAll('select[name^="ng_"]').forEach(x => { x.value = ''; });
+    this.tinhLai(tid);
+  },
+
   /* Tính lại cả bảng ngay khi lễ tân đổi người làm, sửa tiền lab hoặc bỏ tick ảnh —
      không phải lưu rồi mở lại mới thấy số. Chỉ đọc form, KHÔNG ghi gì vào db. */
   tinhLai(tid){
@@ -7254,25 +7314,51 @@ const QT = {
     const dv = (db.services || []).filter(x => x.group === g);
     const tong = this.tongPct(q);
     App.modal('Công đoạn & hoa hồng — ' + g, `
+      ${q.khongChia ? `<div class="note-block warn-block mb">Nhóm này đang đặt <b>không chia hoa hồng</b>:
+        doanh thu tính chung cho cả phòng khám, không cần ghi tên bác sĩ và không ai được phần.
+        Bộ công đoạn bên dưới (nếu có) sẽ bị bỏ qua.</div>` : ''}
       <div class="note-block mb"><b>${dv.length} dịch vụ</b> trong nhóm này đều ăn theo bộ công đoạn dưới đây.
         Ai làm công đoạn nào thì hưởng phần đó; một ca chia được cho nhiều người.
         ${q.truLab ? 'Nhóm này <b>trừ tiền lab trước rồi mới tính %</b>.' : ''}</div>
       ${(q.buoc || []).length ? `<div class="tbl-wrap"><table style="min-width:520px">
         <thead><tr><th>Công đoạn</th><th class="r">Tỷ trọng</th><th class="r">Lương 10%</th><th class="r">Lương 30%</th><th></th></tr></thead>
-        <tbody>${q.buoc.map(b => `<tr><td>${h(b.t)}</td>
+        <tbody>${q.buoc.map((b, i) => `<tr><td>${h(b.t)}</td>
           <td class="r num">${b.tien != null ? '—' : (b.tt != null ? b.tt + '%' : '—')}</td>
           <td class="r num">${b.tien != null ? money(b.tien) : (b.p10 != null ? b.p10 : (b.p || 0)) + '%'}</td>
           <td class="r num">${b.tien != null ? money(b.tien) : (b.p30 != null ? b.p30 : (b.p || 0)) + '%'}</td>
-          <td><button class="btn small" onclick="QT.buocForm('${q.id}','${b.b}')">Sửa</button></td></tr>`).join('')}</tbody>
+          <td style="white-space:nowrap">
+            <button class="btn small" ${i === 0 ? 'disabled' : ''} onclick="QT.buocDoiCho('${q.id}',${i},-1)">↑</button>
+            <button class="btn small" ${i === q.buoc.length - 1 ? 'disabled' : ''} onclick="QT.buocDoiCho('${q.id}',${i},1)">↓</button>
+            <button class="btn small" onclick="QT.buocForm('${q.id}','${b.b}')">Sửa</button></td></tr>`).join('')}</tbody>
         <tfoot><tr><td><b>Cộng</b></td><td class="r num"><b>${tong}%</b></td><td class="r num">${+(tong*0.1).toFixed(1)}%</td>
           <td class="r num">${+(tong*0.3).toFixed(1)}%</td><td></td></tr></tfoot></table></div>`
         : '<div class="note-block warn-block">Chưa có công đoạn nào — mọi dịch vụ trong nhóm này hiện <b>không chia hoa hồng cho ai</b>.</div>'}
       <div class="form-actions" style="margin-top:12px;flex-wrap:wrap;gap:6px">
         <button class="btn primary" onclick="QT.buocForm('${q.id}')">${IC.plus} Thêm công đoạn</button>
         <button class="btn" onclick="QT.truLabDoi('${q.id}')">${q.truLab ? 'Bỏ trừ tiền lab' : 'Trừ tiền lab trước khi tính %'}</button>
+        <button class="btn ${q.khongChia ? 'danger' : ''}" onclick="QT.chiaDoi('${q.id}')">${
+          q.khongChia ? 'Cho chia hoa hồng lại' : 'Không chia hoa hồng (tính chung phòng khám)'}</button>
         <span class="spacer"></span>
         <button class="btn" onclick="QT._veNhom=null;Svc.nhomBang()">Xong</button></div>
       ${dv.length ? `<div class="sub-line" style="margin-top:10px">Áp cho: ${dv.slice(0,10).map(x=>h(x.name)).join(' · ')}${dv.length>10?' … và '+(dv.length-10)+' dịch vụ nữa':''}</div>` : ''}`);
+  },
+  /* Đổi thứ tự công đoạn — thứ tự này là thứ tự làm thật ở ghế nên phải sửa được */
+  buocDoiCho(qid, i, huong){
+    const q = this.boId(qid); if (!q || !q.buoc) return;
+    const j = i + huong;
+    if (j < 0 || j >= q.buoc.length) return;
+    const t = q.buoc[i]; q.buoc[i] = q.buoc[j]; q.buoc[j] = t;
+    q._up = Date.now();
+    save();
+    if (this._veNhom) this.bangNhom(this._veNhom); else this.bang();
+  },
+  chiaDoi(qid){
+    const q = this.boId(qid); if (!q) return;
+    q.khongChia = !q.khongChia; q._up = Date.now();
+    save();
+    App.toast(q.khongChia ? 'Nhóm này không chia hoa hồng nữa — doanh thu tính chung phòng khám'
+                          : 'Nhóm này chia hoa hồng theo công đoạn trở lại');
+    if (this._veNhom) this.bangNhom(this._veNhom); else this.bang();
   },
   truLabDoi(qid){
     const q = this.boId(qid); if (!q) return;
