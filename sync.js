@@ -106,13 +106,32 @@ const Sync = {
     this.tombs = [];
     return dem;
   },
+  /* Supabase trả tối đa 1000 dòng một lần gọi (db-max-rows). Kho records của phòng
+     khám có vài nghìn dòng — khách hàng, hạng mục điều trị, phiếu thu nằm chung một
+     bảng — nên đọc một phát chỉ lấy được phần đầu, mà KHÔNG báo lỗi gì vì về mặt
+     HTTP vẫn là 200. Máy nào chưa có sẵn dữ liệu thì hiện thiếu khách.
+     Phải đọc từng trang cho tới khi hết. */
+  TRANG: 1000,
+  async docKho(bang){
+    const ra = [];
+    for (let tu = 0; ; tu += this.TRANG) {
+      /* Bắt buộc có order cố định: không có ORDER BY thì thứ tự giữa hai lần gọi
+         không được đảm bảo, trang sau lặp lại dòng của trang trước và bỏ sót dòng khác. */
+      const p = await Cloud.auth('/rest/v1/' + bang + '?select=*&order=id.asc'
+        + '&limit=' + this.TRANG + '&offset=' + tu, {timeout: 45000}) || [];
+      ra.push(...p);
+      if (p.length < this.TRANG) break;
+      if (ra.length > 500000) break;   /* chặn vòng lặp vô tận nếu máy chủ trả lạ */
+    }
+    return ra;
+  },
   async pull(){
-    let rows = await Cloud.auth('/rest/v1/records?select=*', {timeout: 30000}) || [];
+    let rows = await this.docKho('records');
     /* Đọc cả hai kho rồi trộn. Bản ghi bệnh án cũ còn sót trong records sẽ thua bản
        trong emr vì dấu thời gian cũ hơn — thứ tự trộn không ảnh hưởng kết quả. */
     if (this.emrSan !== false) {
       try {
-        const e = await Cloud.auth('/rest/v1/emr?select=*', {timeout: 30000}) || [];
+        const e = await this.docKho('emr');
         rows = rows.concat(e);
         this.emrSan = true;
       } catch(err){
