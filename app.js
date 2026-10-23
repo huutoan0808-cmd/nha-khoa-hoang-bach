@@ -439,6 +439,16 @@ function migrate() {
   /* Kế hoạch lập trước v129 chưa có hạng mục điều trị, vì hồi đó còn phải bấm "Đưa
      vào điều trị" từng dòng. Nay nút đó bỏ rồi nên phải dựng nốt cho hồ sơ cũ, không
      thì mấy dòng đó mắc kẹt mãi trong kế hoạch mà không vào được công nợ. */
+  /* Máy đã cài trước v139 thì qt_noinha và qt_tram đã có sẵn, vòng nạp chỉ thêm kỹ
+     thuật CÒN THIẾU nên không đụng tới phần danh mục riêng của chúng. Bổ sung một lần. */
+  if (!db.donTreEm) {
+    [['qt_noinha', 'Điều trị tủy + trám răng sữa'], ['qt_tram', 'Trám răng sữa (GIC)']].forEach(([id, ten]) => {
+      const q = (db.quyTrinh || []).find(x => x.id === id); if (!q) return;
+      q.dv = q.dv || [];
+      if (!q.dv.some(x => Combo.norm(x) === Combo.norm(ten))) { q.dv.push(ten); q._up = Date.now(); }
+    });
+    db.donTreEm = 1;
+  }
   if (!db.donHM) {
     let them = 0;
     (db.customers || []).forEach(c => {
@@ -6921,6 +6931,7 @@ const QT = {
       {b:'tlt_dau',  t:'Chỉnh đau',                      tt:5,  p10:0.5, p30:1.5},
      ]},
     {id:'qt_noinha', ten:'Điều trị tủy', nhom:['Điều trị tủy'], truLab:false, labGY:[],
+     dv:['Điều trị tủy + trám răng sữa'],
      buoc:[
       {b:'nn_tv',      t:'Tư vấn',                                  tt:10, p10:1,   p30:3},
       {b:'nn_ssot',    t:'Sửa soạn ống tuỷ (SSOT)',                 tt:50, p10:5,   p30:15},
@@ -6931,6 +6942,7 @@ const QT = {
       {b:'nn_tk',      t:'Tái khám + chụp phim kiểm tra sau 6 tháng',tt:5, p10:0.5, p30:1.5},
      ]},
     {id:'qt_tram', ten:'Trám răng', nhom:['Trám răng'], truLab:false, labGY:[],
+     dv:['Trám răng sữa (GIC)'],
      buoc:[
       {b:'tr_tv',   t:'Tư vấn',                     tt:10, p10:1,   p30:3},
       {b:'tr_xoang',t:'Tạo xoang',                   tt:20, p10:2,   p30:6},
@@ -6975,6 +6987,22 @@ const QT = {
      ]},
     {id:'qt_tieuphau', ten:'Tiểu phẫu', nhom:[], truLab:false, labGY:[],
      buoc:[{b:'tp_phu', t:'Phụ tiểu phẫu', p10:1, p30:1}]},
+
+    /* ---- Răng trẻ em ----
+       Nhóm này KHÔNG dùng một bộ công đoạn chung: gói chăm sóc, vệ sinh dự phòng,
+       bọc mão và điều trị tủy ăn bốn mức khác hẳn nhau. Nên gán theo DANH MỤC RIÊNG,
+       không gán theo nhóm (nhom để rỗng) — danh mục riêng thắng nhóm nên mỗi dịch vụ
+       chạy đúng mức của nó. Điều trị tủy răng sữa và trám răng sữa thì dùng chung bộ
+       của người lớn, gán ở phần dv của hai kỹ thuật đó. */
+    {id:'qt_tre_goi', ten:'Gói chăm sóc răng miệng trẻ em', nhom:[], truLab:false, labGY:[],
+     dv:['Gói chăm sóc Robot (1 năm)','Gói chăm sóc Siêu Nhân (1 năm)','Gói chăm sóc Super Man (1 năm)'],
+     buoc:[{b:'tg_tv', t:'Tư vấn', p10:1, p30:1}]},
+    {id:'qt_tre_dp', ten:'Vệ sinh & dự phòng răng trẻ em', nhom:[], truLab:false, labGY:[],
+     dv:['Vệ sinh răng trẻ em','Phủ vecni fluor'],
+     buoc:[{b:'td_lam', t:'Thực hiện', p10:10, p30:10}]},
+    {id:'qt_tre_mao', ten:'Bọc mão răng sữa', nhom:[], truLab:true, labGY:[],
+     dv:['Bọc mão kim loại răng sữa'],
+     buoc:[{b:'tm_lam', t:'Thực hiện', p10:10, p30:10}]},
   ],
 
   /* ---------- Nhóm lương và các mức bị trừ ----------
@@ -7307,6 +7335,32 @@ const QT = {
     }
     return q;
   },
+  /* Mở màn công đoạn của một kỹ thuật theo id — dùng cho những kỹ thuật gán theo
+     danh mục riêng, không thuộc nhóm nào nên không mở từ bảng Nhóm dịch vụ được. */
+  bangKT(qid){
+    const q = this.boId(qid); if (!q) { App.toast('Không tìm thấy'); return; }
+    const g = (q.nhom || [])[0];
+    if (g) { this.bangNhom(g); return; }
+    this._veNhom = null;
+    App.modal('Công đoạn & hoa hồng — ' + q.ten, `
+      <div class="note-block mb">Kỹ thuật này áp theo <b>danh mục riêng</b>, không theo nhóm dịch vụ.
+        Áp cho: ${(q.dv || []).length ? (q.dv).map(h).join(' · ') : '<i>chưa gán danh mục nào</i>'}</div>
+      ${(q.buoc || []).length ? `<div class="tbl-wrap"><table style="min-width:480px">
+        <thead><tr><th>Công đoạn</th><th class="r">Lương 10%</th><th class="r">Lương 30%</th><th></th></tr></thead>
+        <tbody>${q.buoc.map((b, i) => `<tr><td>${h(b.t)}</td>
+          <td class="r num">${b.tien != null ? money(b.tien) : (b.p10 != null ? b.p10 : (b.p || 0)) + '%'}</td>
+          <td class="r num">${b.tien != null ? money(b.tien) : (b.p30 != null ? b.p30 : (b.p || 0)) + '%'}</td>
+          <td style="white-space:nowrap">
+            <button class="btn small" ${i === 0 ? 'disabled' : ''} onclick="QT.buocDoiCho('${q.id}',${i},-1)">↑</button>
+            <button class="btn small" ${i === q.buoc.length - 1 ? 'disabled' : ''} onclick="QT.buocDoiCho('${q.id}',${i},1)">↓</button>
+            <button class="btn small" onclick="QT.buocForm('${q.id}','${b.b}')">Sửa</button></td></tr>`).join('')}</tbody></table></div>`
+        : '<div class="note-block warn-block">Chưa có công đoạn nào.</div>'}
+      <div class="form-actions" style="margin-top:12px;flex-wrap:wrap;gap:6px">
+        <button class="btn primary" onclick="QT.buocForm('${q.id}')">${IC.plus} Thêm công đoạn</button>
+        <button class="btn" onclick="QT.qtForm('${q.id}')">Sửa danh mục áp dụng</button>
+        <span class="spacer"></span>
+        <button class="btn" onclick="App.closeModal()">Xong</button></div>`);
+  },
   bangNhom(g){
     if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới sửa được'); return; }
     const q = this.choNhom(g);
@@ -7317,9 +7371,18 @@ const QT = {
       ${q.khongChia ? `<div class="note-block warn-block mb">Nhóm này đang đặt <b>không chia hoa hồng</b>:
         doanh thu tính chung cho cả phòng khám, không cần ghi tên bác sĩ và không ai được phần.
         Bộ công đoạn bên dưới (nếu có) sẽ bị bỏ qua.</div>` : ''}
-      <div class="note-block mb"><b>${dv.length} dịch vụ</b> trong nhóm này đều ăn theo bộ công đoạn dưới đây.
-        Ai làm công đoạn nào thì hưởng phần đó; một ca chia được cho nhiều người.
-        ${q.truLab ? 'Nhóm này <b>trừ tiền lab trước rồi mới tính %</b>.' : ''}</div>
+      ${(() => {
+        /* Đếm đúng số dịch vụ THẬT SỰ ăn theo bộ chung — món nào đã có kỹ thuật riêng
+           nhận thì không tính vào, không thì câu này nói sai. */
+        const soRieng = dv.filter(x => QT.ds().some(k => k.id !== q.id
+          && (k.dv || []).some(y => Combo.norm(y) === Combo.norm(x.name)))).length;
+        const soChung = dv.length - soRieng;
+        return `<div class="note-block mb">${soChung
+          ? `<b>${soChung} dịch vụ</b> trong nhóm này ăn theo bộ công đoạn dưới đây${soRieng ? `, ${soRieng} dịch vụ còn lại có mức riêng (xem cuối trang)` : ''}.`
+          : `Cả <b>${dv.length} dịch vụ</b> trong nhóm này đều đã có <b>mức riêng</b> (xem cuối trang) — bộ công đoạn dưới đây hiện không áp cho món nào.`}
+          Ai làm công đoạn nào thì hưởng phần đó; một ca chia được cho nhiều người.
+          ${q.truLab ? 'Nhóm này <b>trừ tiền lab trước rồi mới tính %</b>.' : ''}</div>`;
+      })()}
       ${(q.buoc || []).length ? `<div class="tbl-wrap"><table style="min-width:520px">
         <thead><tr><th>Công đoạn</th><th class="r">Tỷ trọng</th><th class="r">Lương 10%</th><th class="r">Lương 30%</th><th></th></tr></thead>
         <tbody>${q.buoc.map((b, i) => `<tr><td>${h(b.t)}</td>
@@ -7340,7 +7403,19 @@ const QT = {
           q.khongChia ? 'Cho chia hoa hồng lại' : 'Không chia hoa hồng (tính chung phòng khám)'}</button>
         <span class="spacer"></span>
         <button class="btn" onclick="QT._veNhom=null;Svc.nhomBang()">Xong</button></div>
-      ${dv.length ? `<div class="sub-line" style="margin-top:10px">Áp cho: ${dv.slice(0,10).map(x=>h(x.name)).join(' · ')}${dv.length>10?' … và '+(dv.length-10)+' dịch vụ nữa':''}</div>` : ''}`);
+      ${(() => {
+        /* Dịch vụ nào trong nhóm đã bị một kỹ thuật khác "nhận riêng" thì nó KHÔNG ăn
+           theo bộ trên — phải nói rõ, không thì nhìn vào tưởng cả nhóm chạy như nhau. */
+        const rieng = dv.map(x => ({x, q: QT.ds().find(k => (k.dv || []).some(y => Combo.norm(y) === Combo.norm(x.name)))}))
+          .filter(o => o.q && o.q.id !== q.id);
+        const chung = dv.filter(x => !rieng.some(o => o.x.id === x.id));
+        return `${chung.length ? `<div class="sub-line" style="margin-top:10px">Áp bộ trên cho:
+            ${chung.slice(0,10).map(x=>h(x.name)).join(' · ')}${chung.length>10?' … và '+(chung.length-10)+' dịch vụ nữa':''}</div>` : ''}
+          ${rieng.length ? `<div class="note-block" style="margin-top:10px">Những dịch vụ sau
+            <b>không theo bộ trên</b> mà có mức riêng:<br>
+            ${rieng.map(o => `• ${h(o.x.name)} → <b>${h(o.q.ten)}</b>
+              <button class="btn small" onclick="QT.bangKT('${o.q.id}')">Xem</button>`).join('<br>')}</div>` : ''}`;
+      })()}`);
   },
   /* Đổi thứ tự công đoạn — thứ tự này là thứ tự làm thật ở ghế nên phải sửa được */
   buocDoiCho(qid, i, huong){
