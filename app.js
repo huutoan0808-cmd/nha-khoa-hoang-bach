@@ -747,6 +747,11 @@ const App = {
       <div class="card mb"><div class="card-b">
         <div class="alert-line"><span class="alert-ico warn">!</span><div><b>${r.maTrung}</b> mã khách hàng bị lặp — thừa <b>${r.hoSoThua}</b> hồ sơ</div></div>
         ${r.phieuThuThua ? `<div class="alert-line"><span class="alert-ico warn">!</span><div>Thừa <b>${r.phieuThuThua}</b> phiếu thu trùng số</div></div>` : ''}
+        ${r.maDungChung ? `<div class="note-block warn-block" style="margin-top:10px">
+          <b>${r.maDungChung} mã khách đang dùng cho nhiều NGƯỜI KHÁC NHAU</b> — tổng cộng
+          ${r.nguoiBiDungChungMa} người bị trùng mã với người khác. Hay gặp ở dữ liệu nhập từ file cũ.<br>
+          Những hồ sơ này <b>không được gộp</b> vì chúng là bệnh nhân khác nhau. Bấm
+          <b>Đánh lại mã</b> để phần mềm cấp mã mới cho người bị trùng, giữ nguyên hồ sơ.</div>` : ''}
       </div></div>
       <div class="note-block">Phần mềm sẽ giữ lại hồ sơ có <b>nhiều lịch sử điều trị nhất</b> của mỗi mã khách,
         và <b>chuyển toàn bộ</b> điều trị, phiếu thu, lịch hẹn, phiếu lab của hồ sơ thừa sang hồ sơ được giữ.
@@ -755,7 +760,16 @@ const App = {
         Nên <b>sao lưu</b> (nút ⬇ góc trên) trước khi dọn, để lỡ có gì còn quay lại được.</div>
       <div class="form-actions">
         <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+        ${r.maDungChung ? `<button class="btn" onclick="App.danhLaiMaRun()">Đánh lại mã (${r.nguoiBiDungChungMa})</button>` : ''}
         <button type="button" class="btn primary" onclick="App.dedupeRun()">Dọn ngay</button></div>`);
+  },
+  danhLaiMaRun(){
+    const n = Sync.danhLaiMa();
+    save(); App.render();
+    App.modal('Đã đánh lại mã', `
+      <div class="alert-line"><span class="alert-ico info">✓</span>
+        <div>Đã cấp mã mới cho <b>${n}</b> người bị trùng mã với người khác. Hồ sơ giữ nguyên, không mất gì.</div></div>
+      <div class="form-actions"><button class="btn primary" onclick="App.dedupeForm()">Xem lại</button></div>`);
   },
   async dedupeRun(){
     if (!confirm('Bắt đầu dọn trùng lặp? Nên sao lưu trước.')) return;
@@ -8749,6 +8763,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!Cloud.loggedIn()) Att.loginForm();
   }
   /* Có kết nối sẵn thì lặng lẽ đồng bộ khi mở app */
+  /* Lấy mốc so sánh NGAY BÂY GIỜ, sau khi migrate() đã chuẩn hóa xong dữ liệu.
+     Lấy muộn hơn thì hoặc là mất thay đổi gõ trước lần đồng bộ đầu, hoặc là cả kho bị
+     đóng dấu thời gian mới rồi đè lên dấu xóa của máy khác. */
+  if (typeof Sync !== 'undefined' && Sync.moBaiDau) { try { Sync.moBaiDau(); } catch(e){} }
   if (Cloud.configured() && Cloud.loggedIn()) setTimeout(() => { Sync.run(true).then(() => Att.sync()); }, 800);
   /* Từ nay máy nào nhập gì thì máy khác thấy trong vòng một phút, khỏi bấm nút ⟳ */
   if (typeof Sync !== 'undefined') Sync.khoiDongTuDong();

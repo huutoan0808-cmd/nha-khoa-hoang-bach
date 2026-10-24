@@ -48,14 +48,38 @@ const Sync = {
     /* Ghi thêm danh sách ID xuống db để SỐNG QUA LẦN ĐÓNG APP. Chỉ lưu id chứ không
        lưu cả nội dung: nội dung thì nặng ngang cả kho dữ liệu, mà muốn biết bản ghi
        nào bị xóa thì chỉ cần id là đủ. */
+    /* Ghi vân tay từng bản ghi xuống db để SỐNG QUA LẦN ĐÓNG APP: vừa biết bản ghi
+       nào bị xóa, vừa biết bản ghi nào thật sự đổi nội dung. Nếu chỉ lưu id thì mở
+       app lên stamp() sẽ coi MỌI bản ghi là vừa đổi và đóng dấu thời gian mới cho
+       tất cả — máy đó sẽ đè lên dấu xóa của máy khác. */
     db.syncIds = db.syncIds || {};
     SYNC_TABLES.forEach(t => {
-      db.syncIds[t] = (db[t] || []).map(r => r && r.id).filter(Boolean);
+      const m = {};
+      (db[t] || []).forEach(r => { if (r && r.id) m[r.id] = this.bam(this.plain(r)); });
+      db.syncIds[t] = m;
     });
   },
   plain(r){ const o = {}; Object.keys(r).forEach(k => { if (k !== '_up') o[k] = r[k]; }); return JSON.stringify(o); },
+  /* Vân tay ngắn của một bản ghi. Chỉ dùng để biết "có đổi hay không", không phải để
+     bảo mật, nên một hàm băm rẻ tiền là đủ. */
+  bam(s){
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+    return h.toString(36) + ':' + s.length.toString(36);
+  },
+  /* Lấy mốc so sánh ngay khi mở app, SAU KHI migrate() chuẩn hóa xong. Không đụng
+     tới _up và không đụng tới db.syncIds (cái đó giữ danh sách của lần đồng bộ cuối,
+     dùng để biết bản ghi nào đã bị xóa). */
+  moBaiDau(){
+    SYNC_TABLES.forEach(t => {
+      const m = this.shadow[t] = {};
+      (db[t] || []).forEach(r => { if (r && r.id) m[r.id] = this.plain(r); });
+    });
+    this.daMoc = true;
+  },
   stamp(){
     const now = Date.now();
+    if (!this.daMoc) this.moBaiDau();
     /* Dấu xóa cũng phải sống qua lần đóng app: đẩy lên hỏng giữa chừng mà mất dấu thì
        bản ghi đã xóa sẽ sống lại ở lần kéo về sau. */
     const cu = (db.tombs || []).filter(x => x && x.tbl && x.id);
@@ -66,11 +90,19 @@ const Sync = {
 
     SYNC_TABLES.forEach(t => {
       const arr = db[t] || [], m = this.shadow[t] || (this.shadow[t] = {});
+      /* Bản chụp cũ ghi xuống db. Bản v141 lưu dạng mảng id — đọc được cả hai dạng,
+         nhưng dạng mảng thì không có vân tay nên coi như chưa biết nội dung. */
+      const cuRaw = (db.syncIds || {})[t];
+      const coCu = !!cuRaw;
+      const daBiet = {};
+      if (cuRaw) (Array.isArray(cuRaw) ? cuRaw : Object.keys(cuRaw)).forEach(id => { daBiet[id] = 1; });
       const alive = {};
       arr.forEach(r => {
         if (!r || !r.id) return;
         alive[r.id] = 1;
         const j = this.plain(r);
+        /* Mốc so sánh đã được lấy lúc mở app (moBaiDau), nên tới đây mọi khác biệt
+           đều là người dùng thật sự vừa sửa. Bản ghi chưa có trong mốc là bản ghi mới. */
         if (m[r.id] !== j) { r._up = now; m[r.id] = j; }
       });
       Object.keys(m).forEach(id => {
@@ -79,9 +111,9 @@ const Sync = {
       /* Bản chụp trong bộ nhớ tạm trống (vừa mở app) thì so với danh sách ID đã ghi
          xuống db lần trước. KHÔNG có danh sách đó thì tuyệt đối không sinh dấu xóa —
          máy mới cài sẽ coi như cả kho vừa bị xóa sạch. */
-      const idCu = (db.syncIds || {})[t];
-      if (Array.isArray(idCu)) {
-        idCu.forEach(id => {
+      if (coCu) {
+        const dsId = Array.isArray(cuRaw) ? cuRaw : Object.keys(cuRaw);
+        dsId.forEach(id => {
           if (!alive[id] && !da[t + ':' + id]) { this.tombs.push({tbl:t, id, at:now}); da[t + ':' + id] = 1; }
         });
       }
@@ -193,6 +225,11 @@ const Sync = {
            thành hai hồ sơ trùng. Một kho thì không xảy ra, đọc hai kho là lộ ra. */
         if (at === undefined) { local.push(rec); idx[rid] = local.length - 1; added++; }
         else if ((local[at]._up || 0) < rup) { local[at] = rec; updated++; }
+        else return;
+        /* Bản ghi vừa kéo từ máy khác về cũng phải vào mốc, không thì lần stamp sau
+           coi nó là "người dùng vừa sửa" rồi đẩy ngược lên với dấu thời gian mới. */
+        const sh = this.shadow[t] || (this.shadow[t] = {});
+        sh[rid] = this.plain(rec);
       });
     });
     return {added, updated, removed};
@@ -235,17 +272,54 @@ const Sync = {
   /* ---------- Dọn bản ghi trùng lặp ----------
      Dùng khi dữ liệu đã bị nhân đôi do lỗi đồng bộ trước đây. Giữ bản mới nhất,
      chuyển hết điều trị / phiếu thu / lịch hẹn của bản cũ sang bản được giữ. */
+  /* Hai hồ sơ chỉ được coi là MỘT NGƯỜI khi trùng mã VÀ trùng tên (bỏ dấu), hoặc
+     trùng mã và cùng số điện thoại. Dữ liệu nhập từ file có nhiều người khác nhau
+     dùng chung một mã — gom theo mã không thôi là nhập ba bệnh nhân làm một. */
+  khoaNguoi(c){
+    const ten = Combo.norm((c.name || '').trim()).replace(/\s+/g, ' ');
+    const sdt = String(c.phone || '').replace(/\D/g, '');
+    return (c.code || '') + '|' + (ten || ('sdt' + sdt));
+  },
   findDupCustomers(){
+    const m = {};
+    (db.customers || []).forEach(c => { if (c.code) (m[this.khoaNguoi(c)] || (m[this.khoaNguoi(c)] = [])).push(c); });
+    return Object.entries(m).filter(([, arr]) => arr.length > 1);
+  },
+  /* Mã bị dùng cho nhiều NGƯỜI khác nhau — không gộp được, phải đánh lại mã */
+  findMaDungChung(){
     const byCode = {};
     (db.customers || []).forEach(c => { if (c.code) (byCode[c.code] || (byCode[c.code] = [])).push(c); });
-    return Object.entries(byCode).filter(([, arr]) => arr.length > 1);
+    return Object.entries(byCode)
+      .map(([ma, arr]) => [ma, [...new Set(arr.map(c => this.khoaNguoi(c)))].length, arr])
+      .filter(([, soNguoi]) => soNguoi > 1);
+  },
+  /* Giữ nguyên người đầu tiên, đánh lại mã cho những người còn lại dùng chung mã đó */
+  danhLaiMa(){
+    const co = new Set((db.customers || []).map(c => Combo.norm(c.code || '')));
+    let n = 0;
+    this.findMaDungChung().forEach(([, , arr]) => {
+      const nhom = {};
+      arr.forEach(c => { (nhom[this.khoaNguoi(c)] || (nhom[this.khoaNguoi(c)] = [])).push(c); });
+      Object.values(nhom).slice(1).forEach(ds => {
+        let ma;
+        do { ma = Cust.tienTo() + '-' + (db.seq.cust = (db.seq.cust || 1) + 1); }
+        while (co.has(Combo.norm(ma)));
+        co.add(Combo.norm(ma));
+        ds.forEach(c => { c.code = ma; c._up = Date.now(); });
+        n++;
+      });
+    });
+    return n;
   },
   dedupeReport(){
     const dupC = this.findDupCustomers();
     const thua = dupC.reduce((s, [, arr]) => s + arr.length - 1, 0);
+    const maChung = this.findMaDungChung();
     const noC = {}; (db.receipts || []).forEach(r => { if (r.no) noC[r.no] = (noC[r.no] || 0) + 1; });
     const dupR = Object.values(noC).filter(v => v > 1).reduce((s, v) => s + v - 1, 0);
-    return {maTrung: dupC.length, hoSoThua: thua, phieuThuThua: dupR};
+    return {maTrung: dupC.length, hoSoThua: thua, phieuThuThua: dupR,
+            maDungChung: maChung.length,
+            nguoiBiDungChungMa: maChung.reduce((s, [, n]) => s + n - 1, 0)};
   },
   dedupe(){
     let goneC = 0, moved = 0;
