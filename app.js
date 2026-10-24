@@ -1373,8 +1373,19 @@ const Cust = {
   tienTo(){ return (((db.clinic || {}).maKH || 'RG') + '').trim().toUpperCase() || 'RG'; },
   maTiepTheo(){
     const co = new Set(db.customers.map(x => Combo.norm(x.code || '')));
-    let n = (db.seq && db.seq.cust) || 1, ma;
-    do { ma = this.tienTo() + '-' + n; n++; } while (co.has(Combo.norm(ma)) && n < 1e6);
+    /* Đi tiếp theo số LỚN NHẤT đang có, và giữ đúng bề rộng chữ số của hồ sơ cũ.
+       Dữ liệu nhập từ file đánh số KH-0001…KH-0550; nếu ở đây bắt đầu lại từ 1 thì
+       khách mới ra "RG-1" nằm lạc lõng giữa danh sách và sắp xếp cũng loạn. */
+    let rong = 0, max = 0;
+    (db.customers || []).forEach(x => {
+      const m = String(x.code || '').match(/(\d+)\s*$/);
+      if (!m) return;
+      max = Math.max(max, parseInt(m[1], 10) || 0);
+      rong = Math.max(rong, m[1].length);
+    });
+    const dem = n => (rong > 1 ? String(n).padStart(rong, '0') : String(n));
+    let n = Math.max(max + 1, (db.seq && db.seq.cust) || 1), ma;
+    do { ma = this.tienTo() + '-' + dem(n); n++; } while (co.has(Combo.norm(ma)) && n < 1e6);
     return ma;
   },
 
@@ -1411,6 +1422,19 @@ const Cust = {
       const c = Object.assign({id:uid(), code: d.code || (Cust.tienTo()+'-'+db.seq.cust), createdAt: d.createdAt || todayISO(),
         teeth:{}, record:{dienBien:[], vanDe:[]}}, d);
       db.customers.unshift(c); App.chonKhach(c.id); App.toast('Đã thêm khách hàng ✓');
+      /* Khung hồ sơ nằm DƯỚI bảng danh sách. Phòng khám có hơn 500 hồ sơ nên sau khi
+         lưu, màn hình đứng ở đầu bảng và khách vừa nhập nằm tít bên dưới — nhìn như
+         app nhảy ra ngoài, không hiện gì. Cuộn tới đúng khung đó.
+         Ô tìm còn chữ cũ cũng có thể đang lọc mất khách vừa thêm, nên xóa luôn. */
+      App.state.custQ = '';
+      setTimeout(() => {
+        const el = document.getElementById('custDetail');
+        /* Nhảy thẳng, không cuộn mượt: khung hồ sơ có thể cách tới mấy chục nghìn
+           pixel khi danh sách dài, cuộn mượt quãng đó vừa lâu vừa chóng mặt. */
+        if (el) el.scrollIntoView({block: 'start'});
+        const row = document.querySelector('#custRows .sel-row');
+        if (row) row.classList.add('vua-chon');
+      }, 60);
     }
     save(); App.closeModal(); App.render();
   },
