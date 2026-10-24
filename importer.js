@@ -97,6 +97,22 @@ const Importer = {
   },
   pick(row, keys){ for (const k of keys) if (row[k] !== undefined && row[k] !== '') return row[k]; return ''; },
 
+  /* Trả về hàm kiểm "khách này đã có trong máy chưa".
+     So nguyên chuỗi mã thì hụt: phòng khám đã đổi tiền tố từ KH sang RG, cùng một
+     người lần trước là KH-0001 mà nhập lại thành RG-0001 — không khớp, thành hai hồ
+     sơ. Nên so theo PHẦN SỐ của mã kèm TÊN; có thêm tên nên không gộp nhầm hai người
+     khác nhau lỡ trùng số. */
+  daCoKhach(){
+    const so = v => String(v || '').replace(/^[^0-9]*/, '').replace(/^0+/, '');
+    const ten = v => Combo.norm(String(v || '').trim()).replace(/\s+/g, ' ');
+    const maY = new Set(), soTen = new Set();
+    (db.customers || []).forEach(c => {
+      if (c.code) maY.add(Combo.norm(c.code));
+      soTen.add(so(c.code) + '|' + ten(c.name));
+    });
+    return c => maY.has(Combo.norm(c.code || '')) || soTen.has(so(c.code) + '|' + ten(c.name));
+  },
+
   toCustomer(row, seq){
     const g = k => this.pick(row, this.COLS[k]);
     const name = g('name'); if (!name) return null;
@@ -492,7 +508,7 @@ const Importer = {
         rows.forEach(x => { const c = this.toCustomer(x, ++seq); if (c) made.push(c); });
         made.forEach(c => delete c._addrKind);
         if (mode === 'replace') db.customers = made;
-        else { const have = new Set(db.customers.map(c => c.code)); made.forEach(c => { if (!have.has(c.code)) db.customers.push(c); }); }
+        else { const co = Importer.daCoKhach(); made.forEach(c => { if (!co(c)) db.customers.push(c); }); }
         done.push('Khách hàng: ' + made.length);
         if (typeof Vet !== 'undefined') Vet.ghi('them', 'Nhập từ file: ' + made.length +
           ' hồ sơ khách hàng' + (mode === 'replace' ? ' (thay thế toàn bộ danh sách cũ)' : ''), {luu:false});
@@ -680,8 +696,8 @@ const Importer = {
     made.forEach(c => delete c._addrKind);
     if (mode === 'replace') db.customers = made;
     else {
-      const have = new Set(db.customers.map(c => c.code));
-      made.forEach(c => { if (!have.has(c.code)) db.customers.push(c); });
+      const co = Importer.daCoKhach();
+      made.forEach(c => { if (!co(c)) db.customers.push(c); });
     }
     db.seq.cust = Math.max(db.seq.cust || 1300, 1300 + db.customers.length);
     this._pending = null;
