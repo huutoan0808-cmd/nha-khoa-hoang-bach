@@ -45,10 +45,25 @@ const Sync = {
       const m = this.shadow[t] = {};
       (db[t] || []).forEach(r => { if (r && r.id) m[r.id] = this.plain(r); });
     });
+    /* Ghi thêm danh sách ID xuống db để SỐNG QUA LẦN ĐÓNG APP. Chỉ lưu id chứ không
+       lưu cả nội dung: nội dung thì nặng ngang cả kho dữ liệu, mà muốn biết bản ghi
+       nào bị xóa thì chỉ cần id là đủ. */
+    db.syncIds = db.syncIds || {};
+    SYNC_TABLES.forEach(t => {
+      db.syncIds[t] = (db[t] || []).map(r => r && r.id).filter(Boolean);
+    });
   },
   plain(r){ const o = {}; Object.keys(r).forEach(k => { if (k !== '_up') o[k] = r[k]; }); return JSON.stringify(o); },
   stamp(){
     const now = Date.now();
+    /* Dấu xóa cũng phải sống qua lần đóng app: đẩy lên hỏng giữa chừng mà mất dấu thì
+       bản ghi đã xóa sẽ sống lại ở lần kéo về sau. */
+    const cu = (db.tombs || []).filter(x => x && x.tbl && x.id);
+    const da = {};
+    cu.forEach(x => { da[x.tbl + ':' + x.id] = 1; });
+    this.tombs = cu.concat(this.tombs.filter(x => !da[x.tbl + ':' + x.id]));
+    this.tombs.forEach(x => { da[x.tbl + ':' + x.id] = 1; });
+
     SYNC_TABLES.forEach(t => {
       const arr = db[t] || [], m = this.shadow[t] || (this.shadow[t] = {});
       const alive = {};
@@ -59,9 +74,19 @@ const Sync = {
         if (m[r.id] !== j) { r._up = now; m[r.id] = j; }
       });
       Object.keys(m).forEach(id => {
-        if (!alive[id]) { delete m[id]; this.tombs.push({tbl:t, id, at:now}); }
+        if (!alive[id]) { delete m[id]; if (!da[t + ':' + id]) { this.tombs.push({tbl:t, id, at:now}); da[t + ':' + id] = 1; } }
       });
+      /* Bản chụp trong bộ nhớ tạm trống (vừa mở app) thì so với danh sách ID đã ghi
+         xuống db lần trước. KHÔNG có danh sách đó thì tuyệt đối không sinh dấu xóa —
+         máy mới cài sẽ coi như cả kho vừa bị xóa sạch. */
+      const idCu = (db.syncIds || {})[t];
+      if (Array.isArray(idCu)) {
+        idCu.forEach(id => {
+          if (!alive[id] && !da[t + ':' + id]) { this.tombs.push({tbl:t, id, at:now}); da[t + ':' + id] = 1; }
+        });
+      }
     });
+    db.tombs = this.tombs.slice();
   },
 
   /* ---------- Đẩy lên / kéo về ---------- */
@@ -104,6 +129,7 @@ const Sync = {
       }
     }
     this.tombs = [];
+    db.tombs = [];
     return dem;
   },
   /* Supabase trả tối đa 1000 dòng một lần gọi (db-max-rows). Kho records của phòng
@@ -147,8 +173,13 @@ const Sync = {
       if (!db[t]) db[t] = [];
       const local = db[t], idx = {};
       local.forEach((r, i) => { if (r && r.id) idx[r.id] = i; });
+      /* Dấu xóa đang chờ đẩy lên thì đừng kéo bản ghi đó về — không thì vừa xóa xong
+         lần đồng bộ ngay sau đã thấy nó quay lại, phải đợi vòng sau mới sạch. */
+      const choXoa = {};
+      this.tombs.forEach(x => { if (x.tbl === t) choXoa[x.id] = 1; });
       remote.forEach(rr => {
         const rid = String(rr.id).slice(t.length + 1);
+        if (choXoa[rid]) return;
         const rup = Date.parse(rr.updated_at) || 0;
         const at = idx[rid];
         if (rr.deleted) {
