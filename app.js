@@ -1347,18 +1347,100 @@ const Cust = {
       <div class="form-actions full"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">${id?'Lưu thay đổi':'Thêm khách hàng'}</button></div>
     </form>`);
   },
-  /* Bấm nút Tìm mới lọc, không lọc theo từng phím — danh sách nhảy liên tục trong
-     lúc đang gõ làm người ta bấm nhầm vào hồ sơ khác. */
-  timNgay(){
+  /* ----- Dò khách: kết quả hiện ngay trong lúc gõ -----
+     Tuyệt đối không gọi App.render() theo từng phím. Hàm đó vẽ lại cả #mainArea, tức
+     là dựng lại chính ô đang gõ — con trỏ nhảy về đầu, chữ viết dở mất. Nên chỉ thay
+     ruột bảng kết quả, còn ô nhập giữ nguyên không ai đụng tới.
+     Hoãn 120ms kể từ phím cuối: gõ tên 10 chữ thì lọc 1 lần chứ không phải 10 lần, với
+     hơn 500 hồ sơ thì khác biệt thấy rõ. */
+  goTim(){
+    clearTimeout(this._choTim);
+    this._choTim = setTimeout(() => Cust.locNgay(), 120);
+  },
+  /* Đọc ô nhập + các ô tick, lọc, rồi vá tại chỗ ba chỗ trên màn hình */
+  locNgay(){
     const i = document.getElementById('oTimKH');
     App.state.custQ = i ? i.value.trim() : '';
     const o = {};
     ['ma', 'ten', 'sdt'].forEach(k => { const x = document.getElementById('tim_' + k); o[k] = x ? x.checked : 1; });
-    if (!o.ma && !o.ten && !o.sdt) { App.toast('Chọn ít nhất một mục để tìm'); return; }
     App.state.custO = o;
-    App.render();
+    const ds = Cust.locDS();
+    const tb = document.getElementById('custRows');
+    if (!tb) { App.render(); return; }   /* không ở màn Khách hàng nữa */
+    tb.innerHTML = Cust.hangHTML(ds);
+    const bc = document.getElementById('custTimBC');
+    if (bc) bc.innerHTML = Cust.bcTimHTML(ds.length);
+    if (bc) bc.style.display = App.state.custQ ? '' : 'none';
+    const xoa = document.getElementById('custBoTim');
+    if (xoa) xoa.style.display = App.state.custQ ? '' : 'none';
   },
-  boTim(){ App.state.custQ = ''; App.render(); },
+  timNgay(){ clearTimeout(this._choTim); this.locNgay(); },
+  boTim(){
+    const i = document.getElementById('oTimKH');
+    if (i) { i.value = ''; i.focus(); }
+    this.timNgay();
+  },
+
+  /* Lọc + sắp xếp. Dùng chung cho lần vẽ cả màn hình và lần vá tại chỗ lúc đang gõ,
+     để hai đường không bao giờ cho ra danh sách khác nhau. */
+  locDS(){
+    const q = Combo.norm(App.state.custQ || '');
+    const o = App.state.custO || {ma: 1, ten: 1, sdt: 1};
+    /* Dò theo đúng loại đã tick. Gõ "36" mà để cả ba loại thì ra cả khách tên có số 36
+       lẫn số điện thoại chứa 36 — bỏ tick cho gọn. */
+    const soHoa = x => String(x || '').replace(/\D/g, '');
+    /* Chỉ dò số điện thoại khi trong ô KHÔNG có chữ cái. Gõ "KH-0123" thì phần số là
+       "0123", nằm lọt trong số 0910001233 của một khách khác — ra ba hồ sơ lạ ngay
+       dòng đầu. Có chữ cái tức là người ta đang gõ mã hoặc tên, không phải số. */
+    const laSo = !/[a-z]/.test(q);
+    const khop = c => (o.ma && Combo.norm(c.code || '').includes(q))
+      || (o.ten && Combo.norm(c.name || '').includes(q))
+      || (o.sdt && laSo && soHoa(q) && soHoa(c.phone).includes(soHoa(q)));
+    const ds = !q ? db.customers.slice() : db.customers.filter(khop);
+    const sx = App.state.custSort || {k: 'code', d: 1};
+    const codeNum = c => { const m = String(c.code || '').match(/(\d+)/); return m ? +m[1] : Infinity; };
+    const khoa = {
+      code: c => [codeNum(c), String(c.code || '')],
+      name: c => [Combo.norm(c.name || '')],
+      kham: c => [custLastVisit(c) || ''],
+      sdt:  c => [String(c.phone || '').replace(/\D/g, '') || '\uffff'],
+      diachi: c => [Combo.norm(fullAddr(c) || '\uffff')],
+      no:   c => [custDebt(c)],
+    };
+    const lay = khoa[sx.k] || khoa.code;
+    return ds.sort((a, b) => {
+      const x = lay(a), y = lay(b);
+      for (let i = 0; i < x.length; i++) {
+        if (x[i] < y[i]) return -sx.d;
+        if (x[i] > y[i]) return sx.d;
+      }
+      return 0;
+    });
+  },
+  hangHTML(list){
+    return list.map(c => {
+      const debt = custDebt(c);
+      const lastV = custLastVisit(c);
+      const dc = fullAddr(c);
+      return `<tr class="clickable ${c.id === App.state.custSel ? 'sel-row' : ''}" onclick="Cust.pick('${c.id}')">
+        <td class="num"><b>${h(c.code || '—')}</b></td>
+        <td><span class="cell-who"><span class="avatar">${h((c.name || '?').split(' ').slice(-1)[0].slice(0, 2))}</span>
+          <span><b>${h(c.name)}</b><span>${h(c.gender || '')}${c.dob ? (c.gender ? ', ' : '') + c.dob.slice(0, 4) : ''}${
+            lastV ? ' · khám ' + fmtD(lastV) : ''}</span></span></span></td>
+        <td class="num">${h(c.phone || '—')}</td>
+        <td>${dc ? h(dc) : '<span class="sub-line">—</span>'}</td>
+        ${Perm.can('thu') ? `<td class="r num" ${debt ? 'style="color:var(--danger);font-weight:600"' : ''}>${money(debt)}</td>` : ''}</tr>`;
+    }).join('') || `<tr><td colspan="5" class="sub-line">${App.state.custQ
+      ? 'Không có hồ sơ nào khớp. Thử bỏ bớt dấu tick, hoặc gõ ít chữ hơn.'
+      : 'Chưa có khách hàng nào.'}</td></tr>`;
+  },
+  bcTimHTML(soRa){
+    const o = App.state.custO || {ma: 1, ten: 1, sdt: 1};
+    if (!App.state.custQ) return '';
+    const ten = ['ma', 'ten', 'sdt'].filter(k => o[k]).map(k => ({ma: 'mã KH', ten: 'tên', sdt: 'số điện thoại'})[k]);
+    if (!ten.length) return '<b style="color:var(--danger)">Chưa tick mục nào để dò</b> — tick Mã KH, Tên hoặc Số điện thoại.';
+    return `Đang dò <b>${h(App.state.custQ)}</b> theo ${h(ten.join(', '))} — ra <b>${soRa}</b> hồ sơ.`;
+  },
 
   /* Bấm tiêu đề cột: lần đầu sắp tăng dần, bấm lại thì đảo chiều */
   sapXep(k){
@@ -2651,51 +2733,13 @@ const Cust = {
 };
 
 SCREENS.customers = () => {
-  const q = Combo.norm(App.state.custQ);
   const o = App.state.custO || {ma: 1, ten: 1, sdt: 1};
-  /* Dò theo đúng loại đã chọn. Gõ "36" mà để chế độ tất cả thì ra cả khách tên có
-     số 36 lẫn số điện thoại chứa 36 — chọn đúng loại cho gọn. */
-  const soHoa = x => String(x || '').replace(/\D/g, '');
-  const khopTen = c => Combo.norm(c.name || '').includes(q);
-  const khopMa  = c => Combo.norm(c.code || '').includes(q);
-  const khopSdt = c => soHoa(q) && soHoa(c.phone).includes(soHoa(q));
-  const loc = c => (o.ma && khopMa(c)) || (o.ten && khopTen(c)) || (o.sdt && khopSdt(c));
-  const filtered = !q ? db.customers.slice() : db.customers.filter(loc);
+  const list = Cust.locDS();
+  const rows = Cust.hangHTML(list);
   /* Sắp xếp theo cột đang chọn, bấm lại tiêu đề cột thì đảo chiều */
   const sx = App.state.custSort || {k:'code', d:1};
-  const codeNum = c => { const m = String(c.code||'').match(/(\d+)/); return m ? +m[1] : Infinity; };
-  const khoa = {
-    code: c => [codeNum(c), String(c.code||'')],
-    name: c => [Combo.norm(c.name||'')],
-    kham: c => [custLastVisit(c) || ''],
-    sdt:  c => [String(c.phone || '').replace(/\D/g, '') || '\uffff'],
-    diachi: c => [Combo.norm(fullAddr(c) || '\uffff')],
-    no:   c => [custDebt(c)],
-  };
-  const lay = khoa[sx.k] || khoa.code;
-  const list = filtered.sort((a,b) => {
-    const x = lay(a), y = lay(b);
-    for (let i = 0; i < x.length; i++) {
-      if (x[i] < y[i]) return -sx.d;
-      if (x[i] > y[i]) return sx.d;
-    }
-    return 0;
-  });
   const th = (k, nhan, phai) => `<th class="${phai?'r ':''}sap ${sx.k===k?'dang':''}" onclick="Cust.sapXep('${k}')"
     title="Bấm để sắp xếp">${nhan}<span class="sap-mui">${sx.k===k?(sx.d>0?'▲':'▼'):'⇅'}</span></th>`;
-  const rows = list.map(c => {
-    const debt = custDebt(c);
-    const lastV = custLastVisit(c);
-    const dc = fullAddr(c);
-    return `<tr class="clickable ${c.id===App.state.custSel?'sel-row':''}" onclick="Cust.pick('${c.id}')">
-      <td class="num"><b>${h(c.code||'—')}</b></td>
-      <td><span class="cell-who"><span class="avatar">${h(c.name.split(' ').slice(-1)[0].slice(0,2))}</span>
-        <span><b>${h(c.name)}</b><span>${h(c.gender||'')}${c.dob?(c.gender?', ':'')+c.dob.slice(0,4):''}${
-          lastV?' · khám '+fmtD(lastV):''}</span></span></span></td>
-      <td class="num">${h(c.phone||'—')}</td>
-      <td>${dc ? h(dc) : '<span class="sub-line">—</span>'}</td>
-      ${Perm.can('thu') ? `<td class="r num" ${debt?'style="color:var(--danger);font-weight:600"':''}>${money(debt)}</td>` : ''}</tr>`;
-  }).join('') || '<tr><td colspan="5" class="sub-line">Không tìm thấy khách hàng.</td></tr>';
 
   const c = custById(App.state.custSel);
   let detail = '';
@@ -2738,19 +2782,19 @@ SCREENS.customers = () => {
     <div class="sub">${db.customers.length} hồ sơ · thông tin hành chính theo mẫu BA-18</div></div>
   <div class="card mb"><div class="card-b">
     <div class="searchbar" style="margin:0">${IC.search}
-      <input id="oTimKH" placeholder="Gõ rồi bấm Tìm — hoặc nhấn Enter" value="${h(App.state.custQ)}"
+      <input id="oTimKH" placeholder="Gõ mã KH, tên hoặc số điện thoại — kết quả hiện ngay"
+        value="${h(App.state.custQ)}" autocomplete="off" oninput="Cust.goTim()"
         onkeydown="if(event.key==='Enter'){event.preventDefault();Cust.timNgay()}"></div>
     <div class="check-row" style="margin-top:10px;align-items:center">
-      <span class="sub-line">Tìm theo:</span>
+      <span class="sub-line">Dò theo:</span>
       ${[['ma','Mã KH'],['ten','Tên'],['sdt','Số điện thoại']].map(([k,l]) =>
-        `<label><input type="checkbox" id="tim_${k}"${o[k]?' checked':''}> ${l}</label>`).join('')}
+        `<label><input type="checkbox" id="tim_${k}"${o[k]?' checked':''} onchange="Cust.timNgay()"> ${l}</label>`).join('')}
       <span class="spacer"></span>
-      <button class="btn primary" onclick="Cust.timNgay()">${IC.search} Tìm kiếm</button>
-      ${App.state.custQ ? `<button class="btn" onclick="Cust.boTim()">Bỏ tìm</button>` : ''}
+      <button class="btn" id="custBoTim" onclick="Cust.boTim()"
+        style="${App.state.custQ ? '' : 'display:none'}">Bỏ dò</button>
     </div>
-    ${App.state.custQ ? `<div class="sub-line" style="margin-top:8px">Đang tìm <b>${h(App.state.custQ)}</b>
-      theo ${h(['ma','ten','sdt'].filter(k=>o[k]).map(k=>({ma:'mã KH',ten:'tên',sdt:'số điện thoại'})[k]).join(', ') || 'không mục nào')}
-      — ra <b>${filtered.length}</b> hồ sơ.</div>` : ''}
+    <div class="sub-line" id="custTimBC" style="margin-top:8px${App.state.custQ ? '' : ';display:none'}">${
+      Cust.bcTimHTML(list.length)}</div>
   </div></div>
   <div class="card mb"><div class="tbl-wrap"><table>
     <thead><tr>${th('code','Mã KH')}${th('name','Tên khách hàng')}${th('sdt','Số điện thoại')}${th('diachi','Địa chỉ')}${Perm.can('thu')?th('no','Công nợ',1):''}</tr></thead>
