@@ -486,6 +486,7 @@ function migrate() {
   /* Sổ ghi nhận sự việc và phiếu đánh giá thưởng hiệu quả tháng (danhgia.js) */
   if (!db.ghiNhan) db.ghiNhan = [];
   if (!db.danhGia) db.danhGia = [];
+  if (!db.bangLuong) db.bangLuong = [];
   /* Bảng giá gia công lab: lần đầu nạp bảng mặc định, sau đó để quản lý tự sửa */
   if (!db.giaLab) db.giaLab = GiaLab.MAC_DINH.map(x => Object.assign({id: uid()}, x));
   QT.MAU.forEach(m => {
@@ -888,12 +889,12 @@ const App = {
       }
       try { Vet.ghi('in', t); } catch(e){}
     }
-    const a5 = kho === 'A5';
+    const a5 = kho === 'A5', ngang = kho === 'A4N';
     $('#printArea').innerHTML = html;
     $('#printArea').className = a5 ? 'kho-a5' : '';
     let st = document.getElementById('printPage');
     if (!st) { st = document.createElement('style'); st.id = 'printPage'; document.head.appendChild(st); }
-    st.textContent = a5 ? '@page{size:A5 portrait;margin:10mm}' : '@page{size:A4 portrait;margin:14mm}';
+    st.textContent = a5 ? '@page{size:A5 portrait;margin:10mm}' : ngang ? '@page{size:A4 landscape;margin:8mm}' : '@page{size:A4 portrait;margin:14mm}';
     setTimeout(() => window.print(), 60);
   },
 };
@@ -8323,50 +8324,13 @@ SCREENS.hr = () => {
   const M = monthOf(todayISO());
   /* Không phải quản lý thì chỉ thấy Chấm công — không xem được lương, hoa hồng của người khác */
   const HRTABS = Perm.can('luong')
-    ? [['payroll','Bảng lương'],['attendance','Chấm công'],['congviec','Phân công việc'],['commission','Hoa hồng'],['kpi','KPI · Thưởng · Phạt'],['danhgia','Đánh giá tháng']]
+    ? [['payroll','Bảng lương'],['tonghop','Tổng hợp tháng'],['attendance','Chấm công'],['congviec','Phân công việc'],['commission','Hoa hồng'],['kpi','KPI · Thưởng · Phạt'],['danhgia','Đánh giá tháng']]
     : [['attendance','Chấm công'],['congviec','Phân công việc']];
   if (!HRTABS.some(t => t[0] === App.state.hrTab)) App.state.hrTab = HRTABS[0][0];
   const tab = App.state.hrTab;
-  const payRows = db.staff.map(st => {
-    const com = HR.commissionOf(st, M), bon = HR.bonusOf(st.id, M), pen = HR.penaltyOf(st.id, M), bhxh = st.base*0.105;
-    const net = st.base + com + bon - pen - bhxh;
-    return {st, com, bon, pen, bhxh, net};
-  });
-  const fund = payRows.reduce((s,r)=>s+r.net,0);
-  const bhxhTotal = db.staff.reduce((s,st)=>s+st.base*0.32,0);
 
   let body = '';
-  if (tab === 'payroll') body = `
-    <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
-      <div class="card kpi"><div class="k-label">Tổng quỹ lương tạm tính</div><div class="k-value num">${money(fund)}</div><div class="k-note">${db.staff.length} nhân viên</div></div>
-      <div class="card kpi"><div class="k-label">BHXH phải nộp (32%)</div><div class="k-value num">${money(bhxhTotal)}</div><div class="k-note num">DN 21,5% + NLĐ 10,5%</div></div>
-      <div class="card kpi"><div class="k-label">Trạng thái kỳ</div><div class="k-value" style="font-size:18px"><span class="pill warn">Chưa chốt</span></div><div class="k-note">tự tổng hợp từ phiếu thu, chấm công</div></div>
-    </div>
-    <div class="card"><div class="card-h"><h2>Bảng lương tháng ${M.slice(5)}/${M.slice(0,4)}</h2><span class="hint">hoa hồng, thưởng, phạt tự động</span>
-      <span class="spacer"></span>
-      ${Perm.only('caidat', `<button class="btn small" onclick="Att.accountsPanel()">Tài khoản truy cập</button>`)}
-      <button class="btn small" onclick="HR.staffForm()">${IC.plus} Thêm nhân viên</button></div>
-    <div class="tbl-wrap"><table style="min-width:900px">
-      <thead><tr><th>Nhân viên</th><th class="r">Công</th><th class="r">Lương cứng</th><th class="r">Hoa hồng</th><th class="r">Thưởng</th><th class="r">Phạt</th><th class="r">BHXH (10,5%)</th><th class="r">Thực lãnh</th><th></th></tr></thead>
-      <tbody id="bangLuong">${payRows.map(({st,com,bon,pen,bhxh,net}, i) => `<tr draggable="true" data-id="${st.id}"
-        ondragstart="HR.keoBatDau(event)" ondragover="HR.keoQua(event)" ondrop="HR.keoTha(event)" ondragend="HR.keoXong(event)">
-        <td><span class="cell-who"><span class="keo-tay" title="Kéo để đổi thứ tự">⋮⋮</span>
-          <span class="avatar">${h(st.name.split(' ').slice(-1)[0].slice(0,2))}</span>
-          <span><b>${h(st.name)}</b><span>${h(st.role)}</span></span>
-          <span class="keo-nut">
-            <button class="btn small" title="Lên" ${i===0?'disabled':''} onclick="HR.doiCho('${st.id}',-1)">↑</button>
-            <button class="btn small" title="Xuống" ${i===payRows.length-1?'disabled':''} onclick="HR.doiCho('${st.id}',1)">↓</button>
-          </span></span></td>
-        <td class="r num">${(() => { const s = Att.summary(st.id, M); return s.cong ? s.cong.toFixed(2).replace(/\.?0+$/,'') + '<br><span class="sub-line">' + gioPhut(s.phut) + '</span>' : '—'; })()}</td>
-        <td class="r num">${money(st.base)}</td><td class="r num">${money(com)}</td>
-        <td class="r num" style="color:var(--ok)">${bon?'+'+money(bon):'0'}</td>
-        <td class="r num" style="color:var(--danger)">${pen?'−'+money(pen):'0'}</td>
-        <td class="r num" style="color:var(--danger)">−${money(bhxh)}</td>
-        <td class="r num" style="font-weight:700">${money(net)}</td>
-        <td><button class="btn small" onclick="HR.staffForm('${st.id}')">Sửa</button></td></tr>`).join('')}</tbody></table></div></div>
-    <div class="note-block" style="margin-top:12px">Kéo dấu <b>⋮⋮</b> để đổi thứ tự nhân viên trong bảng —
-      trên điện thoại thì dùng hai nút <b>↑ ↓</b>. Thứ tự này đồng bộ sang mọi máy.</div>
-    <div class="note-block" style="margin-top:12px">BHXH khấu trừ <b>10,5%</b> lương đóng bảo hiểm của người lao động; doanh nghiệp đóng thêm <b>21,5%</b> hạch toán chi phí.</div>`;
+  if (tab === 'payroll') body = Luong.tab();
 
   if (tab === 'attendance') {
     const T = todayISO();
@@ -8462,6 +8426,7 @@ SCREENS.hr = () => {
         <td class="r num" style="font-weight:700;color:var(--${b.amount>0?'ok':'danger'})">${b.amount>0?'+':'−'}${money(Math.abs(b.amount))}</td></tr>`).join('') || '<tr><td colspan="4" class="sub-line">Chưa có ghi nhận.</td></tr>'}</tbody></table></div></div>`;
 
   if (tab === 'danhgia') body = DanhGia.tab();
+  if (tab === 'tonghop') body = Luong.tongHop();
 
   return `
   <div class="page-head"><h1>Nhân sự</h1><span class="spacer"></span></div>

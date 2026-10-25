@@ -43,6 +43,7 @@ const VET_BANG = {
   inventory: 'Kho vật tư', invLog: 'Xuất nhập kho', bonuses: 'Thưởng phạt',
   congViec: 'Công việc được giao', baoCao: 'Báo cáo cuối ngày',
   ghiNhan: 'Sổ ghi nhận nhân sự', danhGia: 'Phiếu đánh giá tháng',
+  bangLuong: 'Bảng lương tháng',
 };
 
 const VET_ACT = {
