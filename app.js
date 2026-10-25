@@ -1249,7 +1249,7 @@ const Cust = {
   },
   /* Mấy nguồn hay gặp nhất, để lễ tân tick thay vì gõ — gõ tay thì mười người ra
      mười kiểu ("fb", "FB", "face", "Facebook") rồi không thống kê được. */
-  NGUON: ['Facebook', 'Zalo', 'TikTok', 'Người quen giới thiệu', 'Tự đến'],
+  NGUON: ['Facebook', 'Zalo', 'TikTok', 'Google', 'Người quen giới thiệu', 'Tự đến'],
   /* Tick một ô thì điền vào ô chữ bên dưới — ô chữ mới là thứ được lưu */
   chonNguon(v){
     const o = document.querySelector('#custForm [name="source"]');
@@ -2908,6 +2908,8 @@ const Cal = {
     const a = id ? db.appointments.find(x=>x.id===id)
                  : {date:App.state.calDate || todayISO(), time:'09:00', dur:30,
                     status:'Chờ xác nhận', customerId: cid || ''};
+    /* Lịch mới thì mặc định người đang đăng nhập là người đặt hẹn */
+    const nguoiHen = id ? (a.nguoiHenId || '') : ((Perm.me() || {}).id || '');
     const labOpts = db.labs.filter(l=>!l.received).map(l=>`<option value="${l.id}"${a.labOrderId===l.id?' selected':''}>${h(l.type)} ${h(l.teeth)} — ${h(custById(l.customerId)?custById(l.customerId).name:'')}</option>`).join('');
     App.modal(id?'Sửa lịch hẹn':'Đặt lịch hẹn', `
     <form class="form-grid" onsubmit="Cal.save(event,'${id||''}')">
@@ -2925,6 +2927,10 @@ const Cal = {
           'Gợi ý lấy từ bảng giá phòng khám. Gõ tự do cũng được.')}</div>
       <div class="f"><label>Bác sĩ</label><select name="doctorId">${db.staff.filter(s=>(s.role||'').includes('Bác sĩ')).map(s=>`<option value="${s.id}"${a.doctorId===s.id?' selected':''}>${h(s.name)}</option>`).join('')}</select></div>
       <div class="f"><label>Trạng thái</label><select name="status">${APPT_STATUS.map(s=>`<option${a.status===s?' selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="f full"><label>Người đặt hẹn</label><select name="nguoiHenId">
+        <option value="">— khách tự đặt / không rõ —</option>
+        ${db.staff.filter(s=>s.active!==false || s.id===nguoiHen).map(s=>`<option value="${s.id}"${nguoiHen===s.id?' selected':''}>${h(s.name)}${s.role?' · '+h(s.role):''}</option>`).join('')}</select>
+        <div class="combo-hint">Người trực tiếp gọi điện, nhắn tin hẹn khách. Dùng để tính thưởng khách mới cho lễ tân (Điều 19 Quy chế lương, thưởng).</div></div>
       <div class="f full"><label>Chờ hàng lab (nếu có)</label><select name="labOrderId"><option value="">— không —</option>${labOpts}</select></div>
       <div class="form-actions full">
         ${id?`<button type="button" class="btn danger" onclick="Cal.del('${id}')">Xóa lịch</button><span class="spacer"></span>`:''}
@@ -2946,7 +2952,8 @@ const Cal = {
       const lab = a.labOrderId ? db.labs.find(l => l.id === a.labOrderId) : null;
       return `<tr class="clickable" onclick="Cal.moTuHoSo('${a.id}')">
         <td class="num"><b>${h(a.time||'')}</b><br><span class="sub-line">${fmtD(a.date)}</span></td>
-        <td>${h(a.service||'—')}<br><span class="sub-line">${h(a.chair||'')}${bs?' · '+h(bs.name):''}${a.tuOnline?' · đặt online':''}</span></td>
+        <td>${h(a.service||'—')}<br><span class="sub-line">${h(a.chair||'')}${bs?' · '+h(bs.name):''}${a.tuOnline?' · đặt online':''}${
+          staffById(a.nguoiHenId) ? ' · hẹn: ' + h(staffById(a.nguoiHenId).name) : ''}</span></td>
         <td><span class="pill ${st}">${h(a.status||'')}</span>
           ${lab && !lab.received ? '<br><span class="pill danger">răng chưa về</span>' : ''}</td></tr>`;
     }).join('') || '<tr><td colspan="3" class="sub-line">Khách này chưa có lịch hẹn nào.</td></tr>';
