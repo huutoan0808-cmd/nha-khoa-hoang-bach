@@ -26,6 +26,14 @@ const Luong = {
   XANG: [[15, 30000], [30, 50000], [50.0001, 70000], [Infinity, 100000]],   /* km một chiều: dưới 15 / 15–<30 / 30–50 / trên 50 */
   ONLINE: ['Facebook', 'Zalo', 'TikTok', 'Google', 'Đặt hẹn online'],
   CONG_CHUAN: 26,
+  /* QĐ 10/2026/QĐ-HB-GQ: quy chế sửa đổi áp dụng từ kỳ lương tháng 11/2026. Tháng trước
+     đó tính theo quy chế cũ (QĐ 05): xăng xe khoán theo chức danh, quỹ 1,5% và 1% tính trên
+     toàn bộ doanh thu, chưa có thưởng hiệu quả tháng, Điều 19, Điều 20. */
+  HIEU_LUC: '2026-11',
+  /* Quỹ Điều 10, 11 và thưởng Điều 20 chỉ tính trên phần doanh thu thuần vượt mức này */
+  NGUONG_DT: 300000000,
+  XANG_CU: {bs: 50000, trothu: 30000, letan: 30000, media: 30000, btg: 30000, khac: 0},
+  quyCheMoi(M){ return M >= this.HIEU_LUC; },
 
   /* Các khoản trên phiếu lương, theo thứ tự in. loai: thu (cộng) / tru (trừ) */
   KHOAN: [
@@ -46,7 +54,7 @@ const Luong = {
     {k: 'khachMoi',   ten: 'Thưởng người bệnh mới',                     cc: 'Mục 19.2, 19.3',loai: 'thu', nhom: 'Thưởng'},
     {k: 'vuotDT',     ten: 'Thưởng vượt doanh thu cá nhân',             cc: 'Mục 19.4',      loai: 'thu', nhom: 'Thưởng'},
     {k: 'kyThuat',    ten: 'Thưởng ca kỹ thuật cao',                    cc: 'Mục 19.4',      loai: 'thu', nhom: 'Thưởng'},
-    {k: 'mucTieu',    ten: 'Thưởng vượt mục tiêu doanh thu cơ sở',      cc: 'Điều 20',       loai: 'thu', nhom: 'Thưởng'},
+    {k: 'mucTieu',    ten: 'Thưởng vượt mức doanh thu cơ sở (300 triệu)', cc: 'Điều 20',       loai: 'thu', nhom: 'Thưởng'},
     {k: 'thuongKhac', ten: 'Thưởng khác (lễ, Tết, thâm niên, sáng kiến…)', cc: 'Điều 13–16, 21', loai: 'thu', nhom: 'Thưởng'},
     {k: 'bhxh',       ten: 'BHXH, BHYT, BHTN người lao động đóng (10,5%)', cc: 'Điều 23',     loai: 'tru', nhom: 'Khấu trừ'},
     {k: 'thue',       ten: 'Thuế thu nhập cá nhân',                     cc: 'Mục 23.3',      loai: 'tru', nhom: 'Khấu trừ'},
@@ -262,14 +270,24 @@ const Luong = {
 
     /* Hỗ trợ */
     d.anCa = N.anCa * cg.ngay; cc.anCa = [`${money(N.anCa)} × ${cg.ngay} ngày có mặt`];
-    const km = +pl.km || 0, mucXang = km ? this.XANG.find(([toi]) => km < toi)[1] : 0;
-    d.xangXe = mucXang * cg.ngay;
-    cc.xangXe = [km ? `Nơi ở cách ${km} km → ${money(mucXang)}/ngày × ${cg.ngay} ngày` : 'Chưa khai khoảng cách nơi ở — vào "Cài đặt lương" của người này để điền'];
+    const km = +pl.km || 0;
+    if (this.quyCheMoi(M)) {
+      const mucXang = km ? this.XANG.find(([toi]) => km < toi)[1] : 0;
+      d.xangXe = mucXang * cg.ngay;
+      cc.xangXe = [km ? `Nơi ở cách ${km} km → ${money(mucXang)}/ngày × ${cg.ngay} ngày` : 'Chưa khai khoảng cách nơi ở — vào "Cài đặt lương" của người này để điền'];
+    } else {
+      d.xangXe = this.XANG_CU[nhom] * cg.ngay;
+      cc.xangXe = [`Quy chế cũ (QĐ 05): ${money(this.XANG_CU[nhom])}/ngày × ${cg.ngay} ngày`];
+    }
     d.dienThoai = cg.cong ? Math.round(N.dienThoai * Math.min(1, cg.cong / this.CONG_CHUAN)) : 0;
     cc.dienThoai = N.dienThoai ? [`${money(N.dienThoai)}/tháng${cg.cong < this.CONG_CHUAN ? ' × ' + cg.cong + '/' + this.CONG_CHUAN + ' công' : ''}`] : ['Chức danh không hưởng'];
 
     /* Hoa hồng & quỹ theo doanh thu */
     const dtCS = this.dtThuan(M);
+    /* Từ 11/2026 quỹ chỉ tính trên phần vượt 300 triệu */
+    const coSoQuy = this.quyCheMoi(M) ? Math.max(0, dtCS.thuan - this.NGUONG_DT) : dtCS.thuan;
+    const moTaCoSo = this.quyCheMoi(M) ? `phần doanh thu thuần vượt 300 triệu (${money(dtCS.thuan)} − 300.000.000 = ${money(coSoQuy)})`
+      : `${money(dtCS.thuan)} doanh thu thuần cơ sở`;
     d.hoaHong = Math.round(HR.commissionOf(st, M)); cc.hoaHong = [`Theo công đoạn đã ghi ở tab Điều trị (xem tab Hoa hồng)`];
     const chiaQuy = (quy, loc) => {
       const ds = dsNV.filter(loc).map(s => ({s, c: this.congCua(s.id, M).cong}));
@@ -277,15 +295,15 @@ const Luong = {
       return tong ? Math.round(quy * cg.cong / tong) : 0;
     };
     if (nhom === 'trothu' || nhom === 'btg') {
-      const quy = dtCS.thuan * 0.015;
+      const quy = coSoQuy * 0.015;
       d.htdt = chiaQuy(quy, s => ['trothu', 'btg'].includes(this.nhomCua(s)));
-      cc.htdt = [`Quỹ 1,5% × ${money(dtCS.thuan)} doanh thu thuần cơ sở = ${money(quy)}, chia theo ngày công (${cg.cong} công)`];
+      cc.htdt = [`Quỹ 1,5% × ${moTaCoSo} = ${money(quy)}, chia theo ngày công (${cg.cong} công)`];
     } else { d.htdt = 0; cc.htdt = ['Chức danh không hưởng']; }
     if (nhom === 'letan' || nhom === 'media') {
       const coLT = dsNV.some(s => this.nhomCua(s) === 'letan'), coMD = dsNV.some(s => this.nhomCua(s) === 'media');
-      const quy = dtCS.thuan * 0.01 * (coLT && coMD ? 0.5 : 1);
+      const quy = coSoQuy * 0.01 * (coLT && coMD ? 0.5 : 1);
       d.ptkh = chiaQuy(quy, s => this.nhomCua(s) === nhom);
-      cc.ptkh = [`Quỹ 1% × ${money(dtCS.thuan)}${coLT && coMD ? ' ÷ 2 chức danh' : ''} = ${money(quy)}, chia theo ngày công trong chức danh`];
+      cc.ptkh = [`Quỹ 1% × ${moTaCoSo}${coLT && coMD ? ' ÷ 2 chức danh' : ''} = ${money(quy)}, chia theo ngày công trong chức danh`];
     } else { d.ptkh = 0; cc.ptkh = ['Chức danh không hưởng']; }
     d.thuNo = nhom === 'letan' ? Math.round((+nhap.thuNo || 0) * 0.02) : 0;
     cc.thuNo = nhom === 'letan' ? [`2% × ${money(+nhap.thuNo || 0)} nợ quá hạn đã thu (nhập tay, kèm xác nhận kế toán)`] : ['Chức danh không hưởng'];
@@ -348,14 +366,19 @@ const Luong = {
     } else { d.vuotDT = 0; d.kyThuat = 0; cc.vuotDT = ['Chức danh không hưởng']; cc.kyThuat = ['Chức danh không hưởng']; }
 
     /* Điều 20 */
-    const mt = +((cs.nhap || {}).mucTieu) || 0;
-    if (mt && dtCS.thuan > mt && nhom !== 'khac') {
+    const mt = this.NGUONG_DT;
+    if (dtCS.thuan > mt && nhom !== 'khac') {
       const quy = (dtCS.thuan - mt) * 0.05;
       const ds = dsNV.filter(s => this.nhomCua(s) !== 'khac').map(s => ({s, w: this.NHOM[this.nhomCua(s)].heSo * this.congCua(s.id, M).cong}));
       const tong = ds.reduce((x, y) => x + y.w, 0);
       d.mucTieu = tong ? Math.round(quy * N.heSo * cg.cong / tong) : 0;
-      cc.mucTieu = [`Doanh thu thuần ${money(dtCS.thuan)} vượt mục tiêu ${money(mt)} → quỹ 5% = ${money(quy)}; hệ số ${N.heSo} × ${cg.cong} công`];
-    } else { d.mucTieu = 0; cc.mucTieu = [mt ? `Doanh thu thuần ${money(dtCS.thuan)} chưa vượt mục tiêu ${money(mt)}` : 'Chưa đặt mục tiêu doanh thu tháng (trang Tổng hợp)']; }
+      cc.mucTieu = [`Doanh thu thuần ${money(dtCS.thuan)} vượt mức ${money(mt)} → quỹ 5% = ${money(quy)}; hệ số ${N.heSo} × ${cg.cong} công`];
+    } else { d.mucTieu = 0; cc.mucTieu = [`Doanh thu thuần ${money(dtCS.thuan)} chưa vượt mức ${money(mt)}`]; }
+
+    /* Trước 11/2026: các khoản quy chế cũ chưa có */
+    if (!this.quyCheMoi(M)) ['hieuQua', 'phuCa', 'ksnk', 'chungChi', 'dungHen', 'khachMoi', 'vuotDT', 'kyThuat', 'mucTieu'].forEach(k => {
+      d[k] = 0; cc[k] = ['Chưa áp dụng — khoản này có từ kỳ lương 11/2026 theo QĐ 10/2026/QĐ-HB-GQ'];
+    });
 
     /* Thưởng khác & khấu trừ ghi ở tab KPI · Thưởng · Phạt (trừ thưởng hiệu quả đã tính ở trên) */
     const bon = (db.bonuses || []).filter(b => b.staffId === st.id && monthOf(b.date) === M && !String(b.id).startsWith('dg_'));
@@ -566,7 +589,7 @@ const Luong = {
   tongHop(){
     this.moi();
     const M = this.M(), cs = this.coSo(M), ql = this.quanLy(), dsNV = this.dsNV(M);
-    const dt = this.dtThuan(M), mt = +((cs.nhap || {}).mucTieu) || 0;
+    const dt = this.dtThuan(M), mt = this.NGUONG_DT, vuot = Math.max(0, dt.thuan - mt);
     const dh = this.dungHen(M), km = this.khachMoi(M), ca = this.caTrongThang(M);
     const tenNguoi = id => id === 'media' ? 'Media (chia đều)' : ((staffById(id) || {}).name || '— chưa rõ —');
     const nguoiOpts = (chon) => `<option value="">— theo dữ liệu —</option><option value="media"${chon === 'media' ? ' selected' : ''}>Media</option>`
@@ -602,9 +625,9 @@ const Luong = {
     <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
       <div class="card kpi"><div class="k-label">Doanh thu thuần cơ sở</div><div class="k-value num">${money(dt.thuan)}</div>
         <div class="k-note">thực thu ${money(dt.thu)} − lab ${money(dt.lab)}</div></div>
-      <div class="card kpi"><div class="k-label">Mục tiêu doanh thu tháng (Điều 20)</div>
-        <div class="k-value num" style="font-size:18px">${ql ? Tien.o('mucTieu', mt || '', `onchange="Luong.datMucTieu(this.value)" style="width:100%"`) : money(mt)}</div>
-        <div class="k-note">${mt ? (dt.thuan > mt ? 'vượt ' + money(dt.thuan - mt) + ' → quỹ ' + money((dt.thuan - mt) * 0.05) : 'chưa vượt') : 'chưa đặt'}</div></div>
+      <div class="card kpi"><div class="k-label">Phần vượt 300 triệu (Điều 10, 11, 20)</div>
+        <div class="k-value num">${this.quyCheMoi(M) ? money(vuot) : '—'}</div>
+        <div class="k-note">${!this.quyCheMoi(M) ? 'tháng này còn theo quy chế cũ' : vuot ? `quỹ 1,5%: ${money(vuot * 0.015)} · 1%: ${money(vuot * 0.01)} · 5%: ${money(vuot * 0.05)}` : 'chưa vượt — các quỹ bằng 0'}</div></div>
       <div class="card kpi"><div class="k-label">Khách đến đúng hẹn (Điều 19.2)</div>
         <div class="k-value num">${dh.tyLe == null ? '—' : Math.round(dh.tyLe * 100) + '%'}</div><div class="k-note">${dh.den}/${dh.tong} lượt hẹn</div></div>
     </div>
@@ -638,11 +661,6 @@ const Luong = {
     fn(r);
     (r.lichSu = r.lichSu || []).push({ai: this.ai(), luc: this.luc(), viec});
     r._up = Date.now(); save(); App.render();
-  },
-  datMucTieu(v){
-    const moi = num(v) || 0, cu = +((this.coSo(this.M()).nhap || {}).mucTieu) || 0;
-    if (moi === cu) return;
-    this.ghiCoSo('Mục tiêu doanh thu: ' + money(cu) + ' → ' + money(moi), r => { r.nhap = r.nhap || {}; r.nhap.mucTieu = moi; });
   },
   ganKhach(cid, nguoi){
     const c = custById(cid);
