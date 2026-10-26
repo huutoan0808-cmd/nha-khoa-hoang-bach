@@ -114,7 +114,8 @@ const MinhChung = {
     let ok = m.auto && !m.han ? tu.ok : !!(g && g.co);
     let ghi = [];
     if (tu) ghi.push(tu.ghi);
-    if (g && g.co) ghi.push(['Đã có', g.so, g.ngay ? 'ngày ' + fmtD(g.ngay) : '', g.noi ? 'lưu: ' + g.noi : ''].filter(Boolean).join(' · '));
+    if (g && g.co) ghi.push(['Đã có', g.so, g.ngay ? 'ngày ' + fmtD(g.ngay) : '', g.noi ? 'lưu: ' + g.noi : '',
+      (g.tep || []).length ? (g.tep || []).length + ' file scan' : ''].filter(Boolean).join(' · '));
     /* Mục tự động nhưng có giấy ký kèm (chấm công, doanh thu, phiếu đánh giá): cần cả hai */
     if (m.auto && this.CA_HAI.includes(m.auto)) ok = tu.ok && !!(g && g.co);
     if (m.han && g && g.co && g.hetHan && g.hetHan < M + '-01') { ok = false; ghi.push('ĐÃ HẾT HẠN ' + fmtD(g.hetHan)); }
@@ -139,6 +140,7 @@ const MinhChung = {
   /* ---------- Tab Hồ sơ minh chứng ---------- */
   tab(){
     Luong.moi();
+    this.guiCho();
     const M = Luong.M(), ql = Luong.quanLy(), ds = Luong.dsNV(M);
     const rows = ds.map(st => { const k = Luong.tinh(st, M), c = this.cua(st, M, k); return {st, k, c, thieu: c.filter(x => !x.ok)}; });
     const csMuc = this.DM.filter(m => m.pv === 'cs' || m.pv === 'cst');
@@ -147,7 +149,7 @@ const MinhChung = {
       const dung = coDung(m);
       return `<tr${dung ? '' : ' style="opacity:.55"'}><td><b>${h(m.ten)}</b><br><span class="sub-line">${h(m.goiY)}</span></td>
         <td class="sub-line">${h(this.PV[m.pv])}</td>
-        <td>${!dung ? '<span class="pill">Tháng này không cần</span>' : t.ok ? '<span class="pill ok">Đủ</span>' : '<span class="pill warn">Thiếu</span>'}<br><span class="sub-line">${h(t.ghi)}</span></td>
+        <td>${!dung ? '<span class="pill">Tháng này không cần</span>' : t.ok ? '<span class="pill ok">Đủ</span>' : '<span class="pill warn">Thiếu</span>'}<br><span class="sub-line">${h(t.ghi)}</span> ${this.linkTep(t.g)}</td>
         <td>${ql ? `<button class="btn small" onclick="MinhChung.sua('${m.id}','')">Cập nhật</button>` : ''}</td></tr>`; }).join('');
     const nvRows = rows.map(r => `<tr class="clickable" onclick="MinhChung.nguoi('${r.st.id}')">
       <td><b>${h(r.st.name)}</b><br><span class="sub-line">${h(Luong.NHOM[r.k.nhom].ten)}</span></td>
@@ -183,7 +185,7 @@ const MinhChung = {
       const muc = c.filter(x => this.khoanCua(x.m).includes(K.k));
       return `<tr><td><b>${h(K.ten)}</b><br><span class="sub-line">${h(K.cc)} · ${K.loai === 'tru' ? '−' : ''}${money(k.v[K.k])}</span></td>
         <td>${muc.map(x => `<div style="margin-bottom:4px">${x.ok ? '<span class="pill ok">Đủ</span>' : '<span class="pill warn">Thiếu</span>'}
-          <b>${h(x.m.ten)}</b> <span class="sub-line">(${this.nhan(x)})</span><br><span class="sub-line">${h(x.ghi || x.m.goiY)}</span>
+          <b>${h(x.m.ten)}</b> <span class="sub-line">(${this.nhan(x)})</span><br><span class="sub-line">${h(x.ghi || x.m.goiY)}</span> ${this.linkTep(x.g)}
           ${ql && this.canGhi(x.m) ? ` <button type="button" class="link-btn" onclick="MinhChung.sua('${x.m.id}','${stId}')">cập nhật</button>` : ''}</div>`).join('')
           || '<span class="sub-line">—</span>'}</td></tr>`;
     }).join('');
@@ -204,6 +206,8 @@ const MinhChung = {
     if (!Luong.quanLy()) return;
     const m = this.DM.find(x => x.id === id), M = Luong.M(), st = stId ? staffById(stId) : null;
     const g = this.ghiCua(m, st, M) || {};
+    if (m.pv === 't' && (Luong.phieu(st.id, M) || {}).chot) { App.toast('Phiếu lương đã chốt — mở chốt trước khi sửa minh chứng tháng'); return; }
+    this._dsTep = (g.tep || []).slice();
     App.modal('Minh chứng: ' + m.ten + (st ? ' — ' + st.name : ''), `
     <form class="form-grid" onsubmit="MinhChung.luu(event,'${id}','${stId}')">
       <div class="note-block full">${h(m.goiY)}<br><span class="sub-line">Phạm vi: ${h(this.PV[m.pv])}${m.pv === 'cst' || m.pv === 't' ? ' ' + Luong.nhanThang(M) : ''}</span></div>
@@ -211,7 +215,11 @@ const MinhChung = {
       <div class="f"><label>Số hiệu, ký hiệu</label><input name="so" value="${h(g.so || '')}" placeholder="VD: 10/2026/QĐ-HB-GQ"></div>
       <div class="f"><label>Ngày văn bản</label><input type="date" name="ngay" value="${h(g.ngay || '')}"></div>
       ${m.han ? `<div class="f"><label>Ngày hết hạn (để trống nếu không xác định thời hạn)</label><input type="date" name="hetHan" value="${h(g.hetHan || '')}"></div>` : ''}
-      <div class="f full"><label>Nơi lưu bản gốc / đường dẫn file scan</label><input name="noi" value="${h(g.noi || '')}" placeholder="VD: bìa hồ sơ lương T11, tủ kế toán; hoặc link Drive"></div>
+      <div class="f full"><label>Nơi lưu bản gốc</label><input name="noi" value="${h(g.noi || '')}" placeholder="VD: bìa hồ sơ lương T11, tủ kế toán"></div>
+      <div class="f full"><label>File scan, ảnh chụp (PDF hoặc ảnh, chọn được nhiều file)</label>
+        <input type="file" accept="image/*,application/pdf" multiple onchange="MinhChung.themTep(this)">
+        <div class="combo-hint">Ảnh tự nén cho nhẹ nhưng vẫn đọc rõ chữ; PDF tối đa ${this.PDF_MAX_MB} MB/file. File lưu trên máy chủ, không làm đầy bộ nhớ của app.</div>
+        <div id="mcTep" style="margin-top:6px">${this.htmlTep()}</div></div>
       ${g.ai ? `<div class="sub-line full">Cập nhật lần cuối: ${h(g.ai)}, ${h(g.luc)}</div>` : ''}
       <div class="form-actions full"><button type="button" class="btn" onclick="${stId ? `MinhChung.nguoi('${stId}')` : 'App.closeModal()'}">Quay lại</button><button class="btn primary">Lưu</button></div>
     </form>`);
@@ -220,9 +228,14 @@ const MinhChung = {
     ev.preventDefault();
     if (!Luong.quanLy()) return;
     const f = ev.target, m = this.DM.find(x => x.id === id), M = Luong.M(), st = stId ? staffById(stId) : null;
-    const moi = {co: f.co.checked, so: f.so.value.trim(), ngay: f.ngay.value, noi: f.noi.value.trim(), ai: Luong.ai(), luc: Luong.luc()};
+    if (this._dangXuLy) { App.toast('Đang xử lý file, chờ chút rồi bấm Lưu'); return; }
+    const moi = {co: f.co.checked, so: f.so.value.trim(), ngay: f.ngay.value, noi: f.noi.value.trim(), ai: Luong.ai(), luc: Luong.luc(),
+                 tep: (this._dsTep || []).slice()};
     if (f.hetHan) moi.hetHan = f.hetHan.value;
-    const viec = `Minh chứng "${m.ten}"${st ? ' (' + st.name + ')' : ''}: ${moi.co ? 'đã có' : 'chưa có'}${moi.so ? ', ' + moi.so : ''}`;
+    const cu = (this.ghiCua(m, st, M) || {}).tep || [];
+    const them = moi.tep.filter(t => !cu.some(x => x.id === t.id)), bo = cu.filter(t => !moi.tep.some(x => x.id === t.id));
+    const viec = `Minh chứng "${m.ten}"${st ? ' (' + st.name + ')' : ''}: ${moi.co ? 'đã có' : 'chưa có'}${moi.so ? ', ' + moi.so : ''}`
+      + (them.length ? '; đính kèm ' + them.map(t => t.ten).join(', ') : '') + (bo.length ? '; gỡ file ' + bo.map(t => t.ten).join(', ') : '');
     if (m.pv === 'cs') {
       if (!db.bangLuong) db.bangLuong = [];
       let r = db.bangLuong.find(x => x.id === 'mc_cs');
@@ -241,6 +254,8 @@ const MinhChung = {
     save(); App.render();
     if (stId) this.nguoi(stId); else App.closeModal();
     App.toast('Đã lưu minh chứng ✓');
+    bo.forEach(t => this.xoaTep(t.id));
+    this.guiCho().then(n => { if (n) App.toast('Đã gửi ' + n + ' file scan lên máy chủ ✓'); });
   },
 
   /* Bảng kê nộp kèm hồ sơ lương khi thanh tra hỏi */
@@ -276,3 +291,166 @@ const MinhChung = {
     App.print(html, 'A4N', 'Bảng kê minh chứng ' + Luong.nhanThang(M));
   },
 };
+
+/* ================= FILE SCAN ĐÍNH KÈM =================
+   Không để file trong localStorage: trình duyệt chỉ cho khoảng 5MB, dùng chung với bệnh
+   án — vài bản scan là đầy, mất dữ liệu. Nên:
+   - Bản ghi minh chứng chỉ giữ THÔNG TIN file (tên, cỡ, loại) → đồng bộ như mọi dữ liệu.
+   - Nội dung file nằm ở IndexedDB của máy (dung lượng lớn) và một dòng riêng trong bảng
+     records trên Supabase (tbl = 'tepMC'). Đồng bộ thường bỏ qua dòng này (sync.js), máy
+     khác chỉ tải file về khi bấm xem.
+   - Chưa đăng nhập / mất mạng thì file chờ trong IndexedDB, lần sau tự gửi lên. */
+Object.assign(MinhChung, {
+  PDF_MAX_MB: 4,
+  ANH_CANH: 1800,      /* đủ đọc chữ trên giấy A4 chụp bằng điện thoại */
+  ANH_CHAT: 0.72,
+  TEN_IDB: 'nkhb-tep-mc',
+  _dsTep: [],
+  _dangXuLy: false,
+
+  idb(){
+    return this._idb || (this._idb = new Promise((ok, loi) => {
+      const y = indexedDB.open(this.TEN_IDB, 1);
+      y.onupgradeneeded = () => y.result.createObjectStore('tep', {keyPath: 'id'});
+      y.onsuccess = () => ok(y.result);
+      y.onerror = () => loi(y.error);
+    }));
+  },
+  async idbLam(che, fn){
+    const d = await this.idb();
+    return new Promise((ok, loi) => {
+      const tx = d.transaction('tep', che), r = fn(tx.objectStore('tep'));
+      tx.oncomplete = () => ok(r && r.result);
+      tx.onerror = () => loi(tx.error);
+    });
+  },
+  layIdb(id){ return this.idbLam('readonly', s => s.get(id)); },
+  ghiIdb(o){ return this.idbLam('readwrite', s => s.put(o)); },
+  boIdb(id){ return this.idbLam('readwrite', s => s.delete(id)); },
+  tatCaIdb(){ return this.idbLam('readonly', s => s.getAll()); },
+
+  docFile(file){
+    return new Promise((ok, loi) => {
+      const fr = new FileReader();
+      fr.onerror = () => loi(new Error('Không đọc được ' + file.name));
+      fr.onload = () => ok(fr.result);
+      fr.readAsDataURL(file);
+    });
+  },
+  async nenAnh(file){
+    const url = await this.docFile(file);
+    return new Promise((ok, loi) => {
+      const im = new Image();
+      im.onerror = () => loi(new Error('Ảnh hỏng: ' + file.name));
+      im.onload = () => {
+        const tl = Math.min(1, this.ANH_CANH / Math.max(im.width, im.height));
+        const cv = document.createElement('canvas');
+        cv.width = Math.round(im.width * tl); cv.height = Math.round(im.height * tl);
+        const c = cv.getContext('2d');
+        c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height);   /* PNG trong suốt → nền trắng */
+        c.drawImage(im, 0, 0, cv.width, cv.height);
+        ok(cv.toDataURL('image/jpeg', this.ANH_CHAT));
+      };
+      im.src = url;
+    });
+  },
+  kb(dataUrl){ return Math.round((dataUrl.length - dataUrl.indexOf(',') - 1) * 0.75 / 1024); },
+
+  htmlTep(){
+    const ds = this._dsTep || [];
+    if (!ds.length) return '<span class="sub-line">Chưa đính kèm file nào.</span>';
+    return ds.map(t => `<div style="display:flex;gap:8px;align-items:center;margin:3px 0">
+      <span class="pill ${t.loai === 'pdf' ? 'info' : ''}">${t.loai === 'pdf' ? 'PDF' : 'Ảnh'}</span>
+      <a href="#" onclick="event.preventDefault();MinhChung.xemTep('${t.id}')">${h(t.ten)}</a>
+      <span class="sub-line">${t.kb} KB</span>
+      <button type="button" class="link-btn" onclick="MinhChung.goTep('${t.id}')">gỡ</button></div>`).join('');
+  },
+  async themTep(inp){
+    const o = document.getElementById('mcTep'), files = [...(inp.files || [])];
+    if (!files.length) return;
+    this._dangXuLy = true;
+    if (o) o.innerHTML = '<span class="sub-line">Đang xử lý ' + files.length + ' file…</span>';
+    const loi = [];
+    for (const file of files) {
+      try {
+        let du, loai;
+        if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+          if (file.size > this.PDF_MAX_MB * 1048576) throw new Error(file.name + ' lớn hơn ' + this.PDF_MAX_MB + ' MB — xuất lại PDF chất lượng thấp hơn hoặc tách trang');
+          du = await this.docFile(file); loai = 'pdf';
+          if (!/^data:application\/pdf/.test(du)) du = 'data:application/pdf;base64,' + du.split(',')[1];
+        } else if (/^image\//.test(file.type)) {
+          du = await this.nenAnh(file); loai = 'anh';
+        } else throw new Error(file.name + ': chỉ nhận PDF hoặc ảnh');
+        const id = 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+        const ten = loai === 'anh' ? file.name.replace(/\.[^.]+$/, '') + '.jpg' : file.name;
+        const meta = {id, ten, loai, kb: this.kb(du), ngay: todayISO(), ai: Luong.ai()};
+        await this.ghiIdb(Object.assign({du, daGui: false}, meta));
+        this._dsTep.push(meta);
+      } catch(e){ loi.push(e.message); }
+    }
+    this._dangXuLy = false;
+    inp.value = '';
+    const f = inp.form;
+    if (f && f.co && this._dsTep.length && !f.co.checked) f.co.checked = true;
+    if (o) o.innerHTML = this.htmlTep() + (loi.length ? `<div class="sub-line" style="color:var(--danger)">${loi.map(h).join('<br>')}</div>` : '');
+  },
+  goTep(id){
+    if (!confirm('Gỡ file này khỏi minh chứng? Bấm Lưu thì file bị xóa hẳn.')) return;
+    this._dsTep = this._dsTep.filter(t => t.id !== id);
+    const o = document.getElementById('mcTep'); if (o) o.innerHTML = this.htmlTep();
+  },
+
+  /* ---------- Gửi lên / tải về máy chủ ---------- */
+  dongMay(id){ return 'tepMC:' + id; },
+  async guiCho(){
+    if (!(Cloud.configured() && Cloud.loggedIn()) || this._dangGui) return 0;
+    this._dangGui = true;
+    let n = 0;
+    try {
+      const ds = (await this.tatCaIdb()).filter(x => !x.daGui);
+      for (const x of ds) {
+        const data = Object.assign({}, x); delete data.daGui;
+        await Cloud.auth('/rest/v1/records?on_conflict=id', {method: 'POST', headers: {Prefer: 'resolution=merge-duplicates'},
+          body: [{id: this.dongMay(x.id), tbl: 'tepMC', data, deleted: false, updated_at: new Date().toISOString()}], timeout: 120000});
+        x.daGui = true; await this.ghiIdb(x); n++;
+      }
+    } catch(e){ console.warn('Gửi file minh chứng chưa được:', e.message); }
+    finally { this._dangGui = false; }
+    return n;
+  },
+  async layTep(id){
+    let x = null;
+    try { x = await this.layIdb(id); } catch(e){}
+    if (x && x.du) return x;
+    if (!(Cloud.configured() && Cloud.loggedIn())) throw new Error('File chưa có trên máy này — đăng nhập đám mây để tải về');
+    const r = await Cloud.auth('/rest/v1/records?select=data&id=eq.' + encodeURIComponent(this.dongMay(id)), {timeout: 120000});
+    if (!r || !r[0] || !r[0].data || !r[0].data.du) throw new Error('Chưa có file trên máy chủ — máy đã đính kèm cần mở app khi có mạng để gửi lên');
+    x = Object.assign({}, r[0].data, {daGui: true});
+    try { await this.ghiIdb(x); } catch(e){}
+    return x;
+  },
+  async xemTep(id){
+    App.toast('Đang mở file…');
+    try {
+      const x = await this.layTep(id);
+      const bin = atob(x.du.split(',')[1]), u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([u8], {type: x.loai === 'pdf' ? 'application/pdf' : 'image/jpeg'}));
+      const w = window.open(url, '_blank');
+      if (!w) {   /* trình duyệt chặn cửa sổ mới → tải về */
+        const a = document.createElement('a'); a.href = url; a.download = x.ten; document.body.appendChild(a); a.click(); a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 120000);
+    } catch(e){ App.toast(e.message); }
+  },
+  async xoaTep(id){
+    try { await this.boIdb(id); } catch(e){}
+    if (Cloud.configured() && Cloud.loggedIn()) {
+      try { await Cloud.auth('/rest/v1/records?id=eq.' + encodeURIComponent(this.dongMay(id)), {method: 'DELETE'}); } catch(e){}
+    }
+  },
+  /* Link mở file trong một minh chứng */
+  linkTep(g){
+    return ((g && g.tep) || []).map(t => `<a href="#" onclick="event.preventDefault();MinhChung.xemTep('${t.id}')">📎 ${h(t.ten)}</a>`).join(' ');
+  },
+});

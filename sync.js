@@ -175,7 +175,9 @@ const Sync = {
     for (let tu = 0; ; tu += this.TRANG) {
       /* Bắt buộc có order cố định: không có ORDER BY thì thứ tự giữa hai lần gọi
          không được đảm bảo, trang sau lặp lại dòng của trang trước và bỏ sót dòng khác. */
-      const p = await Cloud.auth('/rest/v1/' + bang + '?select=*&order=id.asc'
+      /* File scan minh chứng (tbl tepMC) nằm chung bảng records nhưng rất nặng — không kéo
+         về mỗi lần đồng bộ, chỉ tải từng file khi bấm xem (xem minhchung.js) */
+      const p = await Cloud.auth('/rest/v1/' + bang + '?select=*&order=id.asc' + (bang === 'records' ? '&tbl=neq.tepMC' : '')
         + '&limit=' + this.TRANG + '&offset=' + tu, {timeout: 45000}) || [];
       ra.push(...p);
       if (p.length < this.TRANG) break;
@@ -430,6 +432,8 @@ const Sync = {
       await this.push();
       await this.donKhoChung();
       if (typeof Vet !== 'undefined') { try { await Vet.day(); } catch(e){} }
+      /* File scan minh chứng đính kèm lúc chưa có mạng */
+      if (typeof MinhChung !== 'undefined') MinhChung.guiCho();
       await this.syncMeta();
       const dup = this.fixDupReceipts();
       if (dup.length) { await this.push(); App.toast('Đã đánh lại ' + dup.length + ' số phiếu thu bị trùng: ' + dup.slice(0,3).join(', ')); }
