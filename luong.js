@@ -48,7 +48,6 @@ const Luong = {
     {k: 'chuyenCan',  ten: 'Thưởng chuyên cần',                         cc: 'Điều 17',       loai: 'thu', nhom: 'Thưởng'},
     {k: 'hieuQua',    ten: 'Thưởng hiệu quả công việc',                 cc: 'Điều 18',       loai: 'thu', nhom: 'Thưởng'},
     {k: 'phuCa',      ten: 'Thưởng phụ ca kỹ thuật',                    cc: 'Mục 19.1',      loai: 'thu', nhom: 'Thưởng'},
-    {k: 'ksnk',       ten: 'Thưởng tuân thủ KSNK',                      cc: 'Mục 19.1',      loai: 'thu', nhom: 'Thưởng'},
     {k: 'chungChi',   ten: 'Thưởng đạt chứng chỉ',                      cc: 'Mục 19.1',      loai: 'thu', nhom: 'Thưởng'},
     {k: 'dungHen',    ten: 'Thưởng tỷ lệ khách đến đúng hẹn',           cc: 'Mục 19.2',      loai: 'thu', nhom: 'Thưởng'},
     {k: 'khachMoi',   ten: 'Thưởng người bệnh mới',                     cc: 'Mục 19.2, 19.3',loai: 'thu', nhom: 'Thưởng'},
@@ -64,13 +63,43 @@ const Luong = {
   /* Ô quản lý nhập tay mỗi tháng (phần mềm không có dữ liệu để tự biết) */
   NHAP: {
     nghiKP:   {ten: 'Số ngày nghỉ không phép', nhom: ['bs', 'trothu', 'letan', 'media']},
-    ksnk:     {ten: 'Tỷ lệ đạt bảng kiểm KSNK (%)', nhom: ['trothu', 'btg']},
     chungChi: {ten: 'Số chứng chỉ mới được cấp', nhom: ['trothu', 'btg']},
-    diemHQ:   {ten: 'Điểm thưởng hiệu quả (0–100)', nhom: ['trothu', 'letan', 'media']},
+    diemHQ:   {ten: 'Điểm thưởng hiệu quả (0–100)', nhom: ['letan', 'media']},
     thuNo:    {ten: 'Tiền nợ quá hạn đã thu nhờ nhắc nợ (₫)', nhom: ['letan'], tien: true},
     tamUng:   {ten: 'Tạm ứng trong tháng (₫)', tien: true},
     thue:     {ten: 'Thuế TNCN khấu trừ (₫)', tien: true},
   },
+
+  /* Phiếu KPI phụ tá, điều dưỡng trọn thời gian (mục 18.5–18.8). Mỗi tiêu chí: số lượt
+     giao / kiểm tra và số lượt đạt; tỷ lệ hoàn thành quy ra % của trần tiêu chí theo
+     KPI_THANG. Tiêu chí không giao (để trống hoặc 0) thì chưa xét, không cộng tiền. */
+  KPI_PT: [
+    {nhom: 'Năng suất phụ tá điều trị', ten: 'Hoàn thành đủ các bước của ca điều trị được phân công, có bác sĩ xác nhận', tran: 1200000, mc: 'Lịch ghế, nhật ký ca, xác nhận bác sĩ'},
+    {nhom: 'Năng suất phụ tá điều trị', ten: 'Có mặt, sẵn sàng hỗ trợ đúng thời điểm ca được giao (loại trừ ca hủy, đổi lịch ngoài kiểm soát)', tran: 800000, mc: 'Lịch ghế, phân ca'},
+    {nhom: 'Kiểm soát nhiễm khuẩn', ten: 'Chu trình hấp có đủ nhật ký, chỉ thị và kiểm tra theo quy trình', tran: 400000, mc: 'Nhật ký tiệt khuẩn, phiếu chỉ thị'},
+    {nhom: 'Kiểm soát nhiễm khuẩn', ten: 'Lượt kiểm tra tuân thủ phân loại, làm sạch, đóng gói, bảo quản dụng cụ', tran: 400000, mc: 'Bảng kiểm KSNK, người kiểm tra ký'},
+    {nhom: 'Chuẩn bị ghế, dụng cụ', ten: 'Ca được chuẩn bị đủ dụng cụ, vật tư theo kế hoạch điều trị trước khi bắt đầu', tran: 350000, mc: 'Checklist ghế, lịch điều trị'},
+    {nhom: 'Chuẩn bị ghế, dụng cụ', ten: 'Ca hoàn tất vệ sinh, thu dọn và bàn giao ghế đúng quy trình', tran: 250000, mc: 'Phiếu kiểm tra ca, giám sát'},
+    {nhom: 'Quản lý vật tư', ten: 'Đợt kiểm kê được phân công hoàn thành đúng hạn, sai lệch được giải trình', tran: 300000, mc: 'Biên bản kiểm kê, sổ kho'},
+    {nhom: 'Quản lý vật tư', ten: 'Lượt kiểm tra tồn kho, báo vật tư sắp hết, cận hạn đúng quy trình', tran: 300000, mc: 'Phiếu đề xuất mua, báo cáo tồn'},
+    {nhom: 'Hồ sơ, phần mềm', ten: 'Ca cập nhật đúng phần việc phụ tá trên phần mềm trong thời hạn', tran: 350000, mc: 'Mã ca, nhật ký cập nhật'},
+    {nhom: 'Hồ sơ, phần mềm', ten: 'Lượt kiểm tra hồ sơ, công đoạn được phân công đạt yêu cầu chính xác, đầy đủ', tran: 150000, mc: 'Kết quả kiểm tra hồ sơ'},
+    {nhom: 'Hướng dẫn, chăm sóc khách hàng', ten: 'Ca có hướng dẫn sau điều trị theo chỉ định bác sĩ đã duyệt', tran: 300000, mc: 'Phiếu hướng dẫn, mã ca'},
+    {nhom: 'Hướng dẫn, chăm sóc khách hàng', ten: 'Lượt bàn giao lịch tái khám, phản ánh của khách cho lễ tân đúng hạn', tran: 200000, mc: 'Phiếu bàn giao, sổ hẹn'},
+  ],
+  KPI_THANG: [[0.95, 1], [0.9, 0.8], [0.8, 0.5]],
+  kpiTinh(kpi){
+    kpi = kpi || {};
+    const rows = this.KPI_PT.map((t, i) => {
+      const x = kpi[i + 1] || {}, g = +x.g || 0, dat = x.d === '' || x.d == null ? null : +x.d;
+      const tl = g > 0 && dat != null ? Math.min(1, dat / g) : null;
+      const nhan = tl == null ? null : ((this.KPI_THANG.find(([m]) => tl >= m) || [0, 0])[1]);
+      return Object.assign({stt: i + 1, g: x.g ?? '', d: x.d ?? '', m: x.m || '', tl, nhan, tien: nhan == null ? 0 : Math.round(t.tran * nhan)}, t);
+    });
+    return {rows, tong: rows.reduce((s, r) => s + r.tien, 0), tran: rows.reduce((s, r) => s + r.tran, 0),
+            du: rows.filter(r => r.tl != null).length};
+  },
+  pct(x){ return x == null ? '—' : Math.round(x * 1000) / 10 + '%'; },
 
   /* ---------- Tiện ích ---------- */
   M(){ return this.thang || (this.thang = DanhGia.macDinhThang()); },
@@ -320,6 +349,12 @@ const Luong = {
     if (nhom === 'bs') {
       const k = DanhGia.tinh(st, M);
       d.hieuQua = k.tien; cc.hieuQua = [`Phiếu đánh giá tháng: ${k.tong} điểm${k.kyLuat ? ', có kỷ luật' : ''}${k.daChot ? ' (đã chốt)' : ' (chưa chốt phiếu)'}`];
+    } else if (nhom === 'trothu') {
+      const kp = this.kpiTinh(p && p.kpi);
+      d.hieuQua = p && p.kyLuat ? 0 : kp.tong;
+      cc.hieuQua = [`Phiếu KPI phụ tá (mục 18.5): đã chấm ${kp.du}/12 tiêu chí, đạt ${money(kp.tong)} / trần ${money(kp.tran)}`
+        + (p && p.kyLuat ? ' → bị kỷ luật trong tháng: không thưởng' : '')]
+        .concat(kp.rows.filter(r => r.tl != null).map(r => `TC${r.stt} ${r.d}/${r.g} = ${this.pct(r.tl)} → ${r.nhan * 100}% × ${money(r.tran)} = ${money(r.tien)}`));
     } else if (N.hq.length) {
       const diem = nhap.diemHQ === '' || nhap.diemHQ == null ? null : +nhap.diemHQ;
       d.hieuQua = diem == null ? 0 : ((N.hq.find(([m]) => diem >= m) || [0, 0])[1]);
@@ -333,12 +368,9 @@ const Luong = {
       d.phuCa = cua.reduce((s, x) => s + this.LOAI_CA.find(l => l.k === x.k).phuTa, 0);
       cc.phuCa = cua.length ? cua.map(x => `${fmtD(x.v.date)} ${h(x.c.name)}: ${this.LOAI_CA.find(l => l.k === x.k).ten} +${money(this.LOAI_CA.find(l => l.k === x.k).phuTa)}`)
         : ['Không có ca implant, tiểu phẫu, gắn mắc cài nào ghi tên người này là người phụ'];
-      const pt = nhap.ksnk === '' || nhap.ksnk == null ? null : +nhap.ksnk;
-      d.ksnk = pt == null ? 0 : pt >= 90 ? 200000 : pt >= 80 ? 100000 : 0;
-      cc.ksnk = [pt == null ? 'Chưa nhập tỷ lệ đạt bảng kiểm KSNK' : `Bảng kiểm KSNK đạt ${pt}%`];
       d.chungChi = (+nhap.chungChi || 0) * 500000;
       cc.chungChi = [`${+nhap.chungChi || 0} chứng chỉ mới × 500.000`];
-    } else { ['phuCa', 'ksnk', 'chungChi'].forEach(k => { d[k] = 0; cc[k] = ['Chức danh không hưởng']; }); }
+    } else { ['phuCa', 'chungChi'].forEach(k => { d[k] = 0; cc[k] = ['Chức danh không hưởng']; }); }
     if (nhom === 'letan') {
       const dh = this.dungHen(M);
       d.dungHen = dh.tyLe == null ? 0 : dh.tyLe >= 0.85 ? 300000 : dh.tyLe >= 0.75 ? 150000 : 0;
@@ -376,7 +408,7 @@ const Luong = {
     } else { d.mucTieu = 0; cc.mucTieu = [`Doanh thu thuần ${money(dtCS.thuan)} chưa vượt mức ${money(mt)}`]; }
 
     /* Trước 11/2026: các khoản quy chế cũ chưa có */
-    if (!this.quyCheMoi(M)) ['hieuQua', 'phuCa', 'ksnk', 'chungChi', 'dungHen', 'khachMoi', 'vuotDT', 'kyThuat', 'mucTieu'].forEach(k => {
+    if (!this.quyCheMoi(M)) ['hieuQua', 'phuCa', 'chungChi', 'dungHen', 'khachMoi', 'vuotDT', 'kyThuat', 'mucTieu'].forEach(k => {
       d[k] = 0; cc[k] = ['Chưa áp dụng — khoản này có từ kỳ lương 11/2026 theo QĐ 10/2026/QĐ-HB-GQ'];
     });
 
@@ -480,6 +512,7 @@ const Luong = {
         ${k.daChot ? '<b>Đã chốt</b> ngày ' + fmtD(k.p.ngayChot) : 'Tạm tính'}
         ${ql ? ` · <button type="button" class="link-btn" onclick="Luong.caiDat('${stId}')">Cài đặt lương của người này</button>` : ''}</div>
       ${oNhap ? `<div class="form-grid mb">${oNhap}</div>` : ''}
+      ${k.nhom === 'trothu' && this.quyCheMoi(M) ? this.kpiForm(k.p, khoa, stId) : ''}
       <div class="tbl-wrap"><table style="min-width:860px">
         <thead><tr><th style="width:24%">Khoản</th><th>Căn cứ, minh chứng</th><th class="r">Tự tính</th><th>Số sửa</th><th>Lý do</th></tr></thead>
         <tbody>${dong}
@@ -518,6 +551,22 @@ const Luong = {
       const cu = p.nhap[key] ?? '';
       if (String(moi) !== String(cu)) { viec.push(`${x.ten}: ${cu === '' ? 'trống' : cu} → ${moi === '' ? 'trống' : moi}`); p.nhap[key] = moi; }
     });
+    /* Phiếu KPI phụ tá */
+    if (f.querySelector('[name="kp_1_g"]')) {
+      p.kpi = p.kpi || {};
+      this.KPI_PT.forEach((t, i) => {
+        const n = i + 1, cu = p.kpi[n] || {}, moi = {};
+        ['g', 'd', 'm'].forEach(x => { const o = f.querySelector(`[name="kp_${n}_${x}"]`); moi[x] = o ? o.value.trim() : ''; });
+        if (moi.g !== (cu.g ?? '') || moi.d !== (cu.d ?? '') || moi.m !== (cu.m || '')) {
+          viec.push(`KPI TC${n}: ${cu.d ?? ''}/${cu.g ?? ''} → ${moi.d}/${moi.g}${moi.m ? ' (' + moi.m + ')' : ''}`);
+          p.kpi[n] = moi;
+        }
+      });
+      const kl = !!(f.querySelector('[name="kp_kyLuat"]') || {}).checked;
+      if (kl !== !!p.kyLuat) { viec.push(kl ? 'Ghi nhận bị kỷ luật trong tháng (không thưởng hiệu quả)' : 'Bỏ ghi nhận kỷ luật'); p.kyLuat = kl; }
+      const nc = ((f.querySelector('[name="kp_nguoiCham"]') || {}).value || '').trim();
+      if (nc !== (p.kpiNguoiCham || '')) { viec.push('Người đánh giá KPI: ' + (nc || 'trống')); p.kpiNguoiCham = nc; }
+    }
     /* Số sửa từng khoản */
     for (const K of this.KHOAN) {
       const o = f.querySelector('[name="s_' + K.k + '"]'), l = f.querySelector('[name="l_' + K.k + '"]');
@@ -543,6 +592,62 @@ const Luong = {
     p._up = Date.now();
     save(); App.render(); this.chiTiet(stId);
     App.toast(chot ? 'Đã chốt phiếu lương ✓' : (viec.length ? 'Đã lưu ' + viec.length + ' thay đổi ✓' : 'Không có gì thay đổi'));
+  },
+  /* Bảng nhập phiếu KPI trong phiếu lương của phụ tá */
+  kpiForm(p, khoa, stId){
+    const kp = this.kpiTinh(p && p.kpi), dis = khoa ? 'disabled' : '';
+    const o = (n, x, v, w) => `<input name="kp_${n}_${x}" value="${h(v)}" ${dis} ${x === 'm' ? 'placeholder="mã ca, mã phiếu"' : 'type="number" min="0" step="1"'} style="width:${w}px"
+      oninput="Luong.kpiXem(this.form)">`;
+    return `<details class="card mb" style="padding:10px" open><summary><b>Phiếu KPI phụ tá — thưởng hiệu quả (mục 18.5)</b>
+      <span class="sub-line"> · <span id="kpiTong">${money(kp.tong)}</span> / trần ${money(kp.tran)}</span></summary>
+      <div class="tbl-wrap" style="margin-top:8px"><table style="min-width:900px">
+        <thead><tr><th>TC</th><th>Tiêu chí</th><th class="r">Trần</th><th>Lượt giao</th><th>Lượt đạt</th><th class="r">Hoàn thành</th><th class="r">Thưởng</th><th>Minh chứng</th></tr></thead>
+        <tbody>${kp.rows.map(r => `<tr><td class="num">${r.stt}</td>
+          <td style="font-size:12px"><b>${h(r.nhom)}</b><br>${h(r.ten)}<br><span class="sub-line">${h(r.mc)}</span></td>
+          <td class="r num">${money(r.tran)}</td><td>${o(r.stt, 'g', r.g, 70)}</td><td>${o(r.stt, 'd', r.d, 70)}</td>
+          <td class="r num" data-kp-tl="${r.stt}">${this.pct(r.tl)}</td><td class="r num" data-kp-tien="${r.stt}">${money(r.tien)}</td>
+          <td>${o(r.stt, 'm', r.m, 150)}</td></tr>`).join('')}</tbody></table></div>
+      <div class="form-grid" style="margin-top:8px">
+        <div class="f"><label>Người đánh giá</label><input name="kp_nguoiCham" value="${h((p && p.kpiNguoiCham) || '')}" ${dis} placeholder="bác sĩ phụ trách"></div>
+        <div class="f"><label><input type="checkbox" name="kp_kyLuat" ${p && p.kyLuat ? 'checked' : ''} ${dis}> Bị kỷ luật từ khiển trách trở lên trong tháng (không thưởng)</label></div></div>
+      <div class="sub-line">Hoàn thành ≥95% nhận 100% trần · 90–dưới 95% nhận 80% · 80–dưới 90% nhận 50% · dưới 80% không thưởng.
+        Tiêu chí không giao việc thì để trống. Bấm "Lưu tạm" để ghi.
+        <button type="button" class="link-btn" onclick="Luong.inKPI('${stId}')">In phiếu KPI</button></div></details>`;
+  },
+  /* Cập nhật tỷ lệ, tiền ngay khi gõ (chưa lưu) */
+  kpiXem(f){
+    const kpi = {};
+    this.KPI_PT.forEach((t, i) => { const n = i + 1; kpi[n] = {g: f['kp_' + n + '_g'].value, d: f['kp_' + n + '_d'].value}; });
+    const kp = this.kpiTinh(kpi);
+    kp.rows.forEach(r => {
+      const a = f.querySelector(`[data-kp-tl="${r.stt}"]`), b = f.querySelector(`[data-kp-tien="${r.stt}"]`);
+      if (a) a.textContent = this.pct(r.tl); if (b) b.textContent = money(r.tien);
+    });
+    const t = document.getElementById('kpiTong'); if (t) t.textContent = money(kp.tong);
+  },
+  inKPI(stId){
+    const M = this.M(), st = staffById(stId); if (!st) return;
+    const p = this.phieu(stId, M) || {}, kp = this.kpiTinh(p.kpi);
+    const nhomDs = [...new Set(this.KPI_PT.map(t => t.nhom))];
+    const html = `<div style="font-size:11px">${this.dau('PHIẾU ĐÁNH GIÁ THƯỞNG HIỆU QUẢ CÔNG VIỆC THÁNG ' + this.nhanThang(M))}
+      <p style="text-align:center;margin:0 0 8px">Chức danh: Phụ tá bác sĩ, điều dưỡng nha khoa · Họ tên: <b>${h(st.name)}</b> ·
+        Người đánh giá: ${h(p.kpiNguoiCham || '……………………')}<br><i>Căn cứ Điều 18 Quy chế lương, thưởng ${h(DanhGia.qc() || '')}</i></p>
+      <table style="width:100%;border-collapse:collapse" border="1" cellpadding="3">
+        <tr><th>TT</th><th>Nhóm</th><th>Tiêu chí</th><th>Lượt giao</th><th>Lượt đạt</th><th>Hoàn thành</th><th>Tỷ lệ nhận</th><th>Trần</th><th>Thưởng</th><th>Minh chứng</th></tr>
+        ${kp.rows.map(r => `<tr><td>${r.stt}</td><td>${h(r.nhom)}</td><td>${h(r.ten)}</td><td style="text-align:right">${h(r.g)}</td><td style="text-align:right">${h(r.d)}</td>
+          <td style="text-align:right">${this.pct(r.tl)}</td><td style="text-align:right">${r.nhan == null ? 'chưa xét' : r.nhan * 100 + '%'}</td>
+          <td style="text-align:right">${money(r.tran)}</td><td style="text-align:right">${money(r.tien)}</td><td>${h(r.m || r.mc)}</td></tr>`).join('')}
+        <tr><td colspan="7"><b>Tổng${p.kyLuat ? ' (bị kỷ luật trong tháng: không thưởng)' : ''}</b></td><td style="text-align:right"><b>${money(kp.tran)}</b></td>
+          <td style="text-align:right"><b>${money(p.kyLuat ? 0 : kp.tong)}</b></td><td></td></tr></table>
+      <table style="width:60%;border-collapse:collapse;margin-top:8px" border="1" cellpadding="3">
+        <tr><th>Nhóm công việc</th><th>Trần</th><th>Đạt</th></tr>
+        ${nhomDs.map(n => { const rs = kp.rows.filter(r => r.nhom === n);
+          return `<tr><td>${h(n)}</td><td style="text-align:right">${money(rs.reduce((s, r) => s + r.tran, 0))}</td><td style="text-align:right">${money(rs.reduce((s, r) => s + r.tien, 0))}</td></tr>`; }).join('')}</table>
+      <p style="font-size:10px"><i>Hoàn thành từ 95% nhận 100% trần tiêu chí; 90% đến dưới 95% nhận 80%; 80% đến dưới 90% nhận 50%; dưới 80% không thưởng.
+        Tiêu chí không phát sinh hoặc không được giao trong tháng thì không xét và không tính thưởng. Minh chứng ghi mã ca, mã phiếu, không ghi tên người bệnh.
+        Người lao động được đề nghị xem xét lại trong 03 ngày làm việc kể từ ngày nhận phiếu.</i></p>
+      ${this.kyTen('Người đánh giá', 'Giám đốc duyệt').replace('<b>Người lập</b>', '<b>Người lao động</b>')}</div>`;
+    App.print(html, 'A4N', 'Phiếu KPI ' + st.name + ' ' + this.nhanThang(M));
   },
   moChot(stId){
     if (!this.quanLy()) return;
@@ -643,6 +748,12 @@ const Luong = {
         <tbody>${caRows || '<tr><td colspan="4" class="sub-line">Không có trợ thủ.</td></tr>'}</tbody></table></div>
       ${khongPhu.length ? `<div class="note-block" style="margin:10px;border-color:var(--warn)"><b>${khongPhu.length} ca chưa ghi người phụ</b> — vào hồ sơ khách sửa diễn biến để tính thưởng:
         ${khongPhu.map(x => `${fmtD(x.v.date)} ${h(x.c.name)}`).join(' · ')}</div>` : ''}</div>
+    ${this.quyCheMoi(M) ? `<div class="card mb"><div class="card-h"><h2>KPI phụ tá — thưởng hiệu quả (mục 18.5)</h2><span class="hint">chấm trong phiếu lương từng người</span></div>
+      <div class="tbl-wrap"><table><thead><tr><th>Phụ tá</th><th class="r">Tiêu chí đã chấm</th><th class="r">Thưởng KPI</th><th>Người đánh giá</th><th></th></tr></thead>
+        <tbody>${phuTa.filter(s => this.nhomCua(s) === 'trothu').map(s => { const p = this.phieu(s.id, M) || {}, kp = this.kpiTinh(p.kpi);
+          return `<tr><td><b>${h(s.name)}</b></td><td class="r num">${kp.du}/12</td><td class="r num">${money(p.kyLuat ? 0 : kp.tong)}${p.kyLuat ? ' <span class="pill warn">kỷ luật</span>' : ''}</td>
+            <td>${h(p.kpiNguoiCham || '—')}</td><td><button class="btn small" onclick="Luong.inKPI('${s.id}')">${IC.print}</button></td></tr>`; }).join('')
+          || '<tr><td colspan="5" class="sub-line">Không có phụ tá trọn thời gian.</td></tr>'}</tbody></table></div></div>` : ''}
     <div class="card mb"><div class="card-h"><h2>Bác sĩ — doanh thu và ca kỹ thuật cao (Điều 19.4)</h2></div>
       <div class="tbl-wrap"><table><thead><tr><th>Bác sĩ</th><th class="r">Thực thu</th><th class="r">Tiền lab</th><th class="r">Doanh thu thuần</th><th class="r">Buổi implant</th><th class="r">Tháo mắc cài</th></tr></thead>
         <tbody>${bsRows || '<tr><td colspan="6" class="sub-line">Không có bác sĩ.</td></tr>'}</tbody></table></div></div>
