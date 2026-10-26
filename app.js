@@ -487,6 +487,16 @@ function migrate() {
   if (!db.ghiNhan) db.ghiNhan = [];
   if (!db.danhGia) db.danhGia = [];
   if (!db.bangLuong) db.bangLuong = [];
+  /* Trước khi có vai trò Media, Kế toán, người làm hai việc này bị xếp vào Lễ tân —
+     chuyển một lần theo chức danh; ai quản lý đã cố ý đặt khác thì để nguyên */
+  if (!db.clinic) db.clinic = {};
+  if (!db.clinic.vaiMoi1) {
+    (db.staff || []).forEach(s => {
+      const g = guessRole(s.role);
+      if (s.perm === 'letan' && (g === 'media' || g === 'ketoan')) { s.perm = g; s._up = Date.now(); }
+    });
+    db.clinic.vaiMoi1 = true;
+  }
   /* Bảng giá gia công lab: lần đầu nạp bảng mặc định, sau đó để quản lý tự sửa */
   if (!db.giaLab) db.giaLab = GiaLab.MAC_DINH.map(x => Object.assign({id: uid()}, x));
   QT.MAU.forEach(m => {
@@ -932,16 +942,23 @@ const ROLE_MAC_DINH = {
   bacsi:  ['xem','suahoso','ky','mokhoa','thu','ketxuat','giaoviec'],
   trothu: ['xem'],
   letan:  ['xem','thu'],
+  /* Media xem được hồ sơ để làm nội dung trước – sau, nhưng không thu tiền */
+  media:  ['xem'],
+  /* Kế toán thu tiền, xem và in bảng lương; không lập hay sửa bệnh án */
+  ketoan: ['xem','thu','luong'],
 };
 const ROLES = {
   quanly: {label:'Quản lý'}, bacsi: {label:'Bác sĩ'},
   trothu: {label:'Trợ thủ'}, letan: {label:'Lễ tân'},
+  media: {label:'Media'}, ketoan: {label:'Kế toán'},
 };
 const ROLE_TABS = {
   quanly: ['dashboard','customers','calendar','treatment','benhan','work','inventory','hr','lab','reports','settings'],
   bacsi:  ['dashboard','customers','calendar','treatment','benhan','work','inventory','hr','lab'],
   trothu: ['dashboard','customers','calendar','treatment','benhan','work','inventory','hr','lab'],
   letan:  ['dashboard','customers','calendar','treatment','benhan','work','inventory','hr','lab'],
+  media:  ['dashboard','customers','calendar','benhan','work','hr'],
+  ketoan: ['dashboard','customers','calendar','treatment','work','inventory','hr','lab','reports'],
 };
 /* Đoán vai trò từ chức danh cũ nếu chưa đặt rõ */
 const guessRole = txt => {
@@ -950,6 +967,8 @@ const guessRole = txt => {
   if (/bac si|bs/.test(t)) return 'bacsi';
   if (/phu ta|tro thu|dieu duong/.test(t)) return 'trothu';
   if (/le tan|tiep tan|thu ngan/.test(t)) return 'letan';
+  if (/media|marketing/.test(t)) return 'media';
+  if (/ke toan/.test(t)) return 'ketoan';
   return 'letan';
 };
 const Perm = {
@@ -1153,7 +1172,7 @@ SCREENS.dashboard = () => {
   </div>
   <div class="grid-2">
     <div class="col">
-      <div class="card"><div class="card-h"><h2>Doanh thu 7 ngày gần nhất</h2></div><div class="card-b"><div class="chart">${bars}</div></div></div>
+      ${Perm.can('thu') || Perm.can('luong') ? `<div class="card"><div class="card-h"><h2>Doanh thu 7 ngày gần nhất</h2></div><div class="card-b"><div class="chart">${bars}</div></div></div>` : ''}
       ${Perm.can('luong') ? `<div class="card"><div class="card-h"><h2>Doanh thu theo nhóm dịch vụ</h2><span class="hint">tháng ${monthOf(T).slice(5)}/${monthOf(T).slice(0,4)}</span></div><div class="card-b hbars">${groupBars || '<span class="sub-line">Chưa có phiếu thu tháng này.</span>'}</div></div>` : ''}
     </div>
     <div class="col">
@@ -8324,8 +8343,8 @@ SCREENS.hr = () => {
   const M = monthOf(todayISO());
   /* Không phải quản lý thì chỉ thấy Chấm công — không xem được lương, hoa hồng của người khác */
   const HRTABS = Perm.can('luong')
-    ? [['payroll','Bảng lương'],['tonghop','Tổng hợp tháng'],['attendance','Chấm công'],['congviec','Phân công việc'],['commission','Hoa hồng'],['kpi','KPI · Thưởng · Phạt'],['danhgia','Đánh giá tháng']]
-    : [['attendance','Chấm công'],['congviec','Phân công việc']];
+    ? [['payroll','Bảng lương'],['tonghop','Tổng hợp tháng'],['attendance','Chấm công'],['congviec','Phân công việc'],['commission','Hoa hồng'],['kpi','KPI · Thưởng · Phạt'],['danhgia','Đánh giá tháng'],['cuatoi','Phiếu lương của tôi']]
+    : [['attendance','Chấm công'],['congviec','Phân công việc'],['cuatoi','Phiếu lương của tôi']];
   if (!HRTABS.some(t => t[0] === App.state.hrTab)) App.state.hrTab = HRTABS[0][0];
   const tab = App.state.hrTab;
 
@@ -8427,6 +8446,7 @@ SCREENS.hr = () => {
 
   if (tab === 'danhgia') body = DanhGia.tab();
   if (tab === 'tonghop') body = Luong.tongHop();
+  if (tab === 'cuatoi') body = Luong.cuaToi();
 
   return `
   <div class="page-head"><h1>Nhân sự</h1><span class="spacer"></span></div>

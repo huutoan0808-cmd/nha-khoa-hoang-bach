@@ -398,7 +398,7 @@ const Luong = {
     <div class="page-head" style="margin-bottom:12px">${this.chonThang()}
       <span class="spacer"></span>
       ${Perm.only('caidat', `<button class="btn" onclick="Att.accountsPanel()">Tài khoản truy cập</button>`)}
-      <button class="btn" onclick="HR.staffForm()">${IC.plus} Thêm nhân viên</button>
+      ${Perm.only('caidat', `<button class="btn" onclick="HR.staffForm()">${IC.plus} Thêm nhân viên</button>`)}
       <button class="btn primary" onclick="Luong.inBang()">${IC.print} In bảng lương</button></div>
     <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
       <div class="card kpi"><div class="k-label">Tổng thực lĩnh</div><div class="k-value num">${money(tong)}</div><div class="k-note">${ds.length} người · ${rows.filter(r => r.k.daChot).length} phiếu đã chốt</div></div>
@@ -657,6 +657,34 @@ const Luong = {
       r => { r.loai = r.loai || {}; if (dang) delete r.loai[cid]; else r.loai[cid] = ly; });
   },
 
+  /* ---------- Phiếu lương của tôi ----------
+     Mọi nhân viên tự xem phiếu lương của chính mình (mục 6.3 quy chế: người lao động
+     được nhận bảng kê chi tiết). Chỉ hiện phiếu ĐÃ CHỐT — số tạm tính còn đổi, cho xem
+     dễ sinh thắc mắc. Không bao giờ hiện phiếu của người khác. */
+  cuaToi(){
+    const me = Perm.me();
+    if (!me) return `<div class="note-block">Tài khoản đang đăng nhập chưa gắn với nhân viên nào — nhờ quản lý điền email của bạn vào hồ sơ nhân viên.</div>`;
+    const ds = (db.bangLuong || []).filter(r => r.staffId === me.id && r.chot && r.snap)
+      .sort((a, b) => a.thang < b.thang ? 1 : -1);
+    if (!ds.length) return `<div class="note-block">Chưa có phiếu lương nào được chốt cho <b>${h(me.name)}</b>. Phiếu hiện ở đây sau khi quản lý chốt lương tháng.</div>`;
+    const M = ds.some(r => r.thang === this._xemCuaToi) ? this._xemCuaToi : ds[0].thang;
+    const phieu = this.htmlPhieu(me, M, true);
+    return `
+    <div class="page-head" style="margin-bottom:12px">
+      <label class="sub-line" style="display:flex;align-items:center;gap:8px">Tháng
+        <select onchange="Luong._xemCuaToi=this.value;App.render()">${ds.map(r => `<option value="${r.thang}"${r.thang === M ? ' selected' : ''}>${this.nhanThang(r.thang)}</option>`).join('')}</select></label>
+      <span class="spacer"></span>
+      <button class="btn primary" onclick="Luong.inCuaToi('${M}')">${IC.print} In phiếu</button></div>
+    <div class="card"><div class="card-b" style="overflow-x:auto">${phieu}</div></div>
+    <div class="note-block" style="margin-top:12px">Có khoản nào chưa đúng thì báo quản lý trong <b>07 ngày làm việc</b> kể từ ngày nhận phiếu.</div>`;
+  },
+  _xemCuaToi: null,
+  inCuaToi(M){
+    const me = Perm.me(), p = me && this.phieu(me.id, M);
+    if (!p || !p.chot) return;
+    App.print(this.htmlPhieu(me, M), 'A4', 'Phiếu lương ' + me.name + ' ' + this.nhanThang(M));
+  },
+
   /* ---------- In ---------- */
   dau(tieuDe){
     const cl = db.clinic || {};
@@ -669,7 +697,7 @@ const Luong = {
       <td style="border:0;width:33%"><b>${trai}</b><br><i>(Ký, ghi rõ họ tên)</i></td>
       <td style="border:0"><i>${DanhGia.noiKy()}, ngày …… tháng …… năm ……</i><br><b>${phai}</b><br><i>(Ký, ghi rõ họ tên)</i></td></tr></table><div style="height:60px"></div>`;
   },
-  htmlPhieu(st, M){
+  htmlPhieu(st, M, manHinh){
     const k = this.tinh(st, M); let nhomTr = '';
     const dong = this.KHOAN.filter(K => k.v[K.k] || k.sua[K.k]).map(K => {
       const t = K.nhom !== nhomTr ? (nhomTr = K.nhom, `<tr><td colspan="3" style="background:#eee"><b>${h(K.nhom)}</b></td></tr>`) : '';
@@ -678,7 +706,7 @@ const Luong = {
         <td style="font-size:10.5px">${(k.cc[K.k] || []).join('<br>')}${s ? `<br><i>Điều chỉnh: ${h(s.lyDo)} (tự tính ${money(k.d[K.k])})</i>` : ''}</td>
         <td style="text-align:right;white-space:nowrap">${K.loai === 'tru' ? '−' : ''}${money(k.v[K.k])}</td></tr>`;
     }).join('');
-    return `<div style="page-break-after:always;font-size:12px">${this.dau('PHIẾU LƯƠNG THÁNG ' + this.nhanThang(M))}
+    return `<div style="${manHinh ? '' : 'page-break-after:always;'}font-size:12px">${this.dau('PHIẾU LƯƠNG THÁNG ' + this.nhanThang(M))}
       <p style="text-align:center;margin:0 0 10px">Họ tên: <b>${h(st.name)}</b> · Chức danh: ${h(st.role || this.NHOM[k.nhom].ten)} ·
         Công thực tế: ${k.cg.cong} · Ngày có mặt: ${k.cg.ngay}${k.daChot ? '' : ' · <i>(tạm tính)</i>'}</p>
       <table style="width:100%;border-collapse:collapse" border="1" cellpadding="4">
@@ -690,7 +718,7 @@ const Luong = {
       <p style="font-size:10.5px"><i>Chỉ lương chức danh là căn cứ đóng BHXH. Các khoản hỗ trợ và tiền thưởng chi trả theo Quy chế lương, thưởng
         ${h(DanhGia.qc() || '')}, thay đổi theo số ngày làm việc thực tế và kết quả công việc của từng tháng. Người lao động có quyền đối chiếu
         trong 07 ngày làm việc kể từ ngày nhận phiếu.</i></p>
-      ${this.kyTen('Người lao động', 'Giám đốc')}</div>`;
+      ${manHinh ? '' : this.kyTen('Người lao động', 'Giám đốc')}</div>`;
   },
   inPhieu(stId){
     const st = staffById(stId); if (!st) return;
