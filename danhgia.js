@@ -72,7 +72,9 @@ const DanhGia = {
   /* Số quyết định ban hành quy chế lương, thưởng — mỗi công ty một số */
   qc(){
     const cl = db.clinic || {};
-    return cl.qcLuongThuong || (/Thời Đại/i.test((cl.legal || '') + (cl.name || '')) ? '08/2026/QĐ-HB-TĐ' : '');
+    const ten = (cl.legal || '') + (cl.name || '');
+    return cl.qcLuongThuong || (/Thời Đại/i.test(ten) ? '08/2026/QĐ-HB-TĐ'
+      : /Gò Quao/i.test(ten) ? '05/2026/QĐ-HB-GQ, sửa đổi theo QĐ 10/2026/QĐ-HB-GQ' : '');
   },
   doiQC(v){ db.clinic.qcLuongThuong = String(v || '').trim(); save(); App.render(); },
   /* Địa danh ghi ở dòng ngày tháng: theo địa chỉ cơ sở, chưa có địa chỉ thì theo tên */
