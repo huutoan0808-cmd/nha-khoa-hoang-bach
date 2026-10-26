@@ -8343,7 +8343,7 @@ SCREENS.hr = () => {
   const M = monthOf(todayISO());
   /* Không phải quản lý thì chỉ thấy Chấm công — không xem được lương, hoa hồng của người khác */
   const HRTABS = Perm.can('luong')
-    ? [['payroll','Bảng lương'],['tonghop','Tổng hợp tháng'],['attendance','Chấm công'],['congviec','Phân công việc'],['commission','Hoa hồng'],['kpi','KPI · Thưởng · Phạt'],['danhgia','Đánh giá tháng'],['cuatoi','Phiếu lương của tôi']]
+    ? [['payroll','Bảng lương'],['tonghop','Tổng hợp tháng'],['minhchung','Hồ sơ minh chứng'],['attendance','Chấm công'],['congviec','Phân công việc'],['commission','Hoa hồng'],['kpi','KPI · Thưởng · Phạt'],['danhgia','Đánh giá tháng'],['cuatoi','Phiếu lương của tôi']]
     : [['attendance','Chấm công'],['congviec','Phân công việc'],['cuatoi','Phiếu lương của tôi']];
   if (!HRTABS.some(t => t[0] === App.state.hrTab)) App.state.hrTab = HRTABS[0][0];
   const tab = App.state.hrTab;
@@ -8446,6 +8446,7 @@ SCREENS.hr = () => {
 
   if (tab === 'danhgia') body = DanhGia.tab();
   if (tab === 'tonghop') body = Luong.tongHop();
+  if (tab === 'minhchung') body = MinhChung.tab();
   if (tab === 'cuatoi') body = Luong.cuaToi();
 
   return `

@@ -494,10 +494,15 @@ const Luong = {
       `<div class="f"><label>${h(x.ten)}</label>${x.tien ? Tien.o('n_' + key, nhap[key] || '', khoa ? 'disabled' : '')
         : `<input type="number" step="any" name="n_${key}" value="${h(nhap[key] ?? '')}" ${khoa ? 'disabled' : ''}>`}</div>`).join('');
     let nhomTr = '';
+    const mc = MinhChung.thieuTheoKhoan(st, M, k);
     const dong = this.KHOAN.map(K => {
+      const x = mc[K.k];
+      const mcPill = !x ? '' : x.thieu.length
+        ? `<br><span class="pill warn" title="${h(x.thieu.join('; '))}" style="cursor:pointer" onclick="MinhChung.nguoi('${stId}')">Thiếu ${x.thieu.length} minh chứng</span>`
+        : `<br><span class="pill ok">Đủ minh chứng</span>`;
       const s = k.sua[K.k], tieuDe = K.nhom !== nhomTr ? (nhomTr = K.nhom, `<tr><th colspan="5" style="background:var(--bg-2,#f4f4f4)">${h(K.nhom)}</th></tr>`) : '';
       return tieuDe + `<tr>
-        <td><b>${h(K.ten)}</b><br><span class="sub-line">${h(K.cc)}</span></td>
+        <td><b>${h(K.ten)}</b><br><span class="sub-line">${h(K.cc)}</span>${mcPill}</td>
         <td style="font-size:12px">${(k.cc[K.k] || []).map(x => '• ' + x).join('<br>')}
           ${s ? `<br><span class="pill info">Sửa tay: ${h(s.lyDo)} — ${h(s.ai || '')}, ${h(s.luc || '')}</span>` : ''}</td>
         <td class="r num">${K.loai === 'tru' ? '−' : ''}${money(k.d[K.k])}</td>
@@ -510,7 +515,8 @@ const Luong = {
     <form onsubmit="Luong.luu(event,'${stId}',false)">
       <div class="note-block mb">${h(this.NHOM[k.nhom].ten)} · ${k.cg.cong} công thực tế, ${k.cg.ngay} ngày có mặt ·
         ${k.daChot ? '<b>Đã chốt</b> ngày ' + fmtD(k.p.ngayChot) : 'Tạm tính'}
-        ${ql ? ` · <button type="button" class="link-btn" onclick="Luong.caiDat('${stId}')">Cài đặt lương của người này</button>` : ''}</div>
+        ${ql ? ` · <button type="button" class="link-btn" onclick="Luong.caiDat('${stId}')">Cài đặt lương của người này</button>` : ''}
+        · <button type="button" class="link-btn" onclick="MinhChung.nguoi('${stId}')">Hồ sơ minh chứng</button></div>
       ${oNhap ? `<div class="form-grid mb">${oNhap}</div>` : ''}
       ${k.nhom === 'trothu' && this.quyCheMoi(M) ? this.kpiForm(k.p, khoa, stId) : ''}
       <div class="tbl-wrap"><table style="min-width:860px">
@@ -537,6 +543,10 @@ const Luong = {
     const M = this.M(), st = staffById(stId);
     const f = ev.target.closest('form') || document.querySelector('#modalBody form');
     if ((this.phieu(stId, M) || {}).chot) { App.toast('Phiếu đã chốt — mở chốt trước khi sửa'); return; }
+    if (chot) {
+      const thieu = MinhChung.cua(st, M).filter(x => !x.ok);
+      if (thieu.length && !confirm(`Còn thiếu ${thieu.length} minh chứng:\n- ${thieu.map(x => x.m.ten).join('\n- ')}\n\nVẫn chốt phiếu lương?`)) return;
+    }
     /* Soát lý do trước khi ghi bất cứ thứ gì, để không lưu dở dang */
     for (const K of this.KHOAN) {
       const o = f.querySelector('[name="s_' + K.k + '"]'), l = f.querySelector('[name="l_' + K.k + '"]');
