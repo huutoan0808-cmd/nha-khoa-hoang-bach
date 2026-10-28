@@ -3629,50 +3629,13 @@ const Treat = {
       <div><b>Người thu tiền</b><br>(Ký, ghi rõ họ tên)<br><br><br>${h(thu?thu.name:'')}</div>
     </div>`, 'A5');
   },
-  rxForm(){
-    const c = custById(App.state.treatCust);
-    const row = i => `<div class="form-grid full" style="grid-template-columns:2fr 1fr 2fr;gap:6px">
-      <div class="f">${Combo.html('cbDrug'+i,'drug'+i,'',DRUGS,'Gõ tên thuốc '+(i+1))}</div>
-      <div class="f"><input name="qty${i}" placeholder="SL (10 viên)"></div>
-      <div class="f"><input name="use${i}" placeholder="Cách dùng"></div></div>`;
-    App.modal('Kê đơn thuốc — ' + c.name, `
-    <form onsubmit="Treat.rxSave(event)">
-      ${c.allergy?`<div class="note-block mb" style="background:var(--danger-soft);color:var(--danger)">⚠ Khách có ghi chú dị ứng: <b>${h(c.allergy)}</b></div>`:''}
-      ${[0,1,2,3,4].map(row).join('')}
-      <div class="form-actions"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu đơn thuốc</button></div>
-    </form>`);
-  },
-  rxSave(ev){
-    ev.preventDefault();
-    const d = Object.fromEntries(new FormData(ev.target).entries());
-    const items = [];
-    for (let i=0;i<5;i++) if (d['drug'+i]) items.push({drug:d['drug'+i], qty:d['qty'+i]||'', use:d['use'+i]||''});
-    if (!items.length) { App.toast('Đơn chưa có thuốc nào'); return; }
-    db.rx.push({id:uid(), customerId:App.state.treatCust, date:todayISO(), doctorId:'st1', status:'draft', code:'', items});
-    save(); App.closeModal(); App.render(); App.toast('Đã lưu đơn thuốc ✓');
-  },
-  rxSend(id){
-    const r = db.rx.find(x=>x.id===id);
-    r.status = 'sent';
-    const c = custById(r.customerId);
-    r.code = '79-' + (c.code||'').replace(/^[A-Za-zÀ-ỹ]+-/, '') + '-' + r.date.replace(/-/g,'').slice(2) + '-' + Math.floor(1000+Math.random()*9000);
-    save(); App.render(); App.toast('Đã gửi lên Đơn thuốc quốc gia ✓ (mô phỏng — bản thật cần mã liên thông)');
-  },
-  printRx(id){
-    const r = db.rx.find(x=>x.id===id); const c = custById(r.customerId); const doc = staffById(r.doctorId);
-    App.print(`
-    <div class="p-head"><div><b>${h(db.clinic.name)}</b><br>${h(db.clinic.addr)}</div><div>${r.code?('Mã đơn QG: <b>'+h(r.code)+'</b><br>'):''}Ngày: ${fmtD(r.date)}</div></div>
-    <h1>ĐƠN THUỐC</h1>
-    <table class="no-border">
-      <tr><td>Họ tên:</td><td><b>${h(c.name)}</b> — ${fmtD(c.dob)} (${h(c.gender||'')})</td></tr>
-      <tr><td>Địa chỉ:</td><td>${h(fullAddr(c))}</td></tr>
-      <tr><td>Chẩn đoán:</td><td>${h(icdName((c.record||{}).chanDoan))||'—'}</td></tr>
-      ${c.allergy?`<tr><td>Dị ứng:</td><td><b>${h(c.allergy)}</b></td></tr>`:''}
-    </table>
-    <table><tr><th style="width:24px">#</th><th>Thuốc</th><th>Số lượng</th><th>Cách dùng</th></tr>
-    ${r.items.map((it,i)=>`<tr><td>${i+1}</td><td><b>${h(it.drug)}</b></td><td>${h(it.qty)}</td><td>${h(it.use)}</td></tr>`).join('')}</table>
-    <div class="sign"><div></div><div>Ngày ${fmtD(r.date)}<br><b>Bác sỹ kê đơn</b><br>${h(doc?doc.name:'')}<br><br></div></div>`);
-  },
+  /* ---------- Kê đơn thuốc điện tử ----------
+     Toàn bộ phần chuẩn 808/QĐ-BYT nằm ở donthuoc.js. Giữ đúng bốn tên cũ làm lối vào
+     để các chỗ gọi trong màn điều trị không phải sửa theo. */
+  rxForm(){ DT.form(); },
+  rxSave(ev){ DT.save(ev); },
+  rxSend(id){ DT.gui(id); },
+  printRx(id){ DT.inDon(id); },
 };
 
 SCREENS.treatment = () => {
@@ -3716,15 +3679,26 @@ SCREENS.treatment = () => {
       : `<button class="btn small" onclick="Treat.invoice('${r.id}')">Phát hành HĐĐT</button>`}</td>
     <td><button class="btn small" onclick="Treat.printReceipt('${r.id}')">${IC.print} In</button></td></tr>`).join('') || '<tr><td colspan="5" class="sub-line">Chưa có phiếu thu.</td></tr>';
 
-  const rxBlocks = rxs.map(r => `
+  /* Đơn cũ (bản mô phỏng trước đây) ghi thuốc là drug/qty/use, đơn mới theo chuẩn 808
+     ghi ten/sl/cachDung. Đọc cả hai để đơn cũ không hiện trống trơn. */
+  const rxBlocks = rxs.map(r => {
+    const thieu = (typeof DT !== 'undefined') ? DT.thieu(r).length : 0;
+    return `
     <div class="rx mb"><div class="rx-head">
-      <div><b>Đơn ngày ${fmtD(r.date)}</b> · ${h((staffById(r.doctorId)||{}).name||'')}</div>
+      <div><b>Đơn ngày ${fmtD(r.date)}</b> · ${h((staffById(r.doctorId)||{}).name||'')}${
+        r.loai && r.loai !== 'c' ? ' · <span class="pill warn">' + h((DT.LOAI||{})[r.loai]||'') + '</span>' : ''}
+        ${r.code ? '<br><span class="rx-code num">' + h(r.code) + '</span>' : ''}</div>
       <span>${r.status==='sent'
-        ? `<span class="pill ok">Đã liên thông</span> <span class="rx-code num">Mã đơn: ${h(r.code)}</span>`
-        : `<button class="btn small primary" onclick="Treat.rxSend('${r.id}')">Gửi đơn quốc gia</button>`}
+        ? `<span class="pill ok">Đã liên thông</span>`
+        : `<button class="btn small ${thieu?'':'primary'}" onclick="Treat.rxSend('${r.id}')">${
+            thieu ? 'Còn thiếu ' + thieu + ' chỗ' : 'Soát & gửi đơn quốc gia'}</button>`}
         <button class="btn small" onclick="Treat.printRx('${r.id}')">${IC.print} In</button></span></div>
-      <div class="tbl-wrap"><table style="min-width:460px"><thead><tr><th>Thuốc</th><th>SL</th><th>Cách dùng</th></tr></thead>
-      <tbody>${r.items.map(it=>`<tr><td><b>${h(it.drug)}</b></td><td class="num">${h(it.qty)}</td><td>${h(it.use)}</td></tr>`).join('')}</tbody></table></div></div>`).join('') || '<span class="sub-line">Chưa có đơn thuốc.</span>';
+      <div class="tbl-wrap"><table style="min-width:520px"><thead><tr><th>Thuốc</th><th>SL</th><th>Cách dùng</th></tr></thead>
+      <tbody>${(r.items||[]).map(it=>`<tr>
+        <td><b>${h(it.ten||it.drug||'')}</b>${it.hoatChat?'<br><span class="sub-line">'+h(it.hoatChat)+'</span>':''}</td>
+        <td class="num">${h(String(it.sl||it.qty||''))} ${h(it.dv||'')}</td>
+        <td>${h(it.cachDung||it.use||'')}</td></tr>`).join('')}</tbody></table></div></div>`;
+  }).join('') || '<span class="sub-line">Chưa có đơn thuốc.</span>';
 
   const trang = Treat.trang || 'kham';
   const soHM = items.length, soXong = items.filter(t => t.status === 'Hoàn tất').length;
@@ -8686,6 +8660,17 @@ SCREENS.settings = () => {
     <div class="card-b">
       ${the('Liên kết đặt hẹn cho khách', 'Khách tự chọn khung giờ còn trống · lịch đặt chạy thẳng vào Lịch hẹn chờ duyệt',
         `<button class="btn small primary" onclick="DatHen.moLienKet()">Lấy liên kết &amp; mã QR</button>`)}
+    </div></div>
+
+  <div class="card mb"><div class="card-h"><h2>Liên thông đơn thuốc quốc gia</h2>
+    <span class="hint">chuẩn 808/QĐ-BYT</span></div>
+    <div class="card-b">
+      ${the('Mã liên thông cơ sở và hình thức điều trị', h(DT.moTa()),
+        `<button class="btn small primary" onclick="DT.hopCaiDat()"${khoa}>Khai mã</button>`)}
+      ${the('Mã thuốc của Cục Quản lý Dược',
+        DT.soThieuMa() ? `Còn <b>${DT.soThieuMa()}</b> thuốc chưa có mã — đơn có thuốc đó sẽ không gửi được`
+                       : 'Đã khai đủ mã cho cả danh mục',
+        `<button class="btn small" onclick="DT.hopMaThuoc()"${khoa}>Mở bảng mã thuốc</button>`)}
     </div></div>
 
   <div class="card"><div class="card-h"><h2>Dữ liệu</h2></div>
