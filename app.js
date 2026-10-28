@@ -8662,6 +8662,7 @@ SCREENS.settings = () => {
         `<button class="btn small primary" onclick="DatHen.moLienKet()">Lấy liên kết &amp; mã QR</button>`)}
     </div></div>
 
+  ${typeof DT === 'undefined' ? '' : `
   <div class="card mb"><div class="card-h"><h2>Liên thông đơn thuốc quốc gia</h2>
     <span class="hint">chuẩn 808/QĐ-BYT</span></div>
     <div class="card-b">
@@ -8671,7 +8672,7 @@ SCREENS.settings = () => {
         DT.soThieuMa() ? `Còn <b>${DT.soThieuMa()}</b> thuốc chưa có mã — đơn có thuốc đó sẽ không gửi được`
                        : 'Đã khai đủ mã cho cả danh mục',
         `<button class="btn small" onclick="DT.hopMaThuoc()"${khoa}>Mở bảng mã thuốc</button>`)}
-    </div></div>
+    </div></div>`}
 
   <div class="card"><div class="card-h"><h2>Dữ liệu</h2></div>
     <div class="card-b">
