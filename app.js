@@ -353,6 +353,16 @@ function migrate() {
     cl.caChieuRa  = '17:00';
   }
   if (cl.treCho == null) cl.treCho = 5;
+  /* Mã liên thông đơn thuốc quốc gia của hai chi nhánh, đã được Sở Y tế phê duyệt.
+     Nạp sẵn một lần cho khỏi gõ tay; sửa được trong Cài đặt → Liên thông đơn thuốc.
+     Đánh dấu để lần sau không đè lên những gì quản lý đã sửa. */
+  if (!cl.dtCoSo) {
+    cl.dt = Object.assign({}, cl.dt, {coSo: [
+      {ma: '91AQL', ten: 'Thời Đại — Rạch Giá'},
+      {ma: '91AQM', ten: 'Gò Quao'},
+    ]});
+    cl.dtCoSo = 1;
+  }
   /* Đổi tên và địa chỉ phòng khám một lần cho các máy đã cài. Đánh dấu để lần sau
      không đè lên nữa — quản lý vẫn sửa lại được trong Cài đặt. */
   if (!cl.tenTD) {
@@ -8666,7 +8676,7 @@ SCREENS.settings = () => {
   <div class="card mb"><div class="card-h"><h2>Liên thông đơn thuốc quốc gia</h2>
     <span class="hint">chuẩn 808/QĐ-BYT</span></div>
     <div class="card-b">
-      ${the('Mã liên thông cơ sở và hình thức điều trị', h(DT.moTa()),
+      ${the('Chi nhánh và mã liên thông cơ sở', DT.moTa(),
         `<button class="btn small primary" onclick="DT.hopCaiDat()"${khoa}>Khai mã</button>`)}
       ${the('Mã thuốc của Cục Quản lý Dược',
         DT.soThieuMa() ? `Còn <b>${DT.soThieuMa()}</b> thuốc chưa có mã — đơn có thuốc đó sẽ không gửi được`

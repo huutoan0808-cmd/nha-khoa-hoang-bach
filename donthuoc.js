@@ -62,7 +62,32 @@ const DT = {
      Còn MẬT KHẨU cơ sở thì thêm/xóa được bác sĩ khỏi phòng khám trên hệ thống quốc
      gia, nên không để trong app; nó nằm bên Apps Script. */
   cfg(){ return (db.clinic && db.clinic.dt) || {}; },
-  maCoSo(){ return String(this.cfg().maCoSo || '').trim(); },
+
+  /* Hai chi nhánh là hai cơ sở được cấp phép riêng nên có hai mã riêng:
+     Thời Đại (Rạch Giá) 91AQL · Gò Quao 91AQM. Mã sai là mã đơn thuốc mang tên cơ sở
+     khác, tra cứu ra nhầm chỗ.
+     Danh sách chi nhánh thì chung cho cả phòng khám nên nằm trong db (đồng bộ được),
+     NHƯNG "máy này đang ở chi nhánh nào" thì KHÔNG đồng bộ — nó là tính chất của cái
+     máy, không phải của dữ liệu. Để trong db thì máy Gò Quao đổi một cái là máy Rạch
+     Giá đổi theo, rồi kê đơn ra mã của chi nhánh kia mà không ai biết. */
+  KHOA_MAY: 'nkhb_coso',
+  coSoDS(){
+    const ds = (this.cfg().coSo || []).filter(x => x && x.ma);
+    if (ds.length) return ds;
+    /* Bản cũ chỉ có một ô mã — nhận làm chi nhánh đầu tiên để không mất */
+    const cu = String(this.cfg().maCoSo || '').trim();
+    return cu ? [{ma: cu, ten: db.clinic.name || 'Cơ sở chính'}] : [];
+  },
+  coSoMay(){
+    const ds = this.coSoDS();
+    if (!ds.length) return null;
+    let ma = '';
+    try { ma = localStorage.getItem(this.KHOA_MAY) || ''; } catch(e){}
+    return ds.find(x => x.ma === ma) || ds[0];
+  },
+  datCoSoMay(ma){ try { localStorage.setItem(this.KHOA_MAY, ma || ''); } catch(e){} },
+  maCoSo(){ const c = this.coSoMay(); return c ? String(c.ma).trim() : ''; },
+  tenCoSo(){ const c = this.coSoMay(); return c ? (c.ten || c.ma) : ''; },
 
   /* ---------------- Định dạng ---------------- */
   /* ngay_sinh_benh_nhan — d/m/Y */
@@ -182,7 +207,11 @@ const DT = {
   thieu(rx){
     const c = custById(rx.customerId) || {};
     const l = [];
-    if (this.maCoSo().length !== 5) l.push('Chưa khai mã liên thông cơ sở (5 ký tự) trong Cài đặt → Liên thông đơn thuốc');
+    if (this.maCoSo().length !== 5) l.push('Máy này chưa chọn chi nhánh — vào Cài đặt → Liên thông đơn thuốc');
+    /* Đơn kê ở chi nhánh này mà mang mã chi nhánh kia thì tra cứu ra nhầm cơ sở */
+    if (rx.coSo && this.maCoSo() && rx.coSo !== this.maCoSo())
+      l.push('Đơn này kê cho ' + (rx.tenCoSo || rx.coSo) + ' nhưng máy đang đặt ở ' + this.tenCoSo()
+             + ' — đổi chi nhánh của máy rồi gửi lại');
     if (!rx.code) l.push('Đơn chưa có mã — mã sinh ra khi lưu, cần có mã liên thông cơ sở trước');
     if (!String(c.name || '').trim()) l.push('Khách chưa có họ tên');
     if (!this.ngay(c.dob)) l.push('Khách chưa có ngày sinh (chuẩn 808 bắt buộc)');
@@ -232,11 +261,13 @@ Object.assign(DT, {
   /* Đếm xem còn bao nhiêu thuốc chưa có mã — hiện ngay ở thẻ Cài đặt */
   soThieuMa(){ return this.dsThuoc().filter(t => !t.ma).length; },
   moTa(){
-    const co = this.maCoSo();
-    if (co.length !== 5) return 'Chưa khai mã liên thông cơ sở — chưa gửi được đơn nào';
-    const thieu = this.soThieuMa();
-    return 'Mã cơ sở ' + co + (thieu ? ' · còn ' + thieu + '/' + DM_THUOC.length + ' thuốc chưa có mã Cục Dược'
-                                    : ' · đã khai đủ mã thuốc');
+    const ds = this.coSoDS();
+    if (!ds.length) return 'Chưa khai chi nhánh nào — chưa gửi được đơn nào';
+    const c = this.coSoMay(), thieu = this.soThieuMa();
+    return 'Máy này kê đơn cho <b>' + h(c.ten || c.ma) + '</b> (' + h(c.ma) + ')'
+      + (ds.length > 1 ? ' · có ' + ds.length + ' chi nhánh' : '')
+      + (thieu ? ' · còn ' + thieu + '/' + DM_THUOC.length + ' thuốc chưa có mã Cục Dược'
+               : ' · đã khai đủ mã thuốc');
   },
 
   /* ---------------- Kê đơn ---------------- */
@@ -318,6 +349,10 @@ Object.assign(DT, {
       doctorId: (Att.me && Att.me() && Att.me().id) || 'st1',
       loai, status: 'draft',
       code: this.maDon(loai),
+      /* Ghi luôn chi nhánh đã kê. Mã đơn đã mang 5 ký tự này ở đầu, nhưng lưu rời ra
+         thì lọc đơn theo chi nhánh khỏi phải cắt chuỗi, và đổi mã sau này không làm
+         mất dấu đơn cũ thuộc về đâu. */
+      coSo: this.maCoSo(), tenCoSo: this.tenCoSo(),
       chanDoan: (maDx || tenDx) ? [{ma: maDx, ten: tenDx, ketLuan: (d.ketLuan || '').trim()}] : [],
       items,
       canNang: Number(d.canNang) || 0,
@@ -387,15 +422,30 @@ Object.assign(DT, {
   },
 
   /* ---------------- Cài đặt ---------------- */
+  SO_CS: 4,
   hopCaiDat(){
-    const g = this.cfg();
+    const g = this.cfg(), ds = this.coSoDS(), may = this.coSoMay();
+    const dong = i => {
+      const c = ds[i] || {ma: '', ten: ''};
+      return `<tr>
+        <td><input type="radio" name="may" value="${i}"${may && c.ma && c.ma === may.ma ? ' checked' : ''}></td>
+        <td><input name="ten${i}" value="${h(c.ten || '')}" placeholder="Tên chi nhánh"></td>
+        <td><input name="ma${i}" value="${h(c.ma || '')}" maxlength="5" placeholder="5 ký tự"
+              style="text-transform:uppercase;width:90px"></td></tr>`;
+    };
     App.modal('Liên thông đơn thuốc quốc gia', `
     <form onsubmit="DT.luuCaiDat(event)">
-      <div class="f full"><label>Mã liên thông cơ sở (5 ký tự)</label>
-        <input name="maCoSo" value="${h(g.maCoSo || '')}" maxlength="5" placeholder="vd: 89abc" style="text-transform:lowercase">
-        <div class="combo-hint">Lấy trong tài khoản <b>donthuocquocgia.vn</b> sau khi Sở Y tế phê duyệt.
+      <div class="full"><label>Chi nhánh và mã liên thông</label>
+        <div class="tbl-wrap"><table><thead><tr>
+          <th style="width:80px">Máy này</th><th>Tên chi nhánh</th><th style="width:110px">Mã liên thông</th>
+        </tr></thead><tbody>${Array.from({length: this.SO_CS}, (_, i) => dong(i)).join('')}</tbody></table></div>
+        <div class="combo-hint">Mã lấy trong tài khoản <b>donthuocquocgia.vn</b> sau khi Sở Y tế phê duyệt.
           Cấp theo Quyết định 384/QĐ-BYT: 2 ký tự đầu là mã tỉnh, 3 ký tự sau là số thứ tự cơ sở.
-          Đây là <b>5 ký tự đầu của mọi mã đơn thuốc</b>, nên mỗi chi nhánh một mã riêng.</div></div>
+          Đây là <b>5 ký tự đầu của mọi mã đơn thuốc</b> nên mỗi chi nhánh một mã riêng —
+          Thời Đại và Gò Quao là hai cơ sở được cấp phép riêng.</div></div>
+      <div class="note-block full">Cột <b>Máy này</b> chỉ đặt cho <b>riêng máy đang dùng</b>, không đồng bộ sang máy khác.
+        Mỗi máy đứng ở một chi nhánh, nên máy nào tự nhớ chi nhánh của máy đó. Nếu để chung thì
+        bên Gò Quao đổi một cái là bên Rạch Giá kê đơn ra mã Gò Quao mà không ai biết.</div>
       <div class="f full"><label>Mã hình thức điều trị</label>
         <input name="hinhThuc" type="number" min="0" value="${h(String(g.hinhThuc || ''))}" placeholder="chưa biết">
         <div class="combo-hint">Chuẩn 808 bắt buộc với đơn thường, lấy theo <b>danh mục hình thức điều trị do Bộ Y tế
@@ -411,10 +461,33 @@ Object.assign(DT, {
   luuCaiDat(ev){
     ev.preventDefault();
     const d = Object.fromEntries(new FormData(ev.target).entries());
-    const ma = (d.maCoSo || '').trim().toLowerCase();
-    if (ma && ma.length !== 5) { App.toast('Mã liên thông cơ sở phải đúng 5 ký tự'); return; }
-    db.clinic.dt = Object.assign({}, db.clinic.dt, {maCoSo: ma, hinhThuc: Number(d.hinhThuc) || 0});
-    save(); App.closeModal(); App.render(); App.toast('Đã lưu ✓');
+    /* Giữ theo ĐÚNG số thứ tự dòng trước, rồi mới bỏ dòng trống. Nút radio "Máy này"
+       mang số dòng, nên nếu nén danh sách trước thì bỏ một dòng trống ở trên là số
+       lệch hết, chọn Gò Quao lại ra Thời Đại. */
+    const hang = [];
+    for (let i = 0; i < this.SO_CS; i++) {
+      /* Giữ nguyên CHỮ HOA như hệ thống đơn thuốc quốc gia cấp — Thời Đại 91AQL,
+         Gò Quao 91AQM. Hạ về chữ thường là mã đơn ra "91aql…", lệch mã đã đăng ký. */
+      const ma = (d['ma' + i] || '').trim().toUpperCase();
+      const ten = (d['ten' + i] || '').trim();
+      if (!ma && !ten) { hang[i] = null; continue; }
+      if (ma.length !== 5) { App.toast('Mã liên thông phải đúng 5 ký tự — dòng "' + (ten || ma) + '"'); return; }
+      if (hang.some(x => x && x.ma === ma)) { App.toast('Mã ' + ma + ' bị khai hai lần'); return; }
+      hang[i] = {ma, ten: ten || ma};
+    }
+    const ds = hang.filter(Boolean);
+    /* Bỏ maCoSo của bản cũ đi, không thì coSoDS() có thể đọc nhầm về sau */
+    const cu = Object.assign({}, db.clinic.dt);
+    delete cu.maCoSo;
+    db.clinic.dt = Object.assign(cu, {coSo: ds, hinhThuc: Number(d.hinhThuc) || 0});
+
+    /* Chi nhánh của máy này: lưu riêng ngoài db nên không đồng bộ sang máy khác */
+    const i = Number(d.may);
+    const chon = hang[i] || this.coSoMay() || ds[0] || null;
+    if (chon) this.datCoSoMay(chon.ma);
+
+    save(); App.closeModal(); App.render();
+    App.toast(chon ? 'Đã lưu · máy này kê đơn cho ' + (chon.ten || chon.ma) : 'Đã lưu ✓');
   },
 
   /* Bảng khai mã thuốc. Để riêng vì khai một lần rồi thôi, mà danh mục thì dài. */
