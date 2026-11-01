@@ -26,9 +26,8 @@ const Luong = {
   XANG: [[15, 30000], [30, 50000], [50.0001, 70000], [Infinity, 100000]],   /* km một chiều: dưới 15 / 15–<30 / 30–50 / trên 50 */
   ONLINE: ['Facebook', 'Zalo', 'TikTok', 'Google', 'Đặt hẹn online'],
   CONG_CHUAN: 26,
-  /* QĐ 10/2026/QĐ-HB-GQ: quy chế sửa đổi áp dụng từ kỳ lương tháng 11/2026. Tháng trước
-     đó tính theo quy chế cũ (QĐ 05): xăng xe khoán theo chức danh, quỹ 1,5% và 1% tính trên
-     toàn bộ doanh thu, chưa có thưởng hiệu quả tháng, Điều 19, Điều 20. */
+  /* Quy chế lương thưởng (QĐ 05, sửa bởi QĐ 10/2026/QĐ-HB-GQ) áp dụng từ kỳ lương tháng 11/2026.
+     Các tháng trước chỉ trả lương chức danh: mọi khoản hỗ trợ, hoa hồng, thưởng bằng 0 (Toàn chốt 01/11/2026). */
   HIEU_LUC: '2026-11',
   /* Quỹ Điều 10, 11 và thưởng Điều 20 chỉ tính trên phần doanh thu thuần vượt mức này */
   NGUONG_DT: 300000000,
@@ -407,16 +406,19 @@ const Luong = {
       cc.mucTieu = [`Doanh thu thuần ${money(dtCS.thuan)} vượt mức ${money(mt)} → quỹ 5% = ${money(quy)}; hệ số ${N.heSo} × ${cg.cong} công`];
     } else { d.mucTieu = 0; cc.mucTieu = [`Doanh thu thuần ${money(dtCS.thuan)} chưa vượt mức ${money(mt)}`]; }
 
-    /* Trước 11/2026: các khoản quy chế cũ chưa có */
-    if (!this.quyCheMoi(M)) ['hieuQua', 'phuCa', 'chungChi', 'dungHen', 'khachMoi', 'vuotDT', 'kyThuat', 'mucTieu'].forEach(k => {
-      d[k] = 0; cc[k] = ['Chưa áp dụng — khoản này có từ kỳ lương 11/2026 theo QĐ 10/2026/QĐ-HB-GQ'];
+    /* Trước 11/2026: chỉ trả lương chức danh, mọi khoản hỗ trợ, hoa hồng, thưởng đều bằng 0 */
+    const chiLuong = !this.quyCheMoi(M);
+    if (chiLuong) this.KHOAN.filter(K => K.loai === 'thu' && K.k !== 'luong').forEach(K => {
+      d[K.k] = 0; cc[K.k] = ['Chưa áp dụng — hỗ trợ, hoa hồng và thưởng chỉ trả từ kỳ lương 11/2026; tháng trước chỉ trả lương chức danh'];
     });
 
     /* Thưởng khác & khấu trừ ghi ở tab KPI · Thưởng · Phạt (trừ thưởng hiệu quả đã tính ở trên) */
     const bon = (db.bonuses || []).filter(b => b.staffId === st.id && monthOf(b.date) === M && !String(b.id).startsWith('dg_'));
     const cong = bon.filter(b => b.amount > 0), tru = bon.filter(b => b.amount < 0);
-    d.thuongKhac = cong.reduce((s, b) => s + b.amount, 0);
-    cc.thuongKhac = cong.length ? cong.map(b => `${fmtD(b.date)} ${h(b.reason || '')}: +${money(b.amount)}`) : ['Không có'];
+    if (!chiLuong) {
+      d.thuongKhac = cong.reduce((s, b) => s + b.amount, 0);
+      cc.thuongKhac = cong.length ? cong.map(b => `${fmtD(b.date)} ${h(b.reason || '')}: +${money(b.amount)}`) : ['Không có'];
+    }
     d.khauTru = -tru.reduce((s, b) => s + b.amount, 0);
     cc.khauTru = tru.length ? tru.map(b => `${fmtD(b.date)} ${h(b.reason || '')}: ${money(-b.amount)}`) : ['Không có'];
 
@@ -742,7 +744,7 @@ const Luong = {
         <div class="k-note">thực thu ${money(dt.thu)} − lab ${money(dt.lab)}</div></div>
       <div class="card kpi"><div class="k-label">Phần vượt 300 triệu (Điều 10, 11, 20)</div>
         <div class="k-value num">${this.quyCheMoi(M) ? money(vuot) : '—'}</div>
-        <div class="k-note">${!this.quyCheMoi(M) ? 'tháng này còn theo quy chế cũ' : vuot ? `quỹ 1,5%: ${money(vuot * 0.015)} · 1%: ${money(vuot * 0.01)} · 5%: ${money(vuot * 0.05)}` : 'chưa vượt — các quỹ bằng 0'}</div></div>
+        <div class="k-note">${!this.quyCheMoi(M) ? 'trước 11/2026: chỉ trả lương chức danh' : vuot ? `quỹ 1,5%: ${money(vuot * 0.015)} · 1%: ${money(vuot * 0.01)} · 5%: ${money(vuot * 0.05)}` : 'chưa vượt — các quỹ bằng 0'}</div></div>
       <div class="card kpi"><div class="k-label">Khách đến đúng hẹn (Điều 19.2)</div>
         <div class="k-value num">${dh.tyLe == null ? '—' : Math.round(dh.tyLe * 100) + '%'}</div><div class="k-note">${dh.den}/${dh.tong} lượt hẹn</div></div>
     </div>
