@@ -3700,8 +3700,9 @@ SCREENS.treatment = () => {
         ${r.code ? '<br><span class="rx-code num">' + h(r.code) + '</span>' : ''}</div>
       <span>${r.status==='sent'
         ? `<span class="pill ok">Đã liên thông</span>`
-        : `<button class="btn small ${thieu?'':'primary'}" onclick="Treat.rxSend('${r.id}')">${
-            thieu ? 'Còn thiếu ' + thieu + ' chỗ' : 'Soát & gửi đơn quốc gia'}</button>`}
+        : `${r.lt && r.lt.tt==='cho' ? '<span class="pill warn" title="'+h(r.lt.msg||'')+'">Chờ gửi lại</span> '
+            : r.lt && r.lt.tt==='loi' ? '<span class="pill danger" title="'+h((r.lt.loi||[]).join('; ')||r.lt.msg||'')+'">Bị từ chối</span> ' : ''}<button class="btn small ${thieu?'':'primary'}" onclick="Treat.rxSend('${r.id}')">${
+            thieu ? 'Còn thiếu ' + thieu + ' chỗ' : r.lt ? 'Gửi lại' : 'Soát & gửi đơn quốc gia'}</button>`}
         <button class="btn small" onclick="Treat.printRx('${r.id}')">${IC.print} In</button></span></div>
       <div class="tbl-wrap"><table style="min-width:520px"><thead><tr><th>Thuốc</th><th>SL</th><th>Cách dùng</th></tr></thead>
       <tbody>${(r.items||[]).map(it=>`<tr>
@@ -8682,6 +8683,14 @@ SCREENS.settings = () => {
         DT.soThieuMa() ? `Còn <b>${DT.soThieuMa()}</b> thuốc chưa có mã — đơn có thuốc đó sẽ không gửi được`
                        : 'Đã khai đủ mã cho cả danh mục',
         `<button class="btn small" onclick="DT.hopMaThuoc()"${khoa}>Mở bảng mã thuốc</button>`)}
+      ${the('Máy chủ gửi đơn', DT.mayChu()
+          ? 'Đã khai Apps Script · đơn gửi thật lên hệ thống quốc gia, chưa kèm chữ ký số'
+          : 'Chưa khai — đơn chỉ soát và xem trước, chưa gửi đi',
+        DT.mayChu() ? `<button class="btn small" onclick="DT.thuKetNoi()">Thử kết nối</button>` : '')}
+      ${the('Đơn chưa liên thông', (() => { const c = DT.dsCho().length, t = DT.dsTuChoi().length;
+          return c || t ? `${c ? '<span class="pill warn">' + c + ' chờ gửi lại</span> ' : ''}${t ? '<span class="pill danger">' + t + ' bị từ chối</span>' : ''}`
+                        : 'Không có đơn nào kẹt'; })(),
+        `<button class="btn small" onclick="DT.hopChuaGui()">Xem danh sách</button>`)}
     </div></div>`}
 
   <div class="card"><div class="card-h"><h2>Dữ liệu</h2></div>
@@ -8824,7 +8833,10 @@ document.addEventListener('DOMContentLoaded', () => {
      Lấy muộn hơn thì hoặc là mất thay đổi gõ trước lần đồng bộ đầu, hoặc là cả kho bị
      đóng dấu thời gian mới rồi đè lên dấu xóa của máy khác. */
   if (typeof Sync !== 'undefined' && Sync.moBaiDau) { try { Sync.moBaiDau(); } catch(e){} }
-  if (Cloud.configured() && Cloud.loggedIn()) setTimeout(() => { Sync.run(true).then(() => Att.sync()); }, 800);
+  if (Cloud.configured() && Cloud.loggedIn()) setTimeout(() => { Sync.run(true).then(() => Att.sync())
+    /* Đơn thuốc lần trước gửi rớt mạng thì gửi lại — sau đồng bộ để không bỏ sót đơn máy khác kê */
+    .then(() => { if (typeof DT !== 'undefined') DT.tuGuiLai(); }); }, 800);
+  window.addEventListener('online', () => { if (typeof DT !== 'undefined') setTimeout(() => DT.tuGuiLai(), 5000); });
   /* Từ nay máy nào nhập gì thì máy khác thấy trong vòng một phút, khỏi bấm nút ⟳ */
   if (typeof Sync !== 'undefined') Sync.khoiDongTuDong();
   /* Sao lưu: đọc trạng thái để vẽ đúng ô trong Cài đặt, rồi chụp bản của ngày hôm

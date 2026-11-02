@@ -16,12 +16,11 @@
    Chỗ chuẩn 808 tự nói ngược nhau, đã ghi lại ở HAI_TEN_CHAN_DOAN bên dưới. */
 'use strict';
 
-/* Thân đơn thuốc trong ví dụ FormData của 808 ghi phần tử chẩn đoán là
-   ma_chan_doan/ten_chan_doan, nhưng bảng mô tả dữ liệu đầu vào (trường số 12) lại ghi
-   ma_benh/ten_benh. Hai chỗ trong cùng một văn bản, không biết chỗ nào đúng.
-   Đang đi theo ví dụ FormData vì đó là thân request thật được in ra. Nếu hệ thống trả
-   lỗi thiếu trường chẩn đoán thì đổi cờ này sang false, không phải sửa gì khác. */
-const DT_THEO_VI_DU = true;
+/* 808 tự nói ngược nhau ở hai chỗ, ví dụ FormData một kiểu, bảng dữ liệu đầu vào một kiểu:
+   - phần tử chẩn đoán: ma_chan_doan/ten_chan_doan  ↔  ma_benh/ten_benh (trường 12)
+   - mã thẻ BHYT:       ma_so_the_bao_hiem_y_te     ↔  ma_so_bao_hiem_y_te (trường 9)
+   Không biết bên nào đúng nên gửi CẢ HAI tên. Máy chủ của họ (Laravel) bỏ qua trường
+   lạ, nên tên thừa không làm hỏng đơn, còn tên đúng thì chắc chắn có mặt. */
 
 /* Danh mục thuốc phòng khám hay dùng.
    ma: MÃ THUỐC DO CỤC QUẢN LÝ DƯỢC CẤP — cố tình để trống. Chuẩn 808 bắt buộc trường
@@ -144,20 +143,20 @@ const DT = {
   },
 
   /* ---------------- Dựng thân request gửi lên ----------------
-     Trả về đúng hình dạng FormData mà 808 in trong tài liệu. Trường signature để
-     rỗng: chuẩn 808 có trường đó ("Chữ ký số của người kê đơn") nhưng KHÔNG nói ký
-     trên chuỗi nào, chuẩn hóa ra sao, bọc dạng gì — và trong bảng dữ liệu đầu vào nó
-     cũng không được đánh dấu bắt buộc. Chờ đơn vị hỗ trợ kỹ thuật trả lời rồi điền
-     vào đúng một chỗ: hàm DT.kySo() ở cuối file. */
+     Trả về đúng hình dạng FormData mà 808 in trong tài liệu. Chưa có chữ ký thì BỎ
+     HẲN trường signature chứ không gửi chuỗi rỗng: 808 không đánh dấu nó bắt buộc,
+     nhưng có mặt mà rỗng thì máy chủ có thể kiểm định dạng rồi từ chối. Phần mềm eRx
+     (donthuocdientu.vn) đang chạy thật cũng gửi đơn không kèm chữ ký. */
   json(rx){
     const c = custById(rx.customerId) || {};
     const cfg = this.cfg();
     const sdt = String(c.phone || '').replace(/\D/g, '').slice(0, 12);
     const cccd = String(c.cccd || '').replace(/\D/g, '').slice(0, 12);
 
-    const chan = (rx.chanDoan || []).filter(x => x && (x.ma || x.ten)).map(x => DT_THEO_VI_DU
-      ? {ma_chan_doan: x.ma || '', ten_chan_doan: x.ten || '', ket_luan: x.ketLuan || ''}
-      : {ma_benh:      x.ma || '', ten_benh:      x.ten || '', ket_luan: x.ketLuan || ''});
+    const chan = (rx.chanDoan || []).filter(x => x && (x.ma || x.ten)).map(x => ({
+      ma_chan_doan: x.ma || '', ten_chan_doan: x.ten || '',
+      ma_benh: x.ma || '', ten_benh: x.ten || '',
+      ket_luan: x.ketLuan || ''}));
 
     const o = {
       loai_don_thuoc: (rx.loai || 'c').toLowerCase(),
@@ -176,8 +175,8 @@ const DT = {
         cach_dung: String(it.cachDung || '').slice(0, 500),
       })),
       ngay_gio_ke_don: this.ngayGio(rx.luc || rx.date),
-      signature: rx.signature || '',
     };
+    if (rx.signature) o.signature = rx.signature;
 
     /* Bắt buộc với đơn thường; danh mục do Bộ Y tế ban hành, khai một lần trong Cài đặt */
     if (o.loai_don_thuoc === 'c' && cfg.hinhThuc) o.hinh_thuc_dieu_tri = Number(cfg.hinhThuc);
@@ -192,7 +191,11 @@ const DT = {
     if (c.maYTe) o.ma_dinh_danh_y_te = String(c.maYTe).slice(0, 10);
     if (cccd.length === 12) o.ma_dinh_danh_cong_dan = cccd;
     if (rx.canNang) o.can_nang = Number(rx.canNang);
-    if (c.bhyt) o.ma_so_bao_hiem_y_te = String(c.bhyt).slice(0, 10);
+    /* Thẻ BHYT in 15 ký tự (GD4 91 2345678901): 2 chữ đối tượng + 1 số quyền lợi + 2 số
+       tỉnh + 10 số MÃ SỐ BHXH. 808 đòi "mã số" 10 ký tự, tức là 10 số CUỐI, không phải
+       10 ký tự đầu như bản trước cắt. */
+    const bhyt = String(c.bhyt || '').replace(/\s/g, '').toUpperCase();
+    if (bhyt) o.ma_so_bao_hiem_y_te = o.ma_so_the_bao_hiem_y_te = bhyt.length === 15 ? bhyt.slice(5) : bhyt.slice(0, 10);
     if (rx.giamHo) o.thong_tin_nguoi_giam_ho = String(rx.giamHo).slice(0, 500);
     if (rx.luuY) o.luu_y = String(rx.luuY).slice(0, 2000);
     if (rx.loiDan) o.loi_dan = String(rx.loiDan).slice(0, 2000);
@@ -239,8 +242,8 @@ const DT = {
      Chỗ duy nhất còn chờ câu trả lời: ký trên chuỗi nào. Khi có, chỉ sửa trong đây —
      băm chuỗi đó bằng sha256() (đã có sẵn trong ky.js), gửi mã băm sang Apps Script để
      nó gọi MySign extendSigning, rồi gán chữ ký trả về vào rx.signature.
-     Chưa có thì trả null, đơn vẫn gửi được với signature rỗng vì bảng dữ liệu đầu vào
-     của 808 không đánh dấu trường này bắt buộc. */
+     Chưa có thì trả null, đơn vẫn gửi được, json() bỏ hẳn trường signature vì bảng dữ
+     liệu đầu vào của 808 không đánh dấu trường này bắt buộc. */
   kySo(){ return null; },
 };
 
@@ -368,12 +371,55 @@ Object.assign(DT, {
   },
 
   /* ---------------- Soát và gửi ----------------
-     Chưa có client_id/mã liên thông thì chưa gọi API thật được. Bước này soát đủ 27
-     trường rồi dựng sẵn đúng thân request, để khi có tài khoản chỉ việc đẩy đi. */
+     App không tự gọi API quốc gia: mật khẩu bác sĩ không được nằm trong trang web tĩnh.
+     Đơn gửi sang Apps Script (donthuoc-lienthong/Code.gs trong vault), nó giữ mật khẩu,
+     đăng nhập lấy token rồi chuyển đi.
+
+     Đơn LUÔN được lưu trước, gửi sau — học theo eRx. Kết quả mỗi lần gửi ghi vào rx.lt:
+       tt 'ok'   đã nằm trên hệ thống quốc gia (rx.status = 'sent')
+          'loi'  bị từ chối (422) — phải sửa đơn, gửi lại y nguyên vẫn bị từ chối
+          'cho'  mạng rớt / máy chủ quốc gia lỗi — đơn không sai, gửi lại sau là được
+     Gửi lại dùng ĐÚNG mã đơn cũ (mã sinh lúc lưu), nên lỡ lần trước đã tới nơi thì hệ
+     thống báo trùng mã và Apps Script coi như đã gửi, không thành hai đơn. */
+  mayChu(){ return String(this.cfg().gasUrl || '').trim(); },
+  /* Đơn chờ gửi lại: đủ chuẩn, chưa gửi được vì lỗi mạng */
+  dsCho(){ return (db.rx || []).filter(r => r.status !== 'sent' && r.lt && r.lt.tt === 'cho'); },
+  dsTuChoi(){ return (db.rx || []).filter(r => r.status !== 'sent' && r.lt && r.lt.tt === 'loi'); },
+
+  async goiMayChu(q){
+    if (!Cloud.loggedIn()) return {ok: false, tt: 'loi', msg: 'Phải đăng nhập app mới gửi được đơn — máy chủ gửi đơn hỏi lại phiên đăng nhập.'};
+    /* Phiên Supabase sống 1 giờ; sắp hết thì gia hạn trước, kẻo Apps Script hỏi lại thấy hết hạn */
+    if (Cloud.session.expires_at && Date.now() > Cloud.session.expires_at - 120000) await Cloud.refresh();
+    if (!Cloud.loggedIn()) return {ok: false, tt: 'loi', msg: 'Phiên đăng nhập đã hết — đăng nhập lại app.'};
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 45000);
+    try {
+      /* text/plain để trình duyệt khỏi hỏi CORS trước — Apps Script không trả lời được câu hỏi đó */
+      const r = await fetch(this.mayChu(), {method: 'POST', body: JSON.stringify(Object.assign({jwt: Cloud.session.access_token}, q)),
+        headers: {'Content-Type': 'text/plain;charset=utf-8'}, signal: ctrl.signal});
+      const d = await r.json();
+      return d && d.tt ? d : {ok: false, tt: 'cho', msg: 'Máy chủ gửi đơn trả lời lạ'};
+    } catch(e){
+      return {ok: false, tt: 'cho', msg: navigator.onLine === false ? 'Máy đang mất mạng' : 'Không gọi được máy chủ gửi đơn (' + (e.name === 'AbortError' ? 'quá lâu' : e.message) + ')'};
+    } finally { clearTimeout(to); }
+  },
+
+  /* Gửi một đơn, ghi kết quả vào đơn. Không mở hộp thoại — dùng chung cho gửi lại hàng loạt. */
+  async guiMot(rx){
+    const bs = staffById(rx.doctorId);
+    const kq = await this.goiMayChu({a: 'gui', bs: (bs && bs.email) || '', don: this.json(rx)});
+    rx.lt = {tt: kq.tt, luc: new Date().toISOString(), msg: kq.msg || '', loi: kq.loi || [],
+             lan: ((rx.lt && rx.lt.lan) || 0) + 1, boi: Cloud.who()};
+    if (kq.tt === 'ok') rx.status = 'sent';
+    return kq;
+  },
+
   gui(id){
     const rx = (db.rx || []).find(x => x.id === id);
     if (!rx) return;
     const loi = this.thieu(rx);
+    const bs = staffById(rx.doctorId);
+    if (this.mayChu() && !(bs && bs.email)) loi.push('Bác sĩ kê đơn chưa có email trong Nhân sự — Apps Script tìm mã liên thông bác sĩ theo email');
     if (loi.length) {
       App.modal('Chưa gửi được — còn thiếu ' + loi.length + ' chỗ', `
         <div class="note-block warn-block">Hệ thống đơn thuốc quốc gia trả lỗi 422 nếu thiếu trường bắt buộc,
@@ -382,14 +428,80 @@ Object.assign(DT, {
         <div class="form-actions"><button class="btn" onclick="App.closeModal()">Đóng</button></div>`);
       return;
     }
-    const body = JSON.stringify(this.json(rx), null, 2);
-    App.modal('Đơn đã đủ chuẩn 808', `
-      <div class="note-block">Thân request gửi tới <b>POST /api/v1/gui-don-thuoc</b> đã dựng xong và đúng chuẩn.
-        Chưa đẩy đi được vì còn thiếu <b>mật khẩu cơ sở và mã liên thông bác sĩ</b> — hai thứ đó nằm bên Apps Script,
-        không để trong app.</div>
-      <div class="f full"><label>Thân request</label>
-        <textarea rows="16" readonly style="font-family:ui-monospace,monospace;font-size:12px">${h(body)}</textarea></div>
-      <div class="form-actions"><button type="button" class="btn" onclick="App.closeModal()">Đóng</button></div>`);
+    if (!this.mayChu()) {
+      const body = JSON.stringify(this.json(rx), null, 2);
+      App.modal('Đơn đã đủ chuẩn 808', `
+        <div class="note-block">Đơn đã đủ chuẩn nhưng <b>chưa khai máy chủ gửi đơn</b> (Apps Script giữ mật khẩu bác sĩ).
+          Cài theo <b>donthuoc-lienthong/HUONG-DAN.md</b> rồi dán đường dẫn vào Cài đặt → Liên thông đơn thuốc → Khai mã.</div>
+        <div class="f full"><label>Thân request sẽ gửi tới POST /api/v1/gui-don-thuoc</label>
+          <textarea rows="16" readonly style="font-family:ui-monospace,monospace;font-size:12px">${h(body)}</textarea></div>
+        <div class="form-actions"><button type="button" class="btn" onclick="App.closeModal()">Đóng</button></div>`);
+      return;
+    }
+    App.modal('Đang gửi đơn ' + rx.code,'<div class="note-block">Đang gửi lên hệ thống đơn thuốc quốc gia…</div>');
+    this.guiMot(rx).then(kq => {
+      save(); App.render();
+      App.modal(kq.tt === 'ok' ? 'Đã liên thông ✓' : kq.tt === 'cho' ? 'Chưa gửi được — sẽ gửi lại' : 'Hệ thống từ chối đơn', `
+        <div class="note-block ${kq.tt === 'ok' ? '' : 'warn-block'}">${h(kq.msg || '')}
+          ${kq.tt === 'cho' ? '<br>Đơn đã lưu, không mất. App tự gửi lại khi có mạng, hoặc bấm "Gửi lại" ở thẻ đơn.' : ''}
+          ${kq.tt === 'loi' ? '<br>Sửa theo các lỗi dưới đây rồi gửi lại — gửi y nguyên sẽ bị từ chối tiếp.' : ''}</div>
+        ${(kq.loi || []).length ? `<ul style="margin:10px 0 0 18px;line-height:1.7">${kq.loi.map(x => '<li>' + h(x) + '</li>').join('')}</ul>` : ''}
+        <div class="form-actions"><button class="btn" onclick="App.closeModal()">Đóng</button></div>`);
+    });
+  },
+
+  /* Gửi lại mọi đơn đang chờ vì lỗi mạng. Gửi lần lượt từng đơn, không gửi song song,
+     để không đăng nhập cùng lúc nhiều lần bên hệ thống quốc gia. */
+  dangGuiLai: false,
+  async guiLai(imLang){
+    if (this.dangGuiLai || !this.mayChu()) return;
+    const ds = this.dsCho();
+    if (!ds.length) { if (!imLang) App.toast('Không còn đơn nào chờ gửi'); return; }
+    this.dangGuiLai = true;
+    let ok = 0;
+    try {
+      for (const rx of ds) {
+        const kq = await this.guiMot(rx);
+        if (kq.tt === 'ok') ok++;
+        /* Máy chủ vẫn lỗi thì dừng, đợi lần sau, khỏi gọi dồn */
+        if (kq.tt === 'cho') break;
+      }
+    } finally { this.dangGuiLai = false; }
+    save(); App.render();
+    if (!imLang || ok) App.toast('Đã gửi lại ' + ok + '/' + ds.length + ' đơn' + (ok < ds.length ? ' · còn lại sẽ thử sau' : ''));
+  },
+  /* Tự gửi lại: lúc mở app và khi có mạng trở lại. Chỉ đơn lần gửi trước đã quá 5 phút. */
+  tuGuiLai(){
+    if (!this.mayChu() || !Cloud.loggedIn()) return;
+    const cu = this.dsCho().filter(r => !r.lt.luc || Date.now() - new Date(r.lt.luc).getTime() > 5 * 60000);
+    if (cu.length) this.guiLai(true);
+  },
+
+  async thuKetNoi(){
+    if (!this.mayChu()) { App.toast('Chưa khai máy chủ gửi đơn'); return; }
+    const me = Perm.me();
+    App.toast('Đang thử đăng nhập hệ thống quốc gia…');
+    const kq = await this.goiMayChu({a: 'thu', bs: (me && me.email) || Cloud.who(), coSo: this.maCoSo()});
+    App.modal(kq.ok ? 'Kết nối được ✓' : 'Chưa kết nối được', `
+      <div class="note-block ${kq.ok ? '' : 'warn-block'}">${h(kq.msg || '')}</div>
+      ${(kq.loi || []).length ? `<ul style="margin:10px 0 0 18px;line-height:1.7">${kq.loi.map(x => '<li>' + h(x) + '</li>').join('')}</ul>` : ''}
+      <div class="combo-hint">Thử bằng tài khoản đang đăng nhập (${h(Cloud.who() || '—')}) tại ${h(this.tenCoSo() || '—')}.
+        Không gửi đơn nào.</div>
+      <div class="form-actions"><button class="btn" onclick="App.closeModal()">Đóng</button></div>`);
+  },
+
+  /* Danh sách đơn chưa liên thông, mở từ Cài đặt */
+  hopChuaGui(){
+    const ds = [...this.dsCho(), ...this.dsTuChoi()].sort((a, b) => a.date < b.date ? 1 : -1);
+    App.modal('Đơn chưa liên thông', `
+      ${ds.length ? `<div class="tbl-wrap"><table><thead><tr><th>Ngày</th><th>Khách</th><th>Mã đơn</th><th>Tình trạng</th></tr></thead>
+        <tbody>${ds.map(r => `<tr><td class="num">${fmtD(r.date)}</td><td>${h((custById(r.customerId) || {}).name || '')}</td>
+          <td class="num">${h(r.code || '')}</td>
+          <td>${r.lt.tt === 'cho' ? '<span class="pill warn">Chờ gửi lại</span>' : '<span class="pill danger">Bị từ chối</span>'}
+            <br><span class="sub-line">${h(r.lt.msg || '')}${(r.lt.loi || []).length ? ' — ' + h(r.lt.loi.join('; ')) : ''}</span></td></tr>`).join('')}
+        </tbody></table></div>` : '<div class="note-block">Mọi đơn đã lưu đều đã liên thông hoặc chưa bấm gửi.</div>'}
+      <div class="form-actions"><button class="btn" onclick="App.closeModal()">Đóng</button>
+        ${this.dsCho().length ? `<button class="btn primary" onclick="App.closeModal();DT.guiLai()">Gửi lại ${this.dsCho().length} đơn chờ</button>` : ''}</div>`);
   },
 
   /* ---------------- In đơn ---------------- */
@@ -451,9 +563,13 @@ Object.assign(DT, {
         <div class="combo-hint">Chuẩn 808 bắt buộc với đơn thường, lấy theo <b>danh mục hình thức điều trị do Bộ Y tế
           ban hành</b> — nhưng tài liệu không in kèm danh mục đó. Hỏi đơn vị hỗ trợ kỹ thuật
           (medcomm, 1900.8960 nhánh 4) rồi điền một lần.</div></div>
-      <div class="note-block full">Mật khẩu cơ sở <b>không khai ở đây</b>. Mật khẩu đó thêm và xóa được bác sĩ
-        khỏi phòng khám trên hệ thống quốc gia, để trong app thì ai mở app cũng đọc ra — nên nó nằm bên Apps Script,
-        app chỉ gọi sang.</div>
+      <div class="f full"><label>Máy chủ gửi đơn (Apps Script)</label>
+        <input name="gasUrl" value="${h(g.gasUrl || '')}" placeholder="https://script.google.com/macros/s/…/exec">
+        <div class="combo-hint">Đường dẫn <b>/exec</b> của Apps Script <b>donthuoc-lienthong</b>. Cách cài ở HUONG-DAN.md cùng thư mục.
+          Để trống thì đơn chỉ soát và xem trước, chưa gửi đi.</div></div>
+      <div class="note-block full">Mật khẩu cơ sở và mật khẩu bác sĩ <b>không khai ở đây</b>. Mật khẩu đó đăng nhập được
+        hệ thống quốc gia, để trong app thì ai mở app cũng đọc ra — nên nó nằm trong Script Properties của Apps Script,
+        app chỉ gọi sang. Apps Script tìm mã liên thông bác sĩ theo <b>email</b> của bác sĩ trong Nhân sự.</div>
       <div class="form-actions full"><button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
         <button class="btn primary">Lưu</button></div>
     </form>`);
@@ -479,7 +595,11 @@ Object.assign(DT, {
     /* Bỏ maCoSo của bản cũ đi, không thì coSoDS() có thể đọc nhầm về sau */
     const cu = Object.assign({}, db.clinic.dt);
     delete cu.maCoSo;
-    db.clinic.dt = Object.assign(cu, {coSo: ds, hinhThuc: Number(d.hinhThuc) || 0});
+    const gasUrl = (d.gasUrl || '').trim();
+    if (gasUrl && !/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(gasUrl)) {
+      App.toast('Đường dẫn máy chủ gửi đơn phải có dạng https://script.google.com/macros/s/…/exec'); return;
+    }
+    db.clinic.dt = Object.assign(cu, {coSo: ds, hinhThuc: Number(d.hinhThuc) || 0, gasUrl});
 
     /* Chi nhánh của máy này: lưu riêng ngoài db nên không đồng bộ sang máy khác */
     const i = Number(d.may);
