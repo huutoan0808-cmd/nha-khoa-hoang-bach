@@ -1773,10 +1773,6 @@ const Cust = {
       <div class="card-b">
         <div class="sub-line" style="margin:0 0 12px">${h((BUOC.find(b => b.k === lop) || {}).mo || '')}</div>
 
-        ${lop === 'teeth' ? `<div class="note-block mb">Bấm vào từng răng để ghi <b>tình trạng lúc mới đến khám</b>:
-          sâu mặt nào, đã trám, răng sứ, mất răng, lỗ dò… Đây là sơ đồ gốc, hai bước sau đều dựa vào nó
-          và không sửa ngược lại nó.
-          ${App.state.rangChon ? '' : '<br>Nhiều răng <b>cùng một tình trạng</b> (mất nhiều răng, cao răng cả hàm) thì bấm <b>Chọn nhiều răng cùng lúc</b> ở góc trên.'}</div>` : ''}
         ${keHoach ? `<div class="note-block mb">Bấm vào răng cần làm: ô <b>Tình trạng hiện tại</b> đã lấy sẵn từ bước 1,
           bạn chỉ cần chọn <b>chẩn đoán</b> và <b>dịch vụ sẽ làm</b>.
           ${App.state.rangChon ? '' : '<br>Làm <b>cùng một dịch vụ cho nhiều răng</b> (cầu răng, niềng, tháo lắp) thì bấm <b>Chọn nhiều răng cùng lúc</b> ở góc trên — phần mềm gộp thành một hạng mục có số lượng.'}</div>` : ''}
@@ -1847,14 +1843,13 @@ const Cust = {
     App.state.rangChon = null;
     App.render();
   },
-  /* Khối nằm ngay dưới sơ đồ: chưa chọn răng thì chỉ nhắc cách dùng */
+  /* Khối nằm ngay dưới sơ đồ. Chưa chọn răng thì không hiện gì — trước đây chỗ này
+     là một đoạn nhắc cách dùng, nhưng nhắc mãi một câu người làm hằng ngày đã thuộc
+     thì chỉ tổ đẩy sơ đồ lên cao. */
   oGhiRangHTML(c, lop){
     const n = App.state.rangMo;
     if (App.state.rangChon) return '';
-    if (!n) return `<div class="note-block" id="oRangGhi" style="margin-top:14px">
-      <b>Bấm vào một răng trên sơ đồ</b> để ghi cho răng đó — khung nhập hiện ngay tại đây,
-      sơ đồ vẫn nằm nguyên phía trên để đối chiếu với các răng bên cạnh.<br>
-      Nhiều răng cùng lúc: giữ <b>Ctrl</b> bấm từng răng, hoặc giữ <b>Shift</b> bấm răng cuối để lấy cả dải.</div>`;
+    if (!n) return '';
     const vt = (Tooth.hamTren(n) ? 'hàm trên' : 'hàm dưới') + (Tooth.benPhai(n) ? ' bên phải' : ' bên trái');
     return `<div class="card mb" id="oRangGhi" style="margin-top:14px;border-color:var(--accent)">
       <div class="card-h"><h2>Răng ${n}</h2><span class="hint">${h(vt)}</span><span class="spacer"></span>
@@ -5497,10 +5492,7 @@ const Tooth = {
       <span><i style="background:var(--warn)"></i>↔ Lung lay (mũi tên càng đậm càng nặng)</span>
       <span><i class="lg-lodo"></i>Lỗ dò</span>
       <span><i class="lg-sung"></i>Sưng đáy hành lang</span>
-    </div>
-    <div class="combo-hint" style="margin-top:8px">Mỗi răng chia 5 vùng — <b>trên/dưới là mặt ngoài và mặt trong</b> (đổi chiều theo hàm trên hay hàm dưới),
-      <b>trái/phải là mặt gần và mặt xa</b> (mặt gần luôn quay về đường giữa), <b>ô giữa là mặt nhai</b>.
-      Vạch dưới cùng là <b>cổ răng</b>. Rê chuột vào từng vùng để xem tên mặt.</div>`;
+    </div>`;
   },
 };
 
