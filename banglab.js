@@ -39,7 +39,7 @@ const BANG_LAB = {
     {g:'Nền & sửa hàm', n:'Đệm hàm',              d:'cái',  p:200000},
     {g:'Nền & sửa hàm', n:'Thay nền',             d:'cái',  p:300000},
     {g:'Nền & sửa hàm', n:'Ép nhựa cường lực',    d:'cái',  p:200000},
-    {g:'Nền & sửa hàm', n:'Ráp răng lại',         d:'cái',  p:50000,  ghi:'chữ trên bảng mờ, cần xác nhận lại tên'},
+    {g:'Nền & sửa hàm', n:'Gắn răng lại',         d:'cái',  p:50000},
   ],
 
   /* ---------- TẤN DENTAL LAB (Cần Thơ) — bảng báo giá 01/07/2026 ---------- */
@@ -48,7 +48,7 @@ const BANG_LAB = {
     {g:'Phục hình sứ trên cùi răng', n:'Sứ Titan',                    d:'răng', p:250000,  ghi:'BH 5 năm'},
     {g:'Phục hình sứ trên cùi răng', n:'Sứ Chrome - Cobalt',          d:'răng', p:320000,  ghi:'BH 5 năm'},
     {g:'Phục hình sứ trên cùi răng', n:'Sứ Zirconia Aidite',          d:'răng', p:350000,  ghi:'BH 5 năm · miễn phí in mẫu hàm'},
-    {g:'Phục hình sứ trên cùi răng', n:'Sứ Zirconia UNC',             d:'răng', p:400000,  ghi:'BH 10 năm · miễn phí in mẫu hàm'},
+    {g:'Phục hình sứ trên cùi răng', n:'Sứ Zirconia UNC',             d:'răng', p:480000,  ghi:'BH 10 năm · miễn phí in mẫu hàm · giá KM, niêm yết 500.000'},
     {g:'Phục hình sứ trên cùi răng', n:'Sứ Zirconia DDBIO',           d:'răng', p:550000,  ghi:'BH 10 năm · miễn phí in mẫu hàm'},
     {g:'Phục hình sứ trên cùi răng', n:'Sứ Zirconia Cercon',          d:'răng', p:800000,  ghi:'BH 10 năm · miễn phí in mẫu hàm'},
     {g:'Phục hình sứ trên cùi răng', n:'Sứ Zirconia Ceramill ZOLID',  d:'răng', p:900000,  ghi:'BH 10 năm · miễn phí in mẫu hàm'},
@@ -79,37 +79,38 @@ const BANG_LAB = {
   ],
 
   /* ---------- VN PREMIUM LAB (Cần Thơ) ----------
-     Bảng gốc có thêm cột KM (giá khuyến mãi) thấp hơn giá niêm yết. Ở đây lấy GIÁ NIÊM
-     YẾT làm đơn giá và ghi giá KM vào chú thích — khuyến mãi có thời hạn, lấy làm giá
-     chuẩn thì hết đợt là sai mà không ai để ý.
+     Bảng gốc có hai cột giá: niêm yết và KM (khuyến mãi). Phòng khám đang trả theo
+     GIÁ KM nên lấy cột đó làm đơn giá, giá niêm yết ghi vào chú thích để đối chiếu.
+     Món nào bảng gốc không có KM thì dùng luôn giá niêm yết.
+     Hết đợt khuyến mãi nhớ sửa lại — không có gì tự nhắc.
      Phần PHỤC HÌNH THÁO LẮP của bảng này CHƯA NẠP: trong tệp PDF tên món và giá nằm
      rời nhau, ghép lại không chắc đúng cặp nào với cặp nào. */
   'VN Premium Lab': [
-    {g:'Sứ không kim loại', n:'Sứ Zirconia UNC',            d:'răng', p:500000,  ghi:'Hàn Quốc · BH 10 năm · KM 480.000'},
-    {g:'Sứ không kim loại', n:'Sứ Zirconia Hàn',            d:'răng', p:450000,  ghi:'Hàn Quốc · BH 10 năm · KM 420.000'},
-    {g:'Sứ không kim loại', n:'Sứ Zirconia AIDITE',         d:'răng', p:400000,  ghi:'Trung Quốc · BH 7 năm · KM 350.000'},
-    {g:'Sứ không kim loại', n:'Sứ multilayer AIDITE AZIR',  d:'răng', p:500000,  ghi:'đa lớp, không đắp sứ · BH 7 năm · KM 400.000'},
-    {g:'Sứ không kim loại', n:'Sứ Zirconia LAVA 3M',        d:'răng', p:1150000, ghi:'Mỹ · BH 15 năm · KM 1.050.000'},
+    {g:'Sứ không kim loại', n:'Sứ Zirconia UNC',            d:'răng', p:480000,  ghi:'Hàn Quốc · BH 10 năm · giá KM, niêm yết 500.000'},
+    {g:'Sứ không kim loại', n:'Sứ Zirconia Hàn',            d:'răng', p:420000,  ghi:'Hàn Quốc · BH 10 năm · giá KM, niêm yết 450.000'},
+    {g:'Sứ không kim loại', n:'Sứ Zirconia AIDITE',         d:'răng', p:350000,  ghi:'Trung Quốc · BH 7 năm · giá KM, niêm yết 400.000'},
+    {g:'Sứ không kim loại', n:'Sứ multilayer AIDITE AZIR',  d:'răng', p:400000,  ghi:'đa lớp, không đắp sứ · BH 7 năm · giá KM, niêm yết 500.000'},
+    {g:'Sứ không kim loại', n:'Sứ Zirconia LAVA 3M',        d:'răng', p:1050000, ghi:'Mỹ · BH 15 năm · giá KM, niêm yết 1.150.000'},
     {g:'Sứ không kim loại', n:'Sứ SAGEMAX',                 d:'răng', p:1000000, ghi:'Mỹ · BH 15 năm'},
     {g:'Sứ không kim loại', n:'Sứ ZOLID',                   d:'răng', p:900000,  ghi:'Áo · BH 10 năm'},
-    {g:'Sứ không kim loại', n:'Sứ CERCON HT',               d:'răng', p:900000,  ghi:'Đức · BH 10 năm · KM 800.000'},
-    {g:'Sứ không kim loại', n:'Sứ DDBIO',                   d:'răng', p:600000,  ghi:'Đức · BH 10 năm · KM 550.000'},
+    {g:'Sứ không kim loại', n:'Sứ CERCON HT',               d:'răng', p:800000,  ghi:'Đức · BH 10 năm · giá KM, niêm yết 900.000'},
+    {g:'Sứ không kim loại', n:'Sứ DDBIO',                   d:'răng', p:550000,  ghi:'Đức · BH 10 năm · giá KM, niêm yết 600.000'},
     {g:'Sứ không kim loại', n:'Sứ multilayer DDBIO',        d:'răng', p:700000,  ghi:'Đức · đa lớp, không đắp sứ · BH 10 năm'},
     {g:'Sứ không kim loại', n:'Cùi giả Zirco',              d:'cái',  p:150000},
-    {g:'Mặt dán sứ', n:'Mặt dán sứ LISI',        d:'răng', p:1200000, ghi:'BH 10 năm · KM 800.000'},
-    {g:'Mặt dán sứ', n:'Mặt dán sứ EMAX',        d:'răng', p:1000000, ghi:'BH 10 năm · KM 700.000'},
-    {g:'Mặt dán sứ', n:'Mặt dán sứ AIDITE EZ',   d:'răng', p:800000,  ghi:'Zirconia · BH 7 năm · KM 600.000'},
+    {g:'Mặt dán sứ', n:'Mặt dán sứ LISI',        d:'răng', p:800000, ghi:'BH 10 năm · giá KM, niêm yết 1.200.000'},
+    {g:'Mặt dán sứ', n:'Mặt dán sứ EMAX',        d:'răng', p:700000, ghi:'BH 10 năm · giá KM, niêm yết 1.000.000'},
+    {g:'Mặt dán sứ', n:'Mặt dán sứ AIDITE EZ',   d:'răng', p:600000,  ghi:'Zirconia · BH 7 năm · giá KM, niêm yết 800.000'},
     {g:'Mặt dán sứ', n:'Endocrown Emax',         d:'răng', p:1000000, ghi:'BH 10 năm'},
-    {g:'Mặt dán sứ', n:'Sứ None Prep E.max',     d:'răng', p:1200000, ghi:'BH 10 năm · KM 1.000.000'},
-    {g:'Mặt dán sứ', n:'Inlay E.max',            d:'răng', p:650000,  ghi:'BH 10 năm · KM 600.000'},
-    {g:'Mặt dán sứ', n:'Onlay E.max',            d:'răng', p:650000,  ghi:'BH 10 năm · KM 600.000'},
+    {g:'Mặt dán sứ', n:'Sứ None Prep E.max',     d:'răng', p:1000000, ghi:'BH 10 năm · giá KM, niêm yết 1.200.000'},
+    {g:'Mặt dán sứ', n:'Inlay E.max',            d:'răng', p:600000,  ghi:'BH 10 năm · giá KM, niêm yết 650.000'},
+    {g:'Mặt dán sứ', n:'Onlay E.max',            d:'răng', p:600000,  ghi:'BH 10 năm · giá KM, niêm yết 650.000'},
     {g:'Sứ sườn hợp kim', n:'Crom - Coban',  d:'răng', p:380000, ghi:'BH 5 năm'},
     {g:'Sứ sườn hợp kim', n:'Sứ TiTan',      d:'răng', p:250000, ghi:'BH 3 năm'},
-    {g:'Sứ sườn hợp kim', n:'Sứ Niken Crom', d:'răng', p:195000, ghi:'BH 2 năm · KM 180.000'},
-    {g:'Trên Implant', n:'Sứ Kim Loại (Implant)',   d:'răng', p:600000,  ghi:'BH 2 năm · KM 450.000'},
-    {g:'Trên Implant', n:'Sứ TiTan (Implant)',      d:'răng', p:700000,  ghi:'BH 3 năm · KM 550.000'},
-    {g:'Trên Implant', n:'Sứ Crom - Coban (Implant)', d:'răng', p:900000, ghi:'BH 5 năm · KM 650.000'},
-    {g:'Trên Implant', n:'Sứ Zirconia (Implant)',   d:'răng', p:950000,  ghi:'BH 10 năm · KM 850.000'},
+    {g:'Sứ sườn hợp kim', n:'Sứ Niken Crom', d:'răng', p:180000, ghi:'BH 2 năm · giá KM, niêm yết 195.000'},
+    {g:'Trên Implant', n:'Sứ Kim Loại (Implant)',   d:'răng', p:450000,  ghi:'BH 2 năm · giá KM, niêm yết 600.000'},
+    {g:'Trên Implant', n:'Sứ TiTan (Implant)',      d:'răng', p:550000,  ghi:'BH 3 năm · giá KM, niêm yết 700.000'},
+    {g:'Trên Implant', n:'Sứ Crom - Coban (Implant)', d:'răng', p:650000, ghi:'BH 5 năm · giá KM, niêm yết 900.000'},
+    {g:'Trên Implant', n:'Sứ Zirconia (Implant)',   d:'răng', p:850000,  ghi:'BH 10 năm · giá KM, niêm yết 950.000'},
     {g:'Trên Implant', n:'Sứ Cercon HT (Implant)',  d:'răng', p:1190000, ghi:'BH 10 năm'},
     {g:'Trên Implant', n:'Sứ Lava (Implant)',       d:'răng', p:1290000, ghi:'BH 15 năm'},
     {g:'Customized', n:'Customize Abutment Titan', d:'cái', p:700000, ghi:'Hàn Quốc · chưa gồm Premill'},
@@ -151,8 +152,11 @@ const BANG_LAB = {
     {g:'Sứ hợp kim', n:'Cr-Co',         d:'răng', p:350000, ghi:'Mỹ · BH 7 năm'},
     {g:'Sứ hợp kim', n:'Full Cr-Co',    d:'răng', p:300000, ghi:'Mỹ · BH 7 năm'},
     {g:'Mặt dán', n:'Emax Press',               d:'răng', p:1000000, ghi:'Đức · BH 10 năm'},
-    {g:'Mặt dán', n:'Lisi Press',               d:'răng', p:1200000, ghi:'Nhật · BH 10 năm'},
-    {g:'Mặt dán', n:'Celtra Press',             d:'răng', p:1400000, ghi:'Đức · BH 10 năm'},
+    /* Thêm "(mặt dán)" vào tên: Ozean có Lisi Press và Celtra Press ở CẢ hai nhóm răng
+       toàn sứ và mặt dán, giá khác nhau. Tra giá theo tên nên trùng tên là luôn lấy
+       nhầm dòng đầu — mặt dán Celtra 1.400.000 sẽ bị tính thành 1.500.000. */
+    {g:'Mặt dán', n:'Lisi Press (mặt dán)',     d:'răng', p:1200000, ghi:'Nhật · BH 10 năm'},
+    {g:'Mặt dán', n:'Celtra Press (mặt dán)',   d:'răng', p:1400000, ghi:'Đức · BH 10 năm'},
     {g:'Mặt dán', n:'Non-Prep (không mài)',     d:'răng', p:1200000, ghi:'Đức · BH 10 năm · đắp sứ thủy tinh trực tiếp'},
     {g:'Khác', n:'Inlay, Onlay sứ ép',        d:'răng', p:600000, ghi:'Đức · BH 7 năm'},
     {g:'Khác', n:'Cùi giả Zirconia / Sứ ép',  d:'răng', p:400000, ghi:'Đức · BH 7 năm'},
