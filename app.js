@@ -3361,10 +3361,8 @@ const Treat = {
     }).join('');
     const dem = {};
     Object.values(td).forEach(x => dem[x] = (dem[x] || 0) + 1);
-    return `<div class="arch-lb"><span>Hàm trên · phải bệnh nhân</span><span>trái bệnh nhân</span></div>
-      <div class="arch" style="margin-bottom:10px">${hang(TEETH_UP.slice(0,8))}<span class="gap-mid"></span>${hang(TEETH_UP.slice(8))}</div>
+    return `<div class="arch" style="margin-bottom:10px">${hang(TEETH_UP.slice(0,8))}<span class="gap-mid"></span>${hang(TEETH_UP.slice(8))}</div>
       <div class="arch">${hang(TEETH_DN.slice(0,8))}<span class="gap-mid"></span>${hang(TEETH_DN.slice(8))}</div>
-      <div class="arch-lb"><span>Hàm dưới · phải bệnh nhân</span><span>trái bệnh nhân</span></div>
       <div class="legend" style="margin-top:12px">
         ${TIEN_DO.map(([t, k]) => `<span><i class="lg-${k}"></i>${t}${dem[t]?' ('+dem[t]+')':''}</span>`).join('')}
         <span><i class="lg-mutedp"></i>Báo giá${dem['Báo giá']?' ('+dem['Báo giá']+')':''}</span>
@@ -5425,10 +5423,8 @@ const Tooth = {
       ${soKia ? `<div class="note-block warn-block" style="margin-bottom:8px">Đã ghi <b>${soKia} răng</b>
         ở bộ ${bo==='sua'?'vĩnh viễn':'sữa'} — không hiện trên sơ đồ này.
         <button class="btn small" onclick="Tooth.doiBo('${bo==='sua'?'vv':'sua'}')">Xem bộ đó</button></div>` : ''}
-      <div class="arch-lb"><span>Hàm trên · phải bệnh nhân</span><span>trái bệnh nhân</span></div>
       <div class="arch" style="margin-bottom:10px">${hang(tren.slice(0,nua))}<span class="gap-mid"></span>${hang(tren.slice(nua))}</div>
-      <div class="arch">${hang(duoi.slice(0,nua))}<span class="gap-mid"></span>${hang(duoi.slice(nua))}</div>
-      <div class="arch-lb"><span>Hàm dưới · phải bệnh nhân</span><span>trái bệnh nhân</span></div>`;
+      <div class="arch">${hang(duoi.slice(0,nua))}<span class="gap-mid"></span>${hang(duoi.slice(nua))}</div>`;
   },
   /* Lưới chọn số răng cho các hộp thoại không gắn với sơ đồ của một khách cụ thể
      (vd: thêm dịch vụ vào kế hoạch). Bấm để chọn / bỏ chọn, có thể chọn nhiều răng. */
