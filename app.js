@@ -89,6 +89,13 @@ const LAB_TYPES = ['Mão sứ Zirconia','Mão sứ Titan','Mão toàn sứ Emax'
 const CHAIRS = ['Ghế 1','Ghế 2'];
 const TEETH_UP = [18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28];
 const TEETH_DN = [48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38];
+/* Bộ răng sữa theo FDI: phần tư 5 trên-phải, 6 trên-trái, 7 dưới-trái, 8 dưới-phải.
+   Mỗi phần tư 5 răng nên một hàm chỉ 10 răng thay vì 16.
+   Số răng sữa (51–85) không đụng số răng vĩnh viễn (11–48) nên hai bộ dùng chung được
+   một kho dữ liệu, không phải tách ra hay chuyển đổi gì. */
+const TEETH_UP_S = [55,54,53,52,51,61,62,63,64,65];
+const TEETH_DN_S = [85,84,83,82,81,71,72,73,74,75];
+const TEETH_ALL = TEETH_UP.concat(TEETH_DN, TEETH_UP_S, TEETH_DN_S);
 /* Tình trạng chính của một răng. Nội nha là ô tick riêng (nn) chứ không phải một
    trạng thái, vì răng đã nội nha rồi bọc sứ là chuyện thường ngày — gộp làm một
    thì mất thông tin. Các mặt sâu/trám để trong mảng `mat`. */
@@ -1804,7 +1811,7 @@ const Cust = {
         })() : ''}
         ${sauDT ? (() => {
           const co = [];
-          TEETH_UP.concat(TEETH_DN).forEach(n => {
+          TEETH_ALL.forEach(n => {
             const ls = Cust.lichSuRang(c, n).filter(x => x.loai === 'dv');
             if (ls.length) co.push({n, ls});
           });
@@ -2305,8 +2312,10 @@ const Cust = {
   /* Cả dải răng giữa hai lần bấm, tính theo thứ tự in trên sơ đồ chứ không theo số —
        số răng nhảy quãng giữa hai phần hàm (18…11 rồi 21…28). */
   chonDai(tu, den){
-    const hang = Tooth.hamTren(tu) === Tooth.hamTren(den)
-      ? (Tooth.hamTren(tu) ? TEETH_UP : TEETH_DN) : null;
+    /* Phải cùng một hàng in trên sơ đồ: khác hàm, hay một bên răng sữa một bên răng
+       vĩnh viễn, thì không có "cả dải" nào cả. */
+    const h1 = Tooth.hangCua(tu), h2 = Tooth.hangCua(den);
+    const hang = (h1 && h1 === h2) ? h1 : null;
     if (!hang) { this.chonRang(den); return; }
     let a = hang.indexOf(tu), b = hang.indexOf(den);
     if (a < 0 || b < 0) { this.chonRang(den); return; }
@@ -5255,8 +5264,21 @@ Object.assign(HoSo, {
    hàm trên / hàm dưới, đúng như nhìn vào miệng bệnh nhân. */
 
 const Tooth = {
-  hamTren(n){ const q = Math.floor(n/10); return q === 1 || q === 2; },
-  benPhai(n){ const q = Math.floor(n/10); return q === 1 || q === 4; },   /* nửa trái sơ đồ */
+  /* Răng sữa nằm ở phần tư 5–8: 5 trên-phải, 6 trên-trái, 7 dưới-trái, 8 dưới-phải.
+     Thiếu hai phần tư trên ở đây thì răng sữa hàm trên bị vẽ lộn mặt ngoài với mặt
+     trong, và phần tóm tắt ghi nhầm thành hàm dưới. */
+  hamTren(n){ const q = Math.floor(n/10); return q === 1 || q === 2 || q === 5 || q === 6; },
+  benPhai(n){ const q = Math.floor(n/10); return q === 1 || q === 4 || q === 5 || q === 8; },   /* nửa trái sơ đồ */
+  laSua(n){ const q = Math.floor(n/10); return q >= 5 && q <= 8; },
+  /* Bộ đang hiển thị. Mặc định răng vĩnh viễn vì người lớn chiếm phần lớn ca. */
+  bo(){ return App.state.boRang === 'sua' ? 'sua' : 'vv'; },
+  cungTren(){ return this.bo() === 'sua' ? TEETH_UP_S : TEETH_UP; },
+  cungDuoi(){ return this.bo() === 'sua' ? TEETH_DN_S : TEETH_DN; },
+  doiBo(b){ App.state.boRang = b; App.render(); },
+  /* Hàng in trên sơ đồ có chứa răng này — dùng cho việc chọn cả dải giữa hai lần bấm.
+     Tìm trong cả hai bộ chứ không theo bộ đang hiện, vì răng đã ghi từ trước vẫn phải
+     chọn được. */
+  hangCua(n){ return [TEETH_UP, TEETH_DN, TEETH_UP_S, TEETH_DN_S].find(h => h.includes(n)) || null; },
   /* Vùng nào trên ô ứng với mặt nào của răng này */
   ban(n){
     const tren = this.hamTren(n), phai = this.benPhai(n);
@@ -5389,9 +5411,23 @@ const Tooth = {
         <span class="tooth-svg">${this.svg(n,t)}${this.deLen(n,t)}</span>
         <span class="tooth-no num">${n}</span></button>`;
     }).join('');
-    return `<div class="arch-lb"><span>Hàm trên · phải bệnh nhân</span><span>trái bệnh nhân</span></div>
-      <div class="arch" style="margin-bottom:10px">${hang(TEETH_UP.slice(0,8))}<span class="gap-mid"></span>${hang(TEETH_UP.slice(8))}</div>
-      <div class="arch">${hang(TEETH_DN.slice(0,8))}<span class="gap-mid"></span>${hang(TEETH_DN.slice(8))}</div>
+    const bo = this.bo(), nua = bo === 'sua' ? 5 : 8;
+    const tren = this.cungTren(), duoi = this.cungDuoi();
+    /* Răng đã ghi ở bộ KIA vẫn còn nguyên trong hồ sơ nhưng không hiện trên sơ đồ này.
+       Không nói ra thì nhìn vào tưởng mất dữ liệu, hoặc tệ hơn là ghi đè lên. */
+    const boKia = bo === 'sua' ? TEETH_UP.concat(TEETH_DN) : TEETH_UP_S.concat(TEETH_DN_S);
+    const soKia = boKia.filter(n => { const t = kho[n];
+      return t && (t.s !== 'ok' || t.nn || t.loDo || t.sung || (t.mat||[]).length || t.dichVu); }).length;
+    return `<div class="subtabs" style="margin-bottom:8px">
+        <button class="subtab ${bo==='vv'?'active':''}" onclick="Tooth.doiBo('vv')">Răng vĩnh viễn</button>
+        <button class="subtab ${bo==='sua'?'active':''}" onclick="Tooth.doiBo('sua')">Răng sữa</button>
+      </div>
+      ${soKia ? `<div class="note-block warn-block" style="margin-bottom:8px">Đã ghi <b>${soKia} răng</b>
+        ở bộ ${bo==='sua'?'vĩnh viễn':'sữa'} — không hiện trên sơ đồ này.
+        <button class="btn small" onclick="Tooth.doiBo('${bo==='sua'?'vv':'sua'}')">Xem bộ đó</button></div>` : ''}
+      <div class="arch-lb"><span>Hàm trên · phải bệnh nhân</span><span>trái bệnh nhân</span></div>
+      <div class="arch" style="margin-bottom:10px">${hang(tren.slice(0,nua))}<span class="gap-mid"></span>${hang(tren.slice(nua))}</div>
+      <div class="arch">${hang(duoi.slice(0,nua))}<span class="gap-mid"></span>${hang(duoi.slice(nua))}</div>
       <div class="arch-lb"><span>Hàm dưới · phải bệnh nhân</span><span>trái bệnh nhân</span></div>`;
   },
   /* Lưới chọn số răng cho các hộp thoại không gắn với sơ đồ của một khách cụ thể
@@ -5404,13 +5440,34 @@ const Tooth = {
       onclick="Tooth.chonSo(this,'${ten}')"
       style="flex:none;min-width:0;width:30px;padding:5px 0;font-size:12px">${n}</button>`).join('');
     const d = 'display:flex;flex-wrap:nowrap;gap:3px;align-items:center;margin:4px 0;min-width:max-content';
+    const cung = (tren, duoi, nua) =>
+      `<div style="${d}">${hang(tren.slice(0,nua))}<span style="flex:none;width:12px"></span>${hang(tren.slice(nua))}</div>
+       <div style="${d}">${hang(duoi.slice(0,nua))}<span style="flex:none;width:12px"></span>${hang(duoi.slice(nua))}</div>`;
+    const bo = Tooth.bo();
+    /* Vẽ sẵn CẢ HAI bộ rồi ẩn một bộ, chứ không vẽ lại khi bấm. Lưới này nằm trong hộp
+       thoại, mà App.render() chỉ vẽ lại màn chính nên bấm sẽ không ăn; còn vẽ lại cả
+       hộp thoại thì bay mất chẩn đoán và dịch vụ đang gõ dở ở dưới.
+       Ẩn/hiện cũng giữ nguyên răng đã chọn ở bộ kia — chọn R54 rồi đổi sang răng vĩnh
+       viễn thì R54 vẫn nằm trong danh sách, vì có ca đụng cả hai bộ. */
     return `<input type="hidden" name="${ten}" value="">
+      <div class="subtabs" style="margin-bottom:6px">
+        <button type="button" class="subtab ${bo==='vv'?'active':''}" data-bo="vv" onclick="Tooth.doiBoLuoi(this,'vv')">Răng vĩnh viễn</button>
+        <button type="button" class="subtab ${bo==='sua'?'active':''}" data-bo="sua" onclick="Tooth.doiBoLuoi(this,'sua')">Răng sữa</button>
+      </div>
       <div style="overflow-x:auto;max-width:100%">
-        <div style="${d}">${hang(TEETH_UP.slice(0,8))}<span style="flex:none;width:12px"></span>${hang(TEETH_UP.slice(8))}</div>
-        <div style="${d}">${hang(TEETH_DN.slice(0,8))}<span style="flex:none;width:12px"></span>${hang(TEETH_DN.slice(8))}</div>
+        <div data-bo="vv"${bo==='vv'?'':' style="display:none"'}>${cung(TEETH_UP, TEETH_DN, 8)}</div>
+        <div data-bo="sua"${bo==='sua'?'':' style="display:none"'}>${cung(TEETH_UP_S, TEETH_DN_S, 5)}</div>
       </div>
       <div class="combo-hint">Đang chọn: <b id="soRangDaChon">chưa chọn răng nào</b> —
         bấm lần nữa để bỏ chọn. Không chọn răng nào thì dịch vụ tính cho cả hàm.</div>`;
+  },
+  /* Đổi bộ ngay tại chỗ, không vẽ lại gì. Có ghi vào App.state để sơ đồ bên ngoài
+     lần vẽ sau cũng theo cùng một bộ. */
+  doiBoLuoi(btn, b){
+    App.state.boRang = b;
+    const hop = btn.closest('.f') || btn.closest('form') || document;
+    hop.querySelectorAll('.subtab[data-bo]').forEach(x => x.classList.toggle('active', x.dataset.bo === b));
+    hop.querySelectorAll('div[data-bo]').forEach(x => { x.style.display = x.dataset.bo === b ? '' : 'none'; });
   },
   chonSo(btn, ten){
     btn.classList.toggle('primary');
