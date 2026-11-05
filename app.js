@@ -7549,7 +7549,9 @@ const QT = {
         theo <button class="link-btn" onclick="QT.quyTacForm()">quy tắc này</button>.</div>
       <div class="form-actions" style="justify-content:flex-start;margin-bottom:12px;flex-wrap:wrap;gap:6px">
         <button class="btn primary" onclick="QT.qtForm()">${IC.plus} Thêm kỹ thuật</button>
-        <button class="btn" onclick="QT.napMau()">Nạp lại theo bảng tính lương</button></div>
+        <button class="btn" onclick="QT.napMau()">Nạp lại theo bảng tính lương</button>
+        ${(() => { const n = QT.soatCu().suaDuoc.length + QT.soatCu().tuDat.length;
+          return n ? `<button class="btn danger" onclick="QT.hopSoatCu()">Soát tỷ trọng (${n} công đoạn sai)</button>` : ''; })()}</div>
       ${this.ds().length ? '' : '<div class="note-block warn-block mb">Chưa có kỹ thuật nào. Bấm <b>Thêm kỹ thuật</b> để tạo, không thì không tính được hoa hồng theo công đoạn.</div>'}
       ${this.ds().map(q => `<div class="rx mb"><div class="rx-head">
           <b>${h(q.ten)}</b> <span class="sub-line">${q.truLab?'· trừ tiền lab trước':''}
@@ -7673,6 +7675,80 @@ const QT = {
   /* ---------- Nạp lại bảng gốc ----------
      Vòng nạp lúc mở app chỉ thêm kỹ thuật CÒN THIẾU, nên bản cũ đã nằm trong máy sẽ
      không tự đổi theo. Phải có nút bấm tay, và nói rõ cái gì bị ghi đè. */
+  /* ---------- Soát công đoạn còn ở dạng cũ ----------
+     Công đoạn chỉ có mỗi trường `p` là công đoạn CHƯA TỪNG được sửa kể từ khi tách
+     hai nhóm lương: buocSave() luôn ghi p10 và p30, không bao giờ ghi p. Nên `p` còn
+     sót lại tức là dữ liệu cũ của bản phần mềm đời trước.
+     Nguy ở chỗ pctCua() không thấy p10/p30 thì lấy thẳng `p` làm phần trăm ăn, mà con
+     số nằm trong `p` lại là TỶ TRỌNG. Phục hình sứ: Mài cùi tỷ trọng 30 đang được trả
+     thành 30% doanh thu ròng, trong khi bảng lương của phòng khám ghi 3%. */
+  dangCu(b){ return b && b.tien == null && b.p10 == null && b.p30 == null && b.p != null; },
+  mauCua(qid, bid){
+    const m = this.MAU.find(x => x.id === qid);
+    return m ? (m.buoc || []).find(x => x.b === bid) : null;
+  },
+  soatCu(){
+    const suaDuoc = [], tuDat = [];
+    (db.quyTrinh || []).forEach(q => (q.buoc || []).forEach(b => {
+      if (!this.dangCu(b)) return;
+      const m = this.mauCua(q.id, b.b);
+      (m ? suaDuoc : tuDat).push({q, b, m});
+    }));
+    return {suaDuoc, tuDat};
+  },
+  hopSoatCu(){
+    const {suaDuoc, tuDat} = this.soatCu();
+    if (!suaDuoc.length && !tuDat.length) {
+      App.modal('Không có gì phải sửa', `
+        <div class="alert-line"><span class="alert-ico info">\u2713</span>
+          <div>Mọi công đoạn đều đã có phần trăm riêng cho hai nhóm lương. Cột
+            <b>Tỷ trọng</b> nào còn trống chỉ là chưa ai điền, không ảnh hưởng tiền.</div></div>
+        <div class="form-actions"><button class="btn" onclick="App.closeModal()">Đóng</button></div>`);
+      return;
+    }
+    const hang = o => `<tr>
+      <td>${h(o.q.ten)}<br><span class="sub-line">${h(o.b.t)}</span></td>
+      <td class="r num" style="color:var(--danger)"><b>${o.b.p}%</b></td>
+      <td class="r num">${o.m ? o.m.p10 + '%' : '—'}</td>
+      <td class="r num">${o.m ? o.m.p30 + '%' : '—'}</td>
+      <td class="r num">${o.m && o.m.tt != null ? o.m.tt + '%' : '—'}</td></tr>`;
+    App.modal('Soát tỷ trọng và phần trăm hoa hồng', `
+      <div class="note-block warn-block">Những công đoạn dưới đây còn ở <b>dạng cũ</b>: chỉ có một mức chung,
+        chưa tách hai nhóm lương. Phần mềm đang lấy thẳng con số đó làm <b>phần trăm doanh thu được hưởng</b> —
+        nhưng con số đó vốn là <b>tỷ trọng</b>, nên đang trả cao gấp nhiều lần.
+        Cột đỏ là mức đang trả, ba cột sau là mức đúng theo
+        <b>BẢNG TÍNH LƯƠNG THEO %</b> của phòng khám.</div>
+      ${suaDuoc.length ? `<div class="tbl-wrap"><table><thead><tr>
+          <th>Kỹ thuật / công đoạn</th><th class="r">Đang trả</th>
+          <th class="r">Đúng · nhóm 10%</th><th class="r">Đúng · nhóm 30%</th><th class="r">Tỷ trọng</th>
+        </tr></thead><tbody>${suaDuoc.map(hang).join('')}</tbody></table></div>` : ''}
+      ${tuDat.length ? `<div class="note-block" style="margin-top:10px">
+        <b>${tuDat.length} công đoạn</b> không có trong bảng lương gốc (anh tự thêm) nên phần mềm
+        <b>không tự sửa</b> — phải tự đặt lại bằng nút Sửa:<br>
+        ${tuDat.map(o => '• ' + h(o.q.ten) + ' → ' + h(o.b.t) + ' (đang trả <b>' + o.b.p + '%</b>)').join('<br>')}</div>` : ''}
+      <div class="form-actions">
+        <button type="button" class="btn" onclick="App.closeModal()">Để sau</button>
+        ${suaDuoc.length ? `<button class="btn primary" onclick="QT.suaCu()">Sửa ${suaDuoc.length} công đoạn theo bảng lương</button>` : ''}
+      </div>`);
+  },
+  suaCu(){
+    if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới sửa được'); return; }
+    const {suaDuoc} = this.soatCu();
+    suaDuoc.forEach(({b, m}) => {
+      delete b.p;
+      if (m.tt != null) b.tt = m.tt;
+      b.p10 = m.p10; b.p30 = m.p30;
+    });
+    save(); App.render();
+    App.modal('Đã sửa xong', `
+      <div class="alert-line"><span class="alert-ico info">\u2713</span>
+        <div>Đã đưa <b>${suaDuoc.length}</b> công đoạn về đúng bảng lương của phòng khám,
+          và điền luôn cột <b>Tỷ trọng</b>.</div></div>
+      <div class="note-block" style="margin-top:10px">Hoa hồng các tháng trước được tính lại theo mức mới
+        ngay khi mở bảng lương. Kỳ lương nào đã <b>chốt</b> thì giữ nguyên con số đã chốt.</div>
+      <div class="form-actions"><button class="btn primary" onclick="App.closeModal();QT.bang()">Xem lại bảng</button></div>`);
+  },
+
   napMau(){
     if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới nạp được'); return; }
     const co = this.MAU.filter(m => (db.quyTrinh||[]).some(q => q.id === m.id)).length;
