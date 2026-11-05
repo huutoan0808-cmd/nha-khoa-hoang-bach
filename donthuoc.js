@@ -280,8 +280,11 @@ Object.assign(DT, {
     if (!c) { App.toast('Chưa chọn khách hàng'); return; }
     const tenThuoc = this.dsThuoc().map(t => ({t: t.ten + ' — ' + t.hoatChat + (t.ma ? '' : ' (chưa có mã)'), s: t.ten}));
     const dong = i => `<div class="form-grid full" style="grid-template-columns:3fr 1fr 1fr 3fr;gap:6px;margin-bottom:4px">
+      ${/* Combo gọi onpick như MỘT HÀM: r.onpick(v, inp). Trước đây chỗ này truyền một
+            CHUỖI nên chọn thuốc từ danh sách gợi ý là ném lỗi và ô đơn vị không tự điền
+            — gõ tay thì không sao nên lỗi lọt qua. */''}
       <div class="f">${Combo.html('cbDT' + i, 'ten' + i, '', tenThuoc, 'Thuốc ' + (i + 1),
-        'DT.chonThuoc(' + i + ',v)')}</div>
+        v => DT.chonThuoc(i, v))}</div>
       <div class="f"><input name="sl${i}" type="number" min="0" step="1" placeholder="SL"></div>
       <div class="f"><input name="dv${i}" id="dvDT${i}" placeholder="Đơn vị" readonly></div>
       <div class="f"><input name="dung${i}" placeholder="Cách dùng, liều, thời gian"></div></div>`;

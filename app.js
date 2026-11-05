@@ -8885,11 +8885,19 @@ const Lab = {
           'Gõ tên, số điện thoại hoặc mã KH', pickCustomerInto)}
         <input type="hidden" name="customerId" value="${h(l.customerId||'')}"></div>
       <div class="f full"><label>Lab</label>
-        ${Combo.html('cbLabName','labName', l.labName||'', LABS, 'Gõ tên lab', null, 'Lab mới thì cứ gõ tự do.')}</div>
+        ${Combo.html('cbLabName','labName', l.labName||'', BangLab.ten().concat(LABS), 'Gõ tên lab',
+          Lab.chonLab, 'Lab có sẵn bảng giá thì chọn xong tự áp giá. Lab khác cứ gõ tự do.')}</div>
       <div class="f"><label>Loại răng / phục hình</label>
-        ${Combo.html('cbLabType','type', l.type||'', LAB_TYPES, 'Gõ loại phục hình')}</div>
+        ${Combo.html('cbLabType','type', l.type||'', BangLab.goiY(l.labName), 'Gõ loại phục hình', Lab.chonLoai)}
+        <div class="combo-hint" id="labGhi">${h((BangLab.mon(l.labName, l.type)||{}).ghi || '')}</div></div>
       <div class="f"><label>Vị trí răng</label><input name="teeth" value="${h(l.teeth||'')}" placeholder="R36, R44–R46..."></div>
-      <div class="f"><label>Số lượng (đơn vị)</label><input type="number" name="qty" value="${l.qty||1}" min="1"></div>
+      <div class="f"><label>Số lượng (đơn vị)</label>
+        <input type="number" name="qty" value="${l.qty||1}" min="1" oninput="Lab.tinhTien()"></div>
+      <div class="f"><label>Đơn giá lab (đ)</label>
+        ${Tien.o('donGia', l.donGia || 0, 'oninput="Lab.tinhTien()"')}
+        <div class="combo-hint">Tự điền theo bảng giá của lab; sửa tay được nếu lab báo khác.</div></div>
+      <div class="f"><label>Thành tiền</label>
+        <div class="tooth-info" id="labTien" style="margin-top:0">${money((+l.donGia||0) * (+l.qty||1))}</div></div>
       <div class="f"><label>Ngày gởi</label><input type="date" name="sent" value="${h(l.sent||'')}" required></div>
       <div class="f"><label>Hẹn nhận về</label><input type="date" name="due" value="${h(l.due||'')}" required></div>
       <div class="f full"><label>Gắn với lịch hẹn khách (để cảnh báo)</label><select name="apptId"><option value="">— không —</option>
@@ -8900,12 +8908,47 @@ const Lab = {
         <button type="button" class="btn" onclick="App.closeModal()">Hủy</button><button class="btn primary">Lưu</button></div>
     </form>`);
   },
+  /* Đổi lab thì đổi luôn danh mục gợi ý của ô "Loại răng". Không vẽ lại cả hộp thoại
+     — làm vậy là bay mất khách hàng và ngày tháng đang điền; chỉ thay danh sách gợi ý
+     đã đăng ký của ô đó. Combo gọi onpick như một hàm trần nên ở đây phải gọi Lab.
+     chứ không dùng this. */
+  chonLab(v){
+    const r = Combo.reg['cbLabType'];
+    if (r) r.opts = BangLab.goiY(v);
+    const f = document.getElementById('cbLabType');
+    const ten = f ? (f.querySelector('input')||{}).value : '';
+    Lab.apGia(v, ten);
+  },
+  chonLoai(v){
+    const f = document.getElementById('cbLabName');
+    Lab.apGia(f ? (f.querySelector('input')||{}).value : '', v);
+  },
+  /* Điền đơn giá theo bảng của lab. Lab không có bảng giá, hoặc món không có trong
+     bảng, thì GIỮ NGUYÊN số đang có — đừng xoá về 0, vì có thể quản lý vừa gõ tay. */
+  apGia(lab, ten){
+    const m = BangLab.mon(lab, ten);
+    const ghi = document.getElementById('labGhi');
+    if (ghi) ghi.textContent = m ? (m.ghi || '') : '';
+    if (m) {
+      const o = document.querySelector('[name="donGia"]');
+      if (o) { o.value = Tien.dinh(String(m.p)); }
+    }
+    Lab.tinhTien();
+  },
+  tinhTien(){
+    const g = num((document.querySelector('[name="donGia"]')||{}).value);
+    const sl = num((document.querySelector('[name="qty"]')||{}).value) || 1;
+    const o = document.getElementById('labTien');
+    if (o) o.textContent = money(g * sl);
+  },
   save(ev, id){
     ev.preventDefault();
     const d = Object.fromEntries(new FormData(ev.target).entries());
     if (!d.customerId) { App.toast('Hãy chọn khách hàng từ danh sách gợi ý'); return; }
     delete d.customerName;
     d.qty = num(d.qty)||1;
+    d.donGia = num(d.donGia) || 0;
+    d.thanhTien = d.donGia * d.qty;
     if (id) Object.assign(db.labs.find(x=>x.id===id), d);
     else db.labs.push(Object.assign({id:uid(), received:''}, d));
     if (d.apptId) { const a = db.appointments.find(x=>x.id===d.apptId); if (a) a.labOrderId = id || db.labs[db.labs.length-1].id; }
