@@ -4507,6 +4507,9 @@ const HoSo = {
         || (oB && oB.checked ? (oB.dataset.nhan || '') : '');
       delete d[n + 'Tick']; delete d[n + 'Khac']; delete d[n + 'Khong']; delete d[n + 'Bat'];
     });
+    /* Bảng diễn biến của phiếu theo dõi thuộc về hồ sơ khách, không thuộc phiếu */
+    let themDong = 0;
+    if (k === 'theodoi') themDong = this.ghiDienBien(c, d);
     if (d.chanDoan != null) d.chanDoan = icdCode(d.chanDoan);
     if (d.chanDoanKem != null) d.chanDoanKem = icdCode(d.chanDoanKem);
     d._at = todayISO();
@@ -4522,7 +4525,7 @@ const HoSo = {
       ep._up = Date.now();
     }
     save(); App.closeModal(); App.render();
-    App.toast('Đã lưu ' + this.ten(k) + ' ✓');
+    App.toast('Đã lưu ' + this.ten(k) + ' ✓' + (themDong ? ' · thêm ' + themDong + ' buổi' : ''));
     if (inLuon) this.in(k);
   },
   in(k){
@@ -4997,12 +5000,73 @@ Object.assign(HoSo, {
     <div class="f full"><label>Dặn dò — hướng điều trị tiếp theo (in cuối phiếu)</label>
       <textarea name="danDo" rows="2" placeholder="để trống thì lấy phần dặn dò trong bệnh án">${h(d.danDo || '')}</textarea>
       <div class="combo-hint">Bỏ trống thì phiếu tự lấy mục <b>Hướng điều trị và dặn dò</b> đã ghi trong Bệnh án ngoại trú.</div></div>
-    <div class="note-block full">Bảng <b>Thời gian · Diễn biến bệnh · Chỉ định</b> tự lấy từ mục
-      <b>Quá trình điều trị</b> của khách — mỗi buổi một dòng, có bác sĩ và người phụ.
-      Muốn thêm dòng thì bấm <b>Thêm diễn biến</b> ở hồ sơ khách; ở đó có sẵn nút điền nhanh theo mẫu.</div>
+    ${this.bangDienBien(c)}
     <div class="f full"><label>Số dòng trống chừa thêm để viết tay</label>
       <select name="dongTrong">${[0,2,4,6,8].map(n=>`<option${String(d.dongTrong)===String(n)?' selected':''}>${n}</option>`).join('')}</select></div>`;
   },
+  /* Bảng diễn biến ngay trong phiếu: sửa được, và nhập thêm được dòng mới.
+     Cột Thời gian, Diễn biến lấy từ mục Quá trình điều trị bên tab Điều trị; còn Chỉ
+     định và Dặn dò thì CHỈ nhập ở đây — hai ô đó đã bỏ khỏi tab Điều trị vì chúng là
+     việc của hồ sơ bệnh án, không phải việc ghi hằng ngày ở ghế.
+     Dòng nhập thêm được ghi thẳng vào Quá trình điều trị của khách chứ không cất
+     riêng cho phiếu này, để hai nơi không bao giờ nói hai chuyện khác nhau. */
+  SO_DONG_MOI: 3,
+  bangDienBien(c){
+    const ds = ((c.record || {}).dienBien || []).slice()
+      .sort((a, b) => (a.date || '') < (b.date || '') ? -1 : 1);
+    const oDai = (ten, v, ph) => `<textarea name="${ten}" rows="2" placeholder="${h(ph||'')}"
+      style="min-height:0">${h(v || '')}</textarea>`;
+    const cu = ds.map(v => {
+      const dv = v.treatmentId ? db.treatments.find(x => x.id === v.treatmentId) : null;
+      return `<tr>
+        <td style="width:118px"><input type="date" name="bb_${v.id}_date" value="${h(v.date || '')}"></td>
+        <td>${dv ? `<div class="sub-line">${h(dv.name)}${dv.tooth ? ' — R' + h(dv.tooth) : ''}</div>` : ''}
+          ${oDai('bb_' + v.id + '_db', v.db)}</td>
+        <td>${oDai('bb_' + v.id + '_xt', v.xt, 'Chỉ định — xử trí')}</td>
+        <td>${oDai('bb_' + v.id + '_dan', v.dan, 'Dặn dò')}</td></tr>`;
+    }).join('');
+    const moi = Array.from({length: this.SO_DONG_MOI}, (_, i) => `<tr>
+      <td><input type="date" name="bbm_${i}_date"></td>
+      <td>${oDai('bbm_' + i + '_db', '', 'Diễn biến bệnh')}</td>
+      <td>${oDai('bbm_' + i + '_xt', '', 'Chỉ định — xử trí')}</td>
+      <td>${oDai('bbm_' + i + '_dan', '', 'Dặn dò')}</td></tr>`).join('');
+    return `<div class="f full"><label>Thời gian · Diễn biến bệnh · Chỉ định</label>
+      <div class="tbl-wrap"><table style="min-width:720px">
+        <thead><tr><th style="width:118px">Thời gian</th><th>Diễn biến bệnh</th>
+          <th>Chỉ định — xử trí</th><th>Dặn dò</th></tr></thead>
+        <tbody>${cu || ''}${moi}</tbody></table></div>
+      <div class="combo-hint">${ds.length
+        ? `<b>${ds.length} buổi</b> lấy từ <b>Quá trình điều trị</b> — sửa ở đây là sửa luôn bên đó.`
+        : 'Chưa có buổi nào trong Quá trình điều trị.'}
+        Ba dòng trống cuối bảng để <b>nhập thêm</b>; dòng nào có chữ mới được ghi, bỏ trống thì thôi.</div></div>`;
+  },
+  /* Tách các ô của bảng diễn biến ra khỏi dữ liệu phiếu, ghi thẳng vào hồ sơ khách.
+     Để lẫn trong ep.phieu.theodoi thì cùng một nội dung nằm hai nơi, sửa một nơi là
+     lệch. Trả về số dòng vừa thêm. */
+  ghiDienBien(c, d){
+    const r = c.record || (c.record = {});
+    const ds = r.dienBien || (r.dienBien = []);
+    Object.keys(d).forEach(kk => {
+      const m = kk.match(/^bb_(.+)_(date|db|xt|dan)$/);
+      if (!m) return;
+      const v = ds.find(x => x.id === m[1]);
+      if (v) v[m[2]] = d[kk];
+      delete d[kk];
+    });
+    let them = 0;
+    for (let i = 0; i < this.SO_DONG_MOI; i++) {
+      const o = {date: d['bbm_' + i + '_date'], db: d['bbm_' + i + '_db'],
+                 xt: d['bbm_' + i + '_xt'], dan: d['bbm_' + i + '_dan']};
+      ['date', 'db', 'xt', 'dan'].forEach(x => delete d['bbm_' + i + '_' + x]);
+      /* Chỉ riêng ngày thì chưa phải một buổi — phải có chữ mới ghi */
+      if (!((o.db || '').trim() || (o.xt || '').trim() || (o.dan || '').trim())) continue;
+      ds.push(Object.assign({id: uid(), date: o.date || todayISO()}, o));
+      them++;
+    }
+    if (them) c._up = Date.now();
+    return them;
+  },
+
   p_theodoi(c, ep){
     const d = this.dl(ep, 'theodoi'), r = c.record || {};
     const ds = (r.dienBien||[]).slice().sort((a,b)=>(a.date||'')<(b.date||'')?-1:1);
