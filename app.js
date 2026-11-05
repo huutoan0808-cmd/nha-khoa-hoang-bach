@@ -370,6 +370,20 @@ function migrate() {
     ]});
     cl.dtCoSo = 1;
   }
+  /* Bảng giá lab xếp lại theo đúng tên trong bảng giá dịch vụ. Đổi tên những dòng
+     tương đương và bổ sung loại còn thiếu, nhưng KHÔNG đụng tới giá quản lý đã chỉnh
+     tay — chỉ thêm giá 0 cho loại hoàn toàn mới, để quản lý tự điền. */
+  if (!cl.giaLabV2 && typeof GiaLab !== 'undefined') {
+    const ds = db.giaLab || (db.giaLab = []);
+    ds.forEach(x => { const t = GiaLab.DOI_TEN[x.n]; if (t) x.n = t; });
+    GiaLab.MAC_DINH.forEach(m => {
+      const co = ds.find(x => Combo.norm(x.n || '') === Combo.norm(m.n));
+      if (co) { co.g = m.g; if (!co.d) co.d = m.d; }
+      else ds.push(Object.assign({id: uid()}, m));
+    });
+    ds.forEach(x => { if (!x.g) x.g = 'Khác'; });
+    cl.giaLabV2 = 1;
+  }
   /* Bỏ các dịch vụ còn chữ "nội nha" khỏi danh mục. Nhóm đã đổi tên thành "Điều trị
      tủy" từ trước, chỉ còn hai mục trong nhóm Trám răng sót lại cách gọi cũ.
      Chỉ dọn DANH MỤC để chọn từ nay về sau — hạng mục điều trị đã lập vẫn giữ nguyên
@@ -8717,28 +8731,61 @@ SCREENS.hr = () => {
    Trước đây mức tiền lab nằm cứng trong từng quy trình, muốn đổi phải sửa mã.
    Nay để thành một bảng giá riêng, quản lý tự sửa trong tab Cài đặt. */
 const GiaLab = {
-  /* Chép từ Bảng 7 "TIỀN LAB — TRỪ RA TRƯỚC KHI TÍNH %" trong bảng tính lương của phòng khám */
+  /* Giá gốc chép từ Bảng 7 "TIỀN LAB — TRỪ RA TRƯỚC KHI TÍNH %" trong bảng tính lương.
+     TÊN thì đặt ĐÚNG NHƯ TRONG BẢNG GIÁ DỊCH VỤ, không đặt tên riêng. Trước đây hai
+     bên gọi khác nhau — bán là "Răng toàn sứ Zirconia" mà lab ghi "Sứ Zirconia",
+     bán "Răng tháo lắp nhựa — Nhật" mà lab ghi "RTL Nhật" — nên nhìn hai bảng cạnh
+     nhau không biết dòng nào ăn với dòng nào, và mấy dòng na ná nhau rất dễ bấm nhầm.
+
+     p = 0 nghĩa là CHƯA BIẾT giá lab, không phải lab làm miễn phí. Tiền lab bị trừ ra
+     trước khi tính hoa hồng nên đặt đại một con số là sai lương cả phòng khám — để 0
+     và đánh dấu rõ cho quản lý điền. */
   MAC_DINH: [
-    {n:'Sứ kim loại',               d:'răng', p:180000},
-    {n:'Sứ Titan',                  d:'răng', p:280000},
-    {n:'Sứ Zirconia',               d:'răng', p:600000},
-    {n:'Sứ DDbio',                  d:'răng', p:700000},
-    {n:'Sứ Cercon',                 d:'răng', p:1000000},
-    {n:'Sứ Lava 3M',                d:'răng', p:1400000},
-    {n:'Veneer',                    d:'răng', p:1200000},
-    {n:'Cùi giả Zirconia',          d:'răng', p:400000},
-    {n:'RTL Nhật',                  d:'răng', p:50000},
-    {n:'RTL Mỹ',                    d:'răng', p:90000},
-    {n:'RTL Composite',             d:'răng', p:120000},
-    {n:'RTL Excellent',             d:'răng', p:250000},
-    {n:'Chốt bi Rhein83 (Cetec)',   d:'cái',  p:1200000},
-    {n:'Khung liên kết (Ozean)',    d:'cái',  p:600000},
-    {n:'Mắc cài bi (Ozean)',        d:'cái',  p:1500000},
-    {n:'Mắc cài đơn (Ozean)',       d:'cái',  p:400000},
-    {n:'Lưới',                      d:'cái',  p:100000},
-    {n:'Móc dẻo',                   d:'cái',  p:150000},
-    {n:'Hàm khung titan',           d:'hàm',  p:400000},
+    /* --- Phục hình sứ --- */
+    {g:'Phục hình sứ', n:'Răng toàn sứ Zirconia',        d:'răng', p:600000},
+    {g:'Phục hình sứ', n:'Răng toàn sứ DDBio',           d:'răng', p:700000},
+    {g:'Phục hình sứ', n:'Răng toàn sứ Cercon',          d:'răng', p:1000000},
+    {g:'Phục hình sứ', n:'Răng toàn sứ Lava',            d:'răng', p:1400000},
+    {g:'Phục hình sứ', n:'Răng toàn sứ Orodent',         d:'răng', p:0},
+    {g:'Phục hình sứ', n:'Răng sứ kim loại thường',      d:'răng', p:180000},
+    {g:'Phục hình sứ', n:'Răng sứ Titan',                d:'răng', p:280000},
+    {g:'Phục hình sứ', n:'Răng sứ Chrome - Coban',       d:'răng', p:0},
+    {g:'Phục hình sứ', n:'Mặt dán sứ Veneer Emax Press', d:'răng', p:1200000},
+    {g:'Phục hình sứ', n:'Mặt dán sứ Veneer Lisi Press', d:'răng', p:0},
+    {g:'Phục hình sứ', n:'Endocrown',                    d:'răng', p:0},
+    {g:'Phục hình sứ', n:'Inlay / Onlay Emax',           d:'răng', p:0},
+    {g:'Phục hình sứ', n:'Cùi giả Zirconia',             d:'răng', p:400000},
+    {g:'Phục hình sứ', n:'Cùi giả kim loại',             d:'răng', p:0},
+    /* --- Phục hình tháo lắp --- */
+    {g:'Phục hình tháo lắp', n:'Răng tháo lắp nhựa — Nhật', d:'răng', p:50000},
+    {g:'Phục hình tháo lắp', n:'Răng tháo lắp nhựa — Mỹ',   d:'răng', p:90000},
+    {g:'Phục hình tháo lắp', n:'Răng tháo lắp nhựa — Đức',  d:'răng', p:0},
+    {g:'Phục hình tháo lắp', n:'Hàm khung hợp kim thường',  d:'cái',  p:0},
+    {g:'Phục hình tháo lắp', n:'Hàm khung hợp kim Titan',   d:'cái',  p:400000},
+    {g:'Phục hình tháo lắp', n:'Nhựa cường lực',            d:'cái',  p:0},
+    {g:'Phục hình tháo lắp', n:'Lưới',                      d:'cái',  p:100000},
+    {g:'Phục hình tháo lắp', n:'Móc dẻo',                   d:'cái',  p:150000},
+    {g:'Phục hình tháo lắp', n:'Mắc cài bi',                d:'cái',  p:1500000},
+    {g:'Phục hình tháo lắp', n:'Chốt bi Rhein83',           d:'cái',  p:1200000},
+    /* --- Khác: có trả cho lab nhưng không bán thành một dịch vụ riêng --- */
+    {g:'Khác', n:'Khung liên kết (Ozean)',   d:'cái',  p:600000},
+    {g:'Khác', n:'Mắc cài đơn (Ozean)',      d:'cái',  p:400000},
+    {g:'Khác', n:'Răng tháo lắp Composite',  d:'răng', p:120000},
+    {g:'Khác', n:'Răng tháo lắp Excellent',  d:'răng', p:250000},
   ],
+  NHOM: ['Phục hình sứ', 'Phục hình tháo lắp', 'Khác'],
+  /* Tên cũ -> tên mới, để máy đã dùng không mất giá đã chỉnh tay */
+  DOI_TEN: {
+    'Sứ kim loại': 'Răng sứ kim loại thường', 'Sứ Titan': 'Răng sứ Titan',
+    'Sứ Zirconia': 'Răng toàn sứ Zirconia',   'Sứ DDbio': 'Răng toàn sứ DDBio',
+    'Sứ Cercon': 'Răng toàn sứ Cercon',       'Sứ Lava 3M': 'Răng toàn sứ Lava',
+    'Veneer': 'Mặt dán sứ Veneer Emax Press',
+    'RTL Nhật': 'Răng tháo lắp nhựa — Nhật',  'RTL Mỹ': 'Răng tháo lắp nhựa — Mỹ',
+    'RTL Composite': 'Răng tháo lắp Composite', 'RTL Excellent': 'Răng tháo lắp Excellent',
+    'Chốt bi Rhein83 (Cetec)': 'Chốt bi Rhein83',
+    'Mắc cài bi (Ozean)': 'Mắc cài bi',
+    'Hàm khung titan': 'Hàm khung hợp kim Titan',
+  },
   ds(){
     if (!db.giaLab || !db.giaLab.length) db.giaLab = this.MAC_DINH.map(x => Object.assign({id: uid()}, x));
     return db.giaLab;
@@ -8747,15 +8794,30 @@ const GiaLab = {
   goiY(){ return this.ds().map(x => [x.n, +x.p || 0]); },
   bang(){
     const sua = Perm.can('caidat');
-    const rows = this.ds().map(x => `<tr>
-      <td>${sua ? `<input value="${h(x.n)}" onchange="GiaLab.sua('${x.id}','n',this.value)">` : h(x.n)}</td>
+    const ds = this.ds();
+    const dong = x => `<tr>
+      <td>${sua ? `<input value="${h(x.n)}" onchange="GiaLab.sua('${x.id}','n',this.value)">` : h(x.n)}
+        ${!(+x.p) ? '<span class="pill warn">chưa có giá</span>' : ''}</td>
       <td style="width:110px">${sua ? `<input value="${h(x.d||'')}" onchange="GiaLab.sua('${x.id}','d',this.value)">` : h(x.d||'')}</td>
       <td class="r" style="width:150px">${sua ? Tien.o('', x.p, `onchange="GiaLab.sua('${x.id}','p',this.value)"`) : money(x.p)}</td>
-      <td style="width:56px">${sua ? `<button class="btn small danger" onclick="GiaLab.xoa('${x.id}')">Xóa</button>` : ''}</td></tr>`).join('');
+      <td style="width:56px">${sua ? `<button class="btn small danger" onclick="GiaLab.xoa('${x.id}')">Xóa</button>` : ''}</td></tr>`;
+    /* Xếp theo nhóm đúng như bảng giá dịch vụ; dòng tự thêm chưa có nhóm dồn xuống cuối */
+    const nhom = this.NHOM.map(g => ({g, ds: ds.filter(x => x.g === g)}))
+      .concat([{g: '(chưa xếp nhóm)', ds: ds.filter(x => !this.NHOM.includes(x.g))}])
+      .filter(x => x.ds.length);
+    const rows = nhom.map(({g, ds: dsg}) => `
+      <tr><td colspan="4" style="background:var(--surface2);font-weight:700">${h(g)}
+        <span class="sub-line">· ${dsg.length} loại</span></td></tr>
+      ${dsg.map(dong).join('')}`).join('');
+    const thieu = ds.filter(x => !(+x.p)).length;
     App.modal('Bảng giá gia công răng sứ (lab)', `
       <div class="note-block mb">Đây là <b>tiền trả cho lab</b>, không phải giá bán cho khách.
         Khi tính hoa hồng phục hình, phần mềm <b>trừ tiền lab trước rồi mới tính %</b> —
-        mức ở đây hiện ra thành nút bấm nhanh trong bảng công đoạn.</div>
+        mức ở đây hiện ra thành nút bấm nhanh trong bảng công đoạn.<br>
+        Tên đặt <b>đúng như trong bảng giá dịch vụ</b> để nhìn là biết dòng nào ăn với dòng nào.</div>
+      ${thieu ? `<div class="note-block warn-block mb"><b>${thieu} loại chưa có giá lab.</b>
+        Phần mềm để trống chứ không đặt đại, vì tiền lab bị trừ ra trước khi tính hoa hồng —
+        đặt sai là lệch lương cả phòng khám. Hỏi lab rồi điền vào.</div>` : ''}
       <div class="tbl-wrap"><table style="min-width:520px">
         <thead><tr><th>Loại gia công</th><th>Đơn vị</th><th class="r">Giá lab</th><th></th></tr></thead>
         <tbody>${rows || '<tr><td colspan="4" class="sub-line">Chưa có dòng nào.</td></tr>'}</tbody></table></div>
