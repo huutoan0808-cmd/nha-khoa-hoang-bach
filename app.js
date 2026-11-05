@@ -5439,10 +5439,9 @@ const Tooth = {
     const hang = ds => ds.map(n => `<button type="button" class="btn small chon-rang" data-n="${n}"
       onclick="Tooth.chonSo(this,'${ten}')"
       style="flex:none;min-width:0;width:30px;padding:5px 0;font-size:12px">${n}</button>`).join('');
-    const d = 'display:flex;flex-wrap:nowrap;gap:3px;align-items:center;margin:4px 0;min-width:max-content';
     const cung = (tren, duoi, nua) =>
-      `<div style="${d}">${hang(tren.slice(0,nua))}<span style="flex:none;width:12px"></span>${hang(tren.slice(nua))}</div>
-       <div style="${d}">${hang(duoi.slice(0,nua))}<span style="flex:none;width:12px"></span>${hang(duoi.slice(nua))}</div>`;
+      `<div class="hang-rang">${hang(tren.slice(0,nua))}<span style="flex:none;width:12px"></span>${hang(tren.slice(nua))}</div>
+       <div class="hang-rang">${hang(duoi.slice(0,nua))}<span style="flex:none;width:12px"></span>${hang(duoi.slice(nua))}</div>`;
     const bo = Tooth.bo();
     /* Vẽ sẵn CẢ HAI bộ rồi ẩn một bộ, chứ không vẽ lại khi bấm. Lưới này nằm trong hộp
        thoại, mà App.render() chỉ vẽ lại màn chính nên bấm sẽ không ăn; còn vẽ lại cả

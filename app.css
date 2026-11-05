@@ -280,6 +280,13 @@ input[type=checkbox],input[type=radio]{
 
 /* Sơ đồ răng */
 .arch{display:flex;gap:4px;justify-content:center;overflow-x:auto;padding:2px}
+/* Lưới chọn số răng trong hộp thoại. Ô chỉ rộng 30px mà .btn là flex không đặt
+   justify-content, nên chữ số bị dồn sát mép trái — phải canh giữa lại. */
+.chon-rang{justify-content:center}
+/* Hàng răng nằm giữa hộp thoại. min-width:max-content giữ cho 16 răng không rớt
+   xuống dòng; rộng hơn khung thì khung tự cuộn ngang. */
+.hang-rang{display:flex;flex-wrap:nowrap;justify-content:center;gap:3px;align-items:center;
+  margin:4px 0;min-width:max-content}
 .arch .gap-mid{width:12px;flex:none}
 /* Mỗi răng = ô 5 vùng mặt răng (SVG) + số răng bên dưới. Lớp ký hiệu (mất răng,
    răng sứ, implant, nội nha) vẽ chồng lên bằng SVG thứ hai đặt tuyệt đối. */
