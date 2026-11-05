@@ -776,13 +776,40 @@ const App = {
       `<button class="bnav-item ${rest.some(n=>n.id===this.cur)?'active':''}" onclick="App.openSheet()">${IC.more}<span>Thêm</span></button>`;
     $('#moreSheet').innerHTML = `<div class="sheet-grid">` + rest.map(n => `<button class="sheet-item ${n.id===this.cur?'active':''}" onclick="App.go('${n.id}')">${n.icon}<span>${n.label}</span></button>`).join('') + `</div>`;
     if (typeof CV !== 'undefined') { try { CV.veChuong(); } catch(e){} }
+    /* Giữ nguyên chỗ đang cuộn. Thay innerHTML làm trang rỗng đi trong chốc lát, trang
+       ngắn lại thì trình duyệt kéo luôn vị trí cuộn về 0 — sửa xong bấm lưu là văng
+       lên đầu, phải cuộn tìm lại chỗ cũ.
+       Chuyển tab thì KHÔNG giữ: go() tự cuộn lên đầu sau khi vẽ, đúng như mong đợi. */
+    const y = window.scrollY;
     $('#mainArea').innerHTML = SCREENS[this.cur]();
+    if (y) {
+      window.scrollTo({top: y});
+      /* Đặt lại lần nữa sau khi trình duyệt dựng xong khung: lần đầu trang có thể
+         chưa đủ cao để nhận đúng vị trí. */
+      requestAnimationFrame(() => { if (Math.abs(window.scrollY - y) > 2) window.scrollTo({top: y}); });
+    }
   },
   openSheet(){ $('#sheetBack').classList.add('show'); $('#moreSheet').classList.add('show'); },
   closeSheet(){ $('#sheetBack').classList.remove('show'); $('#moreSheet').classList.remove('show'); },
 
-  modal(title, bodyHTML){ $('#modalTitle').textContent = title; $('#modalBody').innerHTML = bodyHTML; $('#modalBack').classList.add('show'); },
-  closeModal(){ $('#modalBack').classList.remove('show'); },
+  /* Vị trí cuộn của từng hộp thoại, nhớ theo TIÊU ĐỀ.
+     Các bảng dài (bảng giá, quy trình & hoa hồng, bảng giá lab…) sửa xong là gọi lại
+     chính hàm dựng bảng, tức dựng lại cả hộp thoại — khung cuộn về 0, đang làm dòng
+     thứ 80 thì văng lên đầu. Nhớ theo tiêu đề thì đi vòng qua hộp thoại con rồi quay
+     lại vẫn đúng chỗ: Bảng giá → Sửa dịch vụ (mở ở đầu) → lưu → Bảng giá (về chỗ cũ).
+     Đóng hẳn hộp thoại thì xóa trí nhớ, lần mở sau bắt đầu từ đầu bảng. */
+  _cuon: {},
+  modal(title, bodyHTML){
+    const back = $('#modalBack'), oTieu = $('#modalTitle');
+    if (back.classList.contains('show') && oTieu.textContent) this._cuon[oTieu.textContent] = back.scrollTop;
+    oTieu.textContent = title;
+    $('#modalBody').innerHTML = bodyHTML;
+    back.classList.add('show');
+    const y = this._cuon[title] || 0;
+    back.scrollTop = y;
+    if (y) requestAnimationFrame(() => { if (Math.abs(back.scrollTop - y) > 2) back.scrollTop = y; });
+  },
+  closeModal(){ $('#modalBack').classList.remove('show'); this._cuon = {}; },
 
   toastT:null,
   toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(this.toastT); this.toastT = setTimeout(()=>t.classList.remove('show'), 2200); },
