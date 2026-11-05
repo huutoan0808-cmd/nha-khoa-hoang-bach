@@ -5510,18 +5510,71 @@ const Svc = {
      ở đó tên nhóm hiện bên phải làm chữ chồng lên nhau, đọc không ra. */
   goiYTen(){ return this.goiY().map(x => x.t); },
 
-  bang(q){
-    if (q != null) App.state.svcQ = q;
+  /* Danh sách đang hiện, đã lọc và xếp nhóm. Tách ra vì cả lúc vẽ bảng lẫn lúc bấm
+     "chọn cả nhóm" đều cần, và hai chỗ phải ra y hệt nhau. */
+  nhomLoc(){
     const tim = Combo.norm(App.state.svcQ || '');
-    const sua = Perm.can('caidat');
     const loc = ds => ds.filter(s => !tim || Combo.norm(s.name).includes(tim) || Combo.norm(s.group||'').includes(tim));
-    const theoNhom = NHOM_DV.map(g => ({g, ds: this.sapXep(loc(db.services.filter(s => s.group === g)))}))
+    return NHOM_DV.map(g => ({g, ds: this.sapXep(loc(db.services.filter(s => s.group === g)))}))
       .concat([{g:'(chưa xếp nhóm)', ds: this.sapXep(loc(db.services.filter(s => !NHOM_DV.includes(s.group))))}])
       .filter(x => x.ds.length);
+  },
+  /* Ô đã tick nằm ngoài DOM: gõ một phím trong ô tìm là bảng vẽ lại từ đầu, để trong
+     DOM thì tick bao nhiêu cũng mất sạch. */
+  _chon: new Set(),
+  daChon(){
+    const co = new Set(db.services.map(x => x.id));
+    [...this._chon].forEach(id => { if (!co.has(id)) this._chon.delete(id); });
+    return this._chon;
+  },
+  chonDoi(id){
+    if (this._chon.has(id)) this._chon.delete(id); else this._chon.add(id);
+    this.bang();
+  },
+  chonCaNhom(i){
+    const n = this.nhomLoc()[i]; if (!n) return;
+    const het = n.ds.every(s => this._chon.has(s.id));
+    n.ds.forEach(s => het ? this._chon.delete(s.id) : this._chon.add(s.id));
+    this.bang();
+  },
+  boChon(){ this._chon.clear(); this.bang(); },
+  xoaNhieu(){
+    if (!Perm.can('caidat')) { App.toast('Chỉ quản lý mới sửa được bảng giá'); return; }
+    const ids = [...this.daChon()];
+    if (!ids.length) return;
+    const ds = db.services.filter(x => ids.includes(x.id));
+    const dung = ds.reduce((t, x) => t + this.demDung(x.id), 0);
+    const ten = ds.slice(0, 12).map(x => '• ' + x.name).join('\n')
+      + (ds.length > 12 ? '\n• … và ' + (ds.length - 12) + ' dịch vụ nữa' : '');
+    if (!confirm('Xóa ' + ds.length + ' dịch vụ khỏi bảng giá?\n\n' + ten
+      + (dung ? '\n\n' + dung + ' hạng mục điều trị đã dùng những dịch vụ này. Hồ sơ cũ vẫn giữ nguyên tên và giá, chỉ mất gợi ý khi lập hạng mục mới.' : '')
+      + '\n\nKhông hoàn tác được.')) return;
+    db.services = db.services.filter(x => !ids.includes(x.id));
+    this._chon.clear();
+    save(); App.render(); this.bang();
+    App.toast('Đã xóa ' + ds.length + ' dịch vụ');
+  },
+
+  bang(q){
+    if (q != null) App.state.svcQ = q;
+    const sua = Perm.can('caidat');
+    const theoNhom = this.nhomLoc();
+    const chon = this.daChon();
+    /* Đang lọc thì có thể có dòng đã tick mà không hiện — phải nói ra, không thì bấm
+       xóa lại mất thêm những dòng không nhìn thấy. */
+    const hien = new Set(theoNhom.flatMap(x => x.ds.map(s => s.id)));
+    const an = [...chon].filter(id => !hien.has(id)).length;
     const chuaGia = db.services.filter(s => !s.price && !s.mienPhi).length;
     const rows = theoNhom.map(({g, ds}) => `
-      <tr><td colspan="${sua?3:2}" style="background:var(--surface2);font-weight:700">${h(g)} <span class="sub-line">· ${ds.length} dịch vụ</span></td></tr>
-      ${ds.map(s => `<tr${sua?` class="clickable" onclick="Svc.form('${s.id}')"`:''}><td>${h(s.name)}
+      <tr><td colspan="${sua?4:2}" style="background:var(--surface2);font-weight:700">
+        ${sua?`<input type="checkbox" style="margin-right:8px" title="Chọn cả nhóm"
+          ${ds.every(s => chon.has(s.id)) ? 'checked' : ''}
+          onclick="event.stopPropagation();Svc.chonCaNhom(${theoNhom.findIndex(x=>x.g===g)})">`:''}
+        ${h(g)} <span class="sub-line">· ${ds.length} dịch vụ</span></td></tr>
+      ${ds.map(s => `<tr${sua?` class="clickable${chon.has(s.id)?' sel-row':''}" onclick="Svc.form('${s.id}')"`:''}>
+        ${sua?`<td style="width:34px"><input type="checkbox" ${chon.has(s.id)?'checked':''}
+          onclick="event.stopPropagation();Svc.chonDoi('${s.id}')"></td>`:''}
+        <td>${h(s.name)}
         ${(s.xuatXu||s.baoHanh||s.note)?`<br><span class="sub-line">${[s.xuatXu, s.baoHanh?'BH '+s.baoHanh:'', s.note].filter(Boolean).map(h).join(' · ')}</span>`:''}</td>
         <td class="r num" style="font-weight:600">${s.price ? money(s.price) : (s.mienPhi ? '<span class="pill ok">Miễn phí</span>' : '<span class="pill warn">chưa đặt giá</span>')}
           ${s.donVi?`<br><span class="sub-line">/ ${h(s.donVi)}</span>`:''}</td>
@@ -5533,15 +5586,22 @@ const Svc = {
         <button class="btn" onclick="Svc.napBangGia()">Nạp bảng giá phòng khám</button>
         ${(() => { const n = Svc.nhomTrung().length;
           return `<button class="btn ${n?'danger':''}" onclick="Svc.donTrung()">Dọn trùng lặp${n?` (${n} nhóm)`:''}</button>`; })()}
-        ${chuaGia?`<span class="pill warn">${chuaGia} dịch vụ chưa đặt giá</span>`:''}</div>`
+        ${chuaGia?`<span class="pill warn">${chuaGia} dịch vụ chưa đặt giá</span>`:''}</div>
+        ${chon.size ? `<div class="note-block warn-block" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+          <b>Đã chọn ${chon.size} dịch vụ</b>
+          ${an ? `<span class="sub-line">trong đó <b>${an}</b> không hiện vì đang lọc — xóa là mất luôn cả những dòng đó</span>` : ''}
+          <span class="spacer"></span>
+          <button class="btn small" onclick="Svc.boChon()">Bỏ chọn</button>
+          <button class="btn small danger" onclick="Svc.xoaNhieu()">Xóa ${chon.size} dịch vụ</button></div>` : ''}`
       : '<div class="note-block mb">Chỉ quản lý mới sửa được bảng giá. Bạn xem để báo giá cho khách.</div>'}
       <div class="searchbar" style="margin-bottom:10px">${IC.search}<input id="svcQ" placeholder="Tìm tên dịch vụ hoặc nhóm..."
         value="${h(App.state.svcQ||'')}" autocomplete="off"
         oninput="Svc.bang(this.value);const i=document.getElementById('svcQ');i.focus();i.setSelectionRange(i.value.length,i.value.length)"></div>
       <div class="tbl-wrap"><table style="min-width:420px">
-        <thead><tr><th>Dịch vụ</th><th class="r">Đơn giá</th>${sua?'<th></th>':''}</tr></thead>
-        <tbody>${rows || `<tr><td colspan="3" class="sub-line">Không tìm thấy dịch vụ nào.</td></tr>`}</tbody></table></div>
+        <thead><tr>${sua?'<th></th>':''}<th>Dịch vụ</th><th class="r">Đơn giá</th>${sua?'<th></th>':''}</tr></thead>
+        <tbody>${rows || `<tr><td colspan="4" class="sub-line">Không tìm thấy dịch vụ nào.</td></tr>`}</tbody></table></div>
       <div class="note-block" style="margin-top:12px">Bấm vào một dòng để sửa <b>tên, nhóm dịch vụ và giá</b>.
+        Tick ô vuông để <b>chọn nhiều dịch vụ rồi xóa một lượt</b>; tick ở dòng tên nhóm là chọn cả nhóm.
         Sửa giá ở đây <b>không làm đổi giá của những hạng mục đã lập trước đó</b> — hồ sơ cũ giữ nguyên giá lúc chốt,
         giá mới chỉ áp cho hạng mục lập từ bây giờ.</div>`);
   },
