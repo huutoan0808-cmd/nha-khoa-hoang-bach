@@ -5680,7 +5680,7 @@ const Svc = {
           ${ds.every(s => chon.has(s.id)) ? 'checked' : ''}
           onclick="event.stopPropagation();Svc.chonCaNhom(${theoNhom.findIndex(x=>x.g===g)})">`:''}
         ${h(g)} <span class="sub-line">· ${ds.length} dịch vụ</span></td></tr>
-      ${ds.map(s => `<tr${sua?` class="clickable${chon.has(s.id)?' sel-row':''}" onclick="Svc.form('${s.id}')"`:''}>
+      ${ds.map(s => `<tr id="svcRow-${s.id}"${sua?` class="clickable${chon.has(s.id)?' sel-row':''}" onclick="Svc.form('${s.id}')"`:''}>
         ${sua?`<td style="width:34px"><input type="checkbox" ${chon.has(s.id)?'checked':''}
           onclick="event.stopPropagation();Svc.chonDoi('${s.id}')"></td>`:''}
         <td>${h(s.name)}
@@ -5744,9 +5744,25 @@ const Svc = {
     if (!d.name) { App.toast('Chưa nhập tên dịch vụ'); return; }
     const trung = db.services.find(x => x.id !== id && Combo.norm(x.name) === Combo.norm(d.name));
     if (trung) { App.toast('Đã có dịch vụ tên này trong nhóm ' + trung.group); return; }
+    let vua = id;
     if (id) Object.assign(db.services.find(x=>x.id===id), d);
-    else db.services.push(Object.assign({id:uid()}, d));
+    else { vua = uid(); db.services.push(Object.assign({id:vua}, d)); }
     save(); App.render(); this.bang(); App.toast('Đã lưu dịch vụ ✓');
+    this.toiDong(vua);
+  },
+  /* Lưu xong thì bang() dựng lại cả bảng nên khung trôi về đầu danh sách — đang sửa
+     dịch vụ thứ 90 mà mỗi lần lưu lại phải cuộn tìm lại từ đầu. Đưa về đúng dòng vừa
+     sửa và nháy sáng một cái cho dễ nhận ra.
+     Không thấy dòng là chuyện bình thường: đổi tên xong thì nó có thể không còn khớp
+     ô tìm đang lọc nữa — im lặng bỏ qua, đã có thông báo "Đã lưu" rồi. */
+  toiDong(id){
+    if (!id) return;
+    setTimeout(() => {
+      const tr = document.getElementById('svcRow-' + id);
+      if (!tr) return;
+      tr.scrollIntoView({block: 'center'});
+      tr.classList.add('vua-chon');
+    }, 40);
   },
   /* ---------- Dọn dịch vụ trùng ----------
      Khóa "lỏng": bỏ dấu, bỏ mọi dấu câu và khoảng trắng. Nhờ vậy "Trám răng cửa —
