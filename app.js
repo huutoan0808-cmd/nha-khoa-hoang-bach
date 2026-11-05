@@ -2663,8 +2663,9 @@ const Cust = {
         <div class="combo-hint">Tick công đoạn nào thì công đoạn đó được ghi là <b>đã làm</b> trong hạng mục điều trị,
           người làm lấy theo <b>bác sĩ</b> chọn ở trên — đây là căn cứ tính hoa hồng.</div></div>
       <div class="f full"><label>Diễn biến bệnh</label><textarea name="db" rows="3" required>${h((v&&v.db)||'')}</textarea></div>
-      <div class="f full"><label>Chỉ định — xử trí</label><textarea name="xt" rows="3">${h((v&&v.xt)||'')}</textarea></div>
-      <div class="f full"><label>Dặn dò sau điều trị</label><textarea name="dan" rows="2">${h((v&&v.dan)||'')}</textarea></div>
+      ${/* "Chỉ định — xử trí" và "Dặn dò sau điều trị" đã bỏ khỏi đây, để bên Bệnh án
+            điện tử. Hai ô đó không có trong form nữa nên visitSave() cũng không ghi
+            đè — buổi nào đã ghi từ trước thì giữ nguyên và vẫn in ra phiếu theo dõi. */''}
       <div class="form-actions full">
         ${vid?`<button type="button" class="btn danger" onclick="Cust.visitDel('${vid}','${c.id}')">Xóa</button><span class="spacer"></span>`:''}
         <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
