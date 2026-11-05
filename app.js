@@ -363,6 +363,16 @@ function migrate() {
     ]});
     cl.dtCoSo = 1;
   }
+  /* Bỏ các dịch vụ còn chữ "nội nha" khỏi danh mục. Nhóm đã đổi tên thành "Điều trị
+     tủy" từ trước, chỉ còn hai mục trong nhóm Trám răng sót lại cách gọi cũ.
+     Chỉ dọn DANH MỤC để chọn từ nay về sau — hạng mục điều trị đã lập vẫn giữ nguyên
+     tên và giá lúc chốt, vì chúng lưu tên riêng chứ không trỏ về danh mục. */
+  if (!cl.boNoiNha) {
+    const bo = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+                      .replace(/đ/g, 'd').toLowerCase();
+    db.services = (db.services || []).filter(x => !bo(x.name).includes('noi nha'));
+    cl.boNoiNha = 1;
+  }
   /* Đổi tên và địa chỉ phòng khám một lần cho các máy đã cài. Đánh dấu để lần sau
      không đè lên nữa — quản lý vẫn sửa lại được trong Cài đặt. */
   if (!cl.tenTD) {
