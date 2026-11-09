@@ -719,7 +719,9 @@ const App = {
   },
   go(id){
     if (!Perm.tabs().includes(id)) { App.toast('Bạn không có quyền vào mục này'); return; }
-    this.cur = id; this.closeSheet(); this.render(); window.scrollTo({top:0});
+    /* Hủy lệnh giữ vị trí mà render() vừa đặt rồi mới kéo lên đầu — không hủy thì một
+       khung hình sau nó kéo ngược về chỗ của màn CŨ. */
+    this.cur = id; this.closeSheet(); this.render(); this.cuonToi(); window.scrollTo({top:0});
   },
   render(){
     /* Máy đã nối vào phòng khám thì BẮT BUỘC đăng nhập mới xem được dữ liệu.
@@ -785,9 +787,24 @@ const App = {
     if (y) {
       window.scrollTo({top: y});
       /* Đặt lại lần nữa sau khi trình duyệt dựng xong khung: lần đầu trang có thể
-         chưa đủ cao để nhận đúng vị trí. */
-      requestAnimationFrame(() => { if (Math.abs(window.scrollY - y) > 2) window.scrollTo({top: y}); });
+         chưa đủ cao để nhận đúng vị trí. Giữ lại số hiệu để hủy được — chỗ nào vừa vẽ
+         xong lại chủ động cuộn đi nơi khác thì phải hủy lệnh này, không thì nó kéo
+         ngược về và nhìn như bấm không ăn. */
+      cancelAnimationFrame(this._rafCuon);
+      this._rafCuon = requestAnimationFrame(() => {
+        if (Math.abs(window.scrollY - y) > 2) window.scrollTo({top: y});
+      });
     }
+  },
+  /* Cuộn tới một chỗ cụ thể SAU khi vẽ lại. Phải hủy lệnh giữ vị trí đang chờ của
+     render() và của modal(), không thì một khung hình sau nó kéo ngược lại.
+     Đây chính là lỗi làm "bấm vào tên khách mà không thấy gì hiện ra": hồ sơ nằm dưới
+     cả danh sách mấy trăm dòng, cuộn tới nơi rồi bị kéo về chỗ cũ ngay. */
+  _rafCuon: 0, _rafModal: 0,
+  cuonToi(el, block){
+    cancelAnimationFrame(this._rafCuon); this._rafCuon = 0;
+    cancelAnimationFrame(this._rafModal); this._rafModal = 0;
+    if (el) el.scrollIntoView({block: block || 'start'});
   },
   openSheet(){ $('#sheetBack').classList.add('show'); $('#moreSheet').classList.add('show'); },
   closeSheet(){ $('#sheetBack').classList.remove('show'); $('#moreSheet').classList.remove('show'); },
@@ -807,7 +824,10 @@ const App = {
     back.classList.add('show');
     const y = this._cuon[title] || 0;
     back.scrollTop = y;
-    if (y) requestAnimationFrame(() => { if (Math.abs(back.scrollTop - y) > 2) back.scrollTop = y; });
+    cancelAnimationFrame(this._rafModal);
+    if (y) this._rafModal = requestAnimationFrame(() => {
+      if (Math.abs(back.scrollTop - y) > 2) back.scrollTop = y;
+    });
   },
   closeModal(){ $('#modalBack').classList.remove('show'); this._cuon = {}; },
 
@@ -1601,7 +1621,7 @@ const Cust = {
         const el = document.getElementById('custDetail');
         /* Nhảy thẳng, không cuộn mượt: khung hồ sơ có thể cách tới mấy chục nghìn
            pixel khi danh sách dài, cuộn mượt quãng đó vừa lâu vừa chóng mặt. */
-        if (el) el.scrollIntoView({block: 'start'});
+        App.cuonToi(el);
         const row = document.querySelector('#custRows .sel-row');
         if (row) row.classList.add('vua-chon');
       }, 60);
@@ -1612,8 +1632,7 @@ const Cust = {
     App.chonKhach(id); App.render();
     /* Nhảy thẳng, KHÔNG cuộn mượt: danh sách vài trăm khách thì quãng cuộn cả chục
        nghìn pixel, cuộn mượt vừa lâu vừa chạy lố qua chỗ cần. */
-    const el = $('#custDetail');
-    if (el) el.scrollIntoView({block:'start'});
+    App.cuonToi($('#custDetail'));
   },
 
   /* Từ tab khác nhảy thẳng vào hồ sơ một khách.
@@ -1631,7 +1650,7 @@ const Cust = {
     App.go('customers');
     setTimeout(() => {
       const el = $('#custDetail');
-      if (el) el.scrollIntoView({block:'start'});
+      App.cuonToi(el);
       const row = document.querySelector('#custRows .sel-row');
       if (row) row.classList.add('vua-chon');
     }, 0);
@@ -1654,7 +1673,7 @@ const Cust = {
     App.state.rangMo = (App.state.rangMo === n) ? null : n;
     App.render();
     setTimeout(() => { const o = document.getElementById('oRangGhi');
-      if (o) o.scrollIntoView({block:'nearest', behavior:'smooth'}); }, 0);
+      App.cuonToi(o, 'nearest'); }, 0);
   },
   dongRang(){ App.state.rangMo = null; App.render(); },
   /* Hạng mục do khung ghi răng lập ra — đánh dấu tuRang để lần sau sửa đúng dòng đó
@@ -5801,7 +5820,7 @@ const Svc = {
     setTimeout(() => {
       const tr = document.getElementById('svcRow-' + id);
       if (!tr) return;
-      tr.scrollIntoView({block: 'center'});
+      App.cuonToi(tr, 'center');
       tr.classList.add('vua-chon');
     }, 40);
   },
