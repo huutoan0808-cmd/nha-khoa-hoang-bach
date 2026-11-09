@@ -198,6 +198,21 @@ input[type=checkbox],input[type=radio]{
   flex:0 0 auto;max-width:100%;white-space:nowrap}
 /* Màn hình hẹp thì cho nhãn dài xuống dòng lại, thà nhiều dòng còn hơn tràn ra ngoài */
 @media (max-width:520px){.check-row label{white-space:normal}}
+
+/* iPhone tự PHÓNG TO cả trang khi chạm vào ô nhập có cỡ chữ dưới 16px, và không thu
+   lại sau khi gõ xong — đăng nhập một lần là cả app phóng to tràn ra ngoài màn hình,
+   phải thoát ra vào lại mới hết. Ô nhập đang lấy cỡ chữ 14px của body (font:inherit)
+   nên dính đúng cái bẫy đó.
+   Đặt 16px cho ô nhập trên màn hình nhỏ là hết. KHÔNG dùng cách chèn maximum-scale=1
+   vào thẻ viewport: làm vậy là chặn luôn việc người dùng tự chụm tay phóng to để đọc,
+   mà phòng khám có khách lớn tuổi. Ô tick và ô tròn chừa ra vì chúng không có chữ.
+   Phải kể ra cả .f input / .f select / .combo-input chứ không chỉ viết trống không:
+   mấy quy tắc kia dùng font:inherit kèm tên lớp nên độ ưu tiên cao hơn, viết trống
+   không thì ô chọn (select) vẫn 14px và iPhone vẫn phóng to. */
+@media (max-width:767px){
+  input:not([type=checkbox]):not([type=radio]), select, textarea,
+  .f input, .f select, .f textarea, .combo>.combo-input, .searchbar input{font-size:16px}
+}
 .check-row label>input{flex:none;margin:0}
 /* Ô nhập nằm chung hàng với các ô tick thì cho nó ăn hết phần còn lại */
 .check-row label:has(>input:not([type=checkbox]):not([type=radio])){flex:1 1 220px}
