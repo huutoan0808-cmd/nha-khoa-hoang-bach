@@ -46,6 +46,24 @@ const VET_BANG = {
   bangLuong: 'Bảng lương tháng',
 };
 
+/* Giá trị dài hơn ngần này thì nhật ký chỉ ghi tên trường, không chép nội dung */
+const VET_GIA_TRI_TOI_DA = 80;
+
+/* Tên trường gọi ra tiếng Việt — nhật ký là thứ kế toán và đoàn thẩm định đọc,
+   không phải lập trình viên. Trường nào không có ở đây thì để nguyên tên. */
+const VET_TRUONG = {
+  date: 'Ngày', amount: 'Số tiền', desc: 'Nội dung', method: 'Hình thức',
+  no: 'Số phiếu', staffId: 'Người thu', doctorId: 'Bác sĩ', group: 'Nhóm dịch vụ',
+  suaBoi: 'Người sửa', suaLuc: 'Sửa lúc', lyDoSua: 'Lý do sửa',
+  name: 'Tên', price: 'Thành tiền', donGia: 'Đơn giá', sl: 'Số lượng',
+  giamPct: 'Giảm %', giamTien: 'Giảm tiền', status: 'Trạng thái', tooth: 'Răng',
+  phone: 'Điện thoại', dob: 'Ngày sinh', time: 'Giờ', note: 'Ghi chú',
+};
+
+/* Trường nào là tiền, trường nào là người — để đọc ra cho dễ soát */
+const VET_TIEN = ['amount', 'price', 'donGia', 'giamTien', 'base', 'buy', 'sell'];
+const VET_LA_NGUOI = ['staffId', 'doctorId', 'assistantId', 'suaBoi', 'lapBoi'];
+
 const VET_ACT = {
   them: 'Thêm mới', sua: 'Sửa', xoa: 'Xóa', khoiphuc: 'Khôi phục',
   dangnhap: 'Đăng nhập', dangxuat: 'Đăng xuất', in: 'In / kết xuất',
@@ -120,17 +138,62 @@ const Vet = {
       (db[t] || []).forEach(r => { if (r && r.id) m[r.id] = this.goi(r); });
     });
   },
-  /* Những trường vừa đổi giữa hai bản JSON — chỉ lấy tên trường, không lấy nội dung,
-     để nhật ký không phình to và không nhân bản dữ liệu bệnh nhân khắp nơi. */
+  /* Những trường vừa đổi giữa hai bản JSON. Ghi TÊN trường, kèm giá trị cũ → mới khi
+     giá trị còn ngắn (số tiền, ngày, trạng thái, tên người…). Sửa một phiếu thu mà
+     nhật ký chỉ nói "đổi: amount" thì không ai biết từ bao nhiêu thành bao nhiêu —
+     mà đó mới là thứ cần truy khi tiền không khớp.
+     Trường dài (sơ đồ răng, danh sách công đoạn, bản ghi lồng nhau) thì vẫn chỉ lấy
+     tên, để nhật ký không phình to và không nhân bản dữ liệu bệnh nhân khắp nơi. */
   khac(cuJSON, moiJSON){
     let a = {}, b = {};
     try { a = JSON.parse(cuJSON); b = JSON.parse(moiJSON); } catch(e){ return []; }
     const ten = new Set(Object.keys(a).concat(Object.keys(b)));
     const ra = [];
     ten.forEach(k => {
-      if (JSON.stringify(a[k]) !== JSON.stringify(b[k])) ra.push(k);
+      const ja = JSON.stringify(a[k]), jb = JSON.stringify(b[k]);
+      if (ja === jb) return;
+      const o = {k};
+      if (this.nganGon(a[k]) !== null && this.nganGon(b[k]) !== null) {
+        o.cu = this.nganGon(a[k]); o.moi = this.nganGon(b[k]);
+      }
+      ra.push(o);
     });
     return ra;
+  },
+  /* Giá trị đủ ngắn và đủ đơn giản để chép thẳng vào nhật ký, không thì trả null */
+  nganGon(v){
+    if (v === undefined || v === null) return '';
+    if (typeof v === 'object') return null;
+    const s = String(v);
+    return s.length <= VET_GIA_TRI_TOI_DA ? s : null;
+  },
+  /* Một dòng "đổi: …" cho người đọc. Nhật ký cũ chỉ có mảng tên trường nên phải đọc
+     được cả hai dạng, nếu không mở nhật ký cũ là lỗi. */
+  moTaDoi(truong){
+    if (!truong || !truong.length) return '';
+    return truong.map(x => {
+      if (typeof x === 'string') return VET_TRUONG[x] || x;
+      const ten = VET_TRUONG[x.k] || x.k;
+      if (x.cu === undefined || x.moi === undefined) return ten;
+      return ten + ': ' + this.doc(x.k, x.cu) + ' → ' + this.doc(x.k, x.moi);
+    }).join(' · ');
+  },
+  /* Đọc một giá trị ra cho người thường: tiền có dấu chấm, ngày kiểu Việt Nam,
+     mã nhân viên ra tên người. "1500000" với "2026-11-16T08:45:00.005Z" thì đúng
+     nhưng không ai soát được. */
+  doc(k, v){
+    if (v === '' || v == null) return '(trống)';
+    const s = String(v);
+    if (VET_TIEN.includes(k) && /^-?\d+$/.test(s)) return (+s).toLocaleString('vi-VN') + 'đ';
+    /* Dấu thời gian là giờ UTC — phải đổi về giờ máy, không thì nhật ký có hai cột
+       giờ lệch nhau bảy tiếng trên cùng một dòng. */
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return this.gio(s);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4);
+    if (VET_LA_NGUOI.includes(k)) {
+      const st = (db.staff || []).find(x => x.id === s);
+      if (st) return st.name;
+    }
+    return s;
   },
 
   /* Gọi từ save(). Lần đầu chỉ chụp chứ không ghi, nếu không cả kho dữ liệu cũ
@@ -341,7 +404,7 @@ const Vet = {
         <td><span class="pill ${v.act === 'xoa' ? 'warn' : v.act === 'them' ? 'ok' : 'info'}">${h(VET_ACT[v.act] || v.act)}</span></td>
         <td>${h(VET_BANG[v.tbl] || v.tbl || '')}</td>
         <td>${h(v.nhan || '')}${v.truong && v.truong.length
-            ? '<br><span class="sub-line">đổi: ' + h(v.truong.join(', ')) + '</span>' : ''}</td>
+            ? '<br><span class="sub-line">đổi: ' + h(this.moTaDoi(v.truong)) + '</span>' : ''}</td>
         <td style="white-space:nowrap">${h(v.may || '')}
           ${co ? `<br><button class="btn small" onclick="Vet.khoiPhuc('${v.id}')">Khôi phục</button>` : ''}</td></tr>`;
     };
@@ -392,7 +455,7 @@ const Vet = {
     const esc = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
     const csv = ['Thời điểm,Người làm,Email,Vai trò,Việc,Mục,Nội dung,Trường đổi,Máy']
       .concat(ds.map(v => [this.gio(v.at), v.ten, v.email, v.vai, VET_ACT[v.act] || v.act,
-        VET_BANG[v.tbl] || v.tbl, v.nhan, (v.truong || []).join(' '), v.may].map(esc).join(',')))
+        VET_BANG[v.tbl] || v.tbl, v.nhan, this.moTaDoi(v.truong), v.may].map(esc).join(',')))
       .join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob(['﻿' + csv], {type: 'text/csv;charset=utf-8'}));

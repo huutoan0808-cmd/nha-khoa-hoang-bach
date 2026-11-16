@@ -3687,6 +3687,10 @@ const Treat = {
         <input name="desc" required placeholder="Vd: Trả góp đợt 2 — bọc sứ R36"
                value="${h(muc.map(t => t.name + (t.tooth ? ' R' + t.tooth : '')).join(', '))}">
         <div class="combo-hint">Điền sẵn theo mấy món đã tick — sửa hoặc gõ thêm thoải mái.</div></div>
+      <div class="f"><label>Ngày lập phiếu</label>
+        <input type="date" name="date" value="${todayISO()}" required>
+        <div class="combo-hint">Mặc định là hôm nay. Thu tiền hôm trước mà nay mới nhập thì <b>sửa lại cho đúng ngày</b> —
+          ghi sai ngày là doanh thu lệch với sổ tiền.</div></div>
       <div class="f"><label>Số tiền (₫)</label>${Tien.o('amount', debt, 'required')}</div>
       <div class="f"><label>Hình thức</label><select name="method">${PAY_METHODS.map(m=>`<option>${m}</option>`).join('')}</select></div>
       <div class="f"><label>Bác sĩ thực hiện</label><select name="doctorId">${db.staff.filter(s=>(s.role||'').includes('Bác sĩ')).map(s=>`<option value="${s.id}">${h(s.name)}</option>`).join('')}</select></div>
@@ -3723,11 +3727,68 @@ const Treat = {
       });
       nhom = Object.keys(tong).sort((a, b) => tong[b] - tong[a])[0] || '';
     }
-    const r = {id:uid(), no:'PT-'+(db.seq.receipt++), date:todayISO(), customerId:App.state.treatCust, desc:d.desc, method:d.method, amount:num(d.amount), staffId:d.staffId || (me?me.id:''), doctorId:d.doctorId, group:nhom, mucIds: ids, invoice:null};
+    /* Ngày lập sửa được nhưng không cho ghi vào tương lai — phiếu thu ngày mai là
+       tiền chưa có, báo cáo nào đọc cũng sai. */
+    let ngay = d.date || todayISO();
+    if (ngay > todayISO()) { ngay = todayISO(); App.toast('Không lập phiếu thu cho ngày tương lai — đã để về hôm nay'); }
+    const r = {id:uid(), no:'PT-'+(db.seq.receipt++), date:ngay, customerId:App.state.treatCust, desc:d.desc, method:d.method, amount:num(d.amount), staffId:d.staffId || (me?me.id:''), doctorId:d.doctorId, group:nhom, mucIds: ids, invoice:null, lapBoi:(me?me.id:''), lapLuc:new Date().toISOString()};
     db.receipts.push(r);
     save(); App.closeModal(); App.render(); App.toast('Đã lập ' + r.no + ' ✓');
     /* Lập xong mở luôn cửa sổ in khổ A5 — khách còn ngồi đó, khỏi phải tìm nút In */
     Treat.printReceipt(r.id);
+  },
+  /* ---------- Sửa một phiếu thu đã lập ----------
+     Phiếu thu là chứng từ tiền: sửa được nhưng mọi lần sửa đều để lại vết trong Nhật
+     ký lưu vết (ai, lúc nào, trường nào, từ giá trị nào sang giá trị nào) và in ngay
+     trên phiếu. Không có nút sửa thì gõ nhầm một con số là sai vĩnh viễn — còn sửa
+     lén thì không ai đối chiếu được với sổ tiền. */
+  phieuSua(rid){
+    if (!Perm.can('thu')) { App.toast('Bạn không có quyền sửa phiếu thu'); return; }
+    const r = db.receipts.find(x => x.id === rid); if (!r) { App.toast('Không tìm thấy phiếu thu'); return; }
+    const c = custById(r.customerId);
+    App.modal('Sửa phiếu thu ' + (r.no || ''), `
+    <form class="form-grid" onsubmit="Treat.phieuLuu(event,'${rid}')">
+      <div class="note-block full">Phiếu của <b>${h(c ? c.name : '(khách đã xóa)')}</b> ·
+        lập ngày <b>${fmtD(r.date)}</b> · số tiền hiện tại <b>${money(r.amount)}</b>.
+        ${r.invoice ? '<br><span class="pill danger">Đã phát hành HĐĐT ' + h(r.invoice.no) + '</span> — sửa phiếu thì hóa đơn đã xuất không còn khớp, phải xử lý hóa đơn theo quy định thuế.' : ''}
+        ${r.old ? '<br><span class="pill mutedp">Phiếu nhập từ sổ giấy cũ</span>' : ''}</div>
+      <div class="f"><label>Ngày lập phiếu</label><input type="date" name="date" value="${h(r.date||'')}" required></div>
+      <div class="f"><label>Số tiền (₫)</label>${Tien.o('amount', r.amount, 'required')}</div>
+      <div class="f full"><label>Nội dung</label><input name="desc" required value="${h(r.desc||'')}"></div>
+      <div class="f"><label>Hình thức</label><select name="method">
+        ${PAY_METHODS.map(m=>`<option${r.method===m?' selected':''}>${m}</option>`).join('')}</select></div>
+      <div class="f"><label>Người thu tiền</label><select name="staffId">
+        <option value="">— chưa ghi —</option>
+        ${db.staff.filter(s=>s.active!==false).map(s=>`<option value="${s.id}"${r.staffId===s.id?' selected':''}>${h(s.name)}</option>`).join('')}</select></div>
+      <div class="f full"><label>Lý do sửa</label>
+        <input name="lyDoSua" required placeholder="Vd: gõ nhầm số tiền, nhập bù phiếu ngày 14/11"
+               value="${h(r.lyDoSua||'')}">
+        <div class="combo-hint">Bắt buộc ghi — lý do này vào nhật ký lưu vết cùng với tên người sửa và giờ sửa.</div></div>
+      <div class="note-block full">Lần sửa này được ghi vào <b>Nhật ký lưu vết</b>: ai sửa, sửa lúc nào,
+        trường nào đổi từ giá trị cũ sang giá trị mới. Nhật ký chỉ thêm, không xóa hay sửa được.</div>
+      <div class="form-actions full">
+        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+        <button class="btn primary">Lưu thay đổi</button></div>
+    </form>`);
+  },
+  phieuLuu(ev, rid){
+    ev.preventDefault();
+    const r = db.receipts.find(x => x.id === rid); if (!r) return;
+    const d = Object.fromEntries(new FormData(ev.target).entries());
+    const me = Att.myStaff();
+    let ngay = d.date || r.date;
+    if (ngay > todayISO()) { ngay = todayISO(); App.toast('Không ghi phiếu thu cho ngày tương lai — đã để về hôm nay'); }
+    const cu = {date: r.date, amount: r.amount, desc: r.desc, method: r.method, staffId: r.staffId};
+    Object.assign(r, {date: ngay, amount: num(d.amount), desc: d.desc, method: d.method,
+      staffId: d.staffId, lyDoSua: (d.lyDoSua || '').trim(),
+      suaBoi: (me ? me.name : (Cloud.who ? Cloud.who() : '')) || '', suaLuc: new Date().toISOString(), _up: Date.now()});
+    /* Không phải gọi Vet thêm: Vet.quet() chạy ngay trong save(), tự so bản cũ với bản
+       mới và ghi đủ ai / lúc nào / trường nào / từ giá trị nào sang giá trị nào — kể cả
+       ô Lý do sửa, vì nó cũng là một trường của phiếu. */
+    const doi = Object.keys(cu).filter(k => String(cu[k]) !== String(r[k]));
+    save();
+    App.closeModal(); App.render();
+    App.toast(doi.length ? 'Đã sửa phiếu thu ✓ — đã ghi vào nhật ký lưu vết' : 'Không có gì thay đổi');
   },
   invoice(rid){
     const r = db.receipts.find(x=>x.id===rid);
@@ -3756,6 +3817,11 @@ const Treat = {
       <tr><td>Hình thức thanh toán:</td><td>${h(r.method)}</td></tr>
       <tr><td>Còn lại sau phiếu này:</td><td><b>${money(conNo)}</b>${conNo?'':' <i>(đã thanh toán đủ)</i>'}</td></tr>
       ${r.invoice?`<tr><td>Hóa đơn điện tử:</td><td>${h(r.invoice.no)} — mã tra cứu ${h(r.invoice.code)}</td></tr>`:''}
+      ${r.suaLuc?`<tr><td>Đã sửa:</td><td>${h(r.suaBoi||'')} · ${h((() => {
+        /* suaLuc là giờ UTC — in thẳng ra là lệch bảy tiếng so với giờ người ta sửa */
+        const d = new Date(r.suaLuc), p = n => String(n).padStart(2,'0');
+        return isNaN(d) ? r.suaLuc : p(d.getDate())+'/'+p(d.getMonth()+1)+'/'+d.getFullYear()+' '+p(d.getHours())+':'+p(d.getMinutes());
+      })())}${r.lyDoSua?' — '+h(r.lyDoSua):''}</td></tr>`:''}
     </table>
     <div class="sign">
       <div><b>Người nộp tiền</b><br>(Ký, ghi rõ họ tên)<br><br><br><br></div>
@@ -3777,8 +3843,11 @@ SCREENS.treatment = () => {
   const c = custById(cid);
   if (!c) return '<div class="page-head"><h1>Điều trị & thanh toán</h1><div class="sub">Chưa có khách hàng — thêm ở tab Khách hàng.</div></div>';
   const items = db.treatments.filter(t=>t.customerId===cid);
+  /* Trừ "Báo giá" ra, mọi trạng thái khác đều là tiền phải thu. Và phải bỏ qua phiếu
+     thu nhập từ sổ giấy cũ y như custDebt() — số nợ mang sang đã là số CÒN LẠI sau
+     những lần thu đó, trừ thêm lần nữa là trang này báo nợ ít hơn mọi trang khác. */
   const total = items.filter(t=>t.status!=='Báo giá').reduce((s,t)=>s+t.price,0);
-  const paid = db.receipts.filter(r=>r.customerId===cid).reduce((s,r)=>s+r.amount,0);
+  const paid = db.receipts.filter(r=>r.customerId===cid && !r.old).reduce((s,r)=>s+r.amount,0);
   const debt = Math.max(0, total - paid);
   const recs = db.receipts.filter(r=>r.customerId===cid).sort((a,b)=>a.date<b.date?1:-1);
   const rxs = db.rx.filter(r=>r.customerId===cid).sort((a,b)=>a.date<b.date?1:-1);
@@ -3805,12 +3874,16 @@ SCREENS.treatment = () => {
   }).join('') || '<tr><td colspan="6" class="sub-line">Chưa có dịch vụ nào — bấm "Thêm dịch vụ".</td></tr>';
 
   const recRows = recs.map(r => `<tr><td class="num">${fmtD(r.date)}<br><span class="sub-line num">${h(r.no)}</span></td>
-    <td>${h(r.desc)}<br><span class="sub-line">${h(r.method)} · ${h(r.group||'')}</span></td>
+    <td>${h(r.desc)}<br><span class="sub-line">${h(r.method)} · ${h(r.group||'')}</span>${
+      r.old ? ' <span class="pill mutedp">sổ cũ</span>' : ''}${
+      r.suaLuc ? `<br><span class="sub-line">✎ ${h(r.suaBoi||'')} sửa ${h(fmtD(r.suaLuc.slice(0,10)))}${
+        r.lyDoSua ? ' — ' + h(r.lyDoSua) : ''}</span>` : ''}</td>
     <td class="r num" style="font-weight:600">${money(r.amount)}</td>
     <td>${r.invoice
       ? `<span class="pill ok">Đã phát hành</span><br><span class="rx-code num">${h(r.invoice.no)} · tra cứu ${h(r.invoice.code)}</span>`
       : `<button class="btn small" onclick="Treat.invoice('${r.id}')">Phát hành HĐĐT</button>`}</td>
-    <td><button class="btn small" onclick="Treat.printReceipt('${r.id}')">${IC.print} In</button></td></tr>`).join('') || '<tr><td colspan="5" class="sub-line">Chưa có phiếu thu.</td></tr>';
+    <td style="white-space:nowrap">${Perm.can('thu') ? `<button class="btn small" onclick="Treat.phieuSua('${r.id}')">Sửa</button> ` : ''}
+      <button class="btn small" onclick="Treat.printReceipt('${r.id}')">${IC.print} In</button></td></tr>`).join('') || '<tr><td colspan="5" class="sub-line">Chưa có phiếu thu.</td></tr>';
 
   /* Đơn cũ (bản mô phỏng trước đây) ghi thuốc là drug/qty/use, đơn mới theo chuẩn 808
      ghi ten/sl/cachDung. Đọc cả hai để đơn cũ không hiện trống trơn. */
@@ -3922,7 +3995,9 @@ SCREENS.treatment = () => {
   if (trang === 'thutien') return dau + `
   <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
     <div class="card kpi"><div class="k-label">Tổng kế hoạch (đã duyệt)</div><div class="k-value num">${money(total)}</div><div class="k-note">${items.length} hạng mục · ${items.filter(t=>t.status==='Báo giá').length} đang báo giá</div></div>
-    <div class="card kpi"><div class="k-label">Đã thanh toán</div><div class="k-value num" style="color:var(--ok)">${money(paid)}</div><div class="k-note">${total?Math.min(100,Math.round(paid/total*100)):0}% kế hoạch</div></div>
+    <div class="card kpi"><div class="k-label">Đã thanh toán</div><div class="k-value num" style="color:var(--ok)">${money(paid)}</div><div class="k-note">${total?Math.min(100,Math.round(paid/total*100)):0}% kế hoạch${
+      (() => { const cu = db.receipts.filter(r=>r.customerId===cid && r.old).reduce((s,r)=>s+r.amount,0);
+        return cu ? '<br>chưa kể ' + money(cu) + ' đã thu trong sổ cũ' : ''; })()}</div></div>
     <div class="card kpi"><div class="k-label">Còn lại</div><div class="k-value num" ${debt?'style="color:var(--danger)"':''}>${money(debt)}</div><div class="k-note">${debt?'nhắc khách theo lịch trả góp':'không còn công nợ'}</div></div>
   </div>
   <div class="card"><div class="card-h"><h2>Phiếu thu</h2><span class="hint">hóa đơn điện tử Viettel SInvoice</span></div>
