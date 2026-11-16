@@ -2690,15 +2690,20 @@ const Cust = {
            còn gì để ghi diễn biến nữa, nên không đưa vào danh sách — trừ khi đang sửa
            lại một dòng cũ đã gắn vào nó, lúc đó phải giữ để khỏi mất liên kết. */
         const dangLam = db.treatments.filter(t => t.customerId === c.id && t.status !== 'Hoàn tất');
-        const cu = v && v.treatmentId ? db.treatments.find(t => t.id === v.treatmentId) : null;
-        const ds = cu && !dangLam.some(t => t.id === cu.id) ? dangLam.concat([cu]) : dangLam;
+        /* Buổi cũ gắn dịch vụ nào thì phải giữ trong danh sách kể cả đã hoàn tất, không
+           thì sửa lại dòng cũ là mất liên kết. */
+        const daChon = Cust.dsDichVuCua(v);
+        const cu = daChon.map(id => db.treatments.find(t => t.id === id)).filter(Boolean);
+        const ds = dangLam.concat(cu.filter(t => !dangLam.some(x => x.id === t.id)));
         return `<div class="f full"><label>Ghi diễn biến cho dịch vụ nào</label>
-          <select name="treatmentId" onchange="Cust.doiDichVuDienBien()">
-            <option value="">— không gắn dịch vụ nào —</option>
-            ${ds.map(t => `<option value="${t.id}"${(v && v.treatmentId) === t.id ? ' selected' : ''}>${h(t.name)}${
-              t.tooth ? ' — R' + h(t.tooth) : ''} · ${h(t.status)}</option>`).join('')}</select>
+          <div class="check-row" style="flex-direction:column;align-items:stretch;gap:4px">
+            ${ds.map(t => `<label><input type="checkbox" name="treatmentIds" value="${t.id}"
+              ${daChon.includes(t.id) ? 'checked' : ''} onchange="Cust.doiDichVuDienBien()">
+              ${h(t.name)}${t.tooth ? ' — R' + h(t.tooth) : ''} <span class="sub-line">· ${h(t.status)}</span></label>`).join('')
+            || '<span class="sub-line">Khách này chưa có dịch vụ nào đang làm dở.</span>'}
+          </div>
           <div class="combo-hint">${dangLam.length
-            ? 'Chỉ hiện những dịch vụ <b>chưa hoàn tất</b>. Chọn xong thì đợt điều trị, bác sĩ và mẫu điền nhanh bên dưới tự bám theo dịch vụ đó.'
+            ? 'Tick <b>nhiều dịch vụ</b> nếu một buổi làm mấy việc — chỉ cần ghi diễn biến một lần. Mỗi dịch vụ có bảng công đoạn riêng ở dưới. Đợt điều trị và bác sĩ bám theo dịch vụ tick đầu tiên.'
             : 'Khách này chưa có dịch vụ nào đang làm dở — thêm hạng mục ở tab <b>Điều trị</b> trước.'}</div></div>`;
       })()}
       <div class="f"><label>Ngày</label><input type="date" name="date" value="${h((v&&v.date)||todayISO())}" required>
@@ -2712,14 +2717,14 @@ const Cust = {
       ${(() => {
         /* Đợt điều trị đi theo dịch vụ chứ không chọn riêng — một dịch vụ chỉ nằm trong
            đúng một đợt, cho chọn tay chỉ tạo cơ hội gắn lệch. */
-        const t0 = v && v.treatmentId ? db.treatments.find(x => x.id === v.treatmentId) : null;
+        const t0 = db.treatments.find(x => x.id === Cust.dsDichVuCua(v)[0]) || null;
         const e0 = t0 && t0.episodeId ? (db.episodes || []).find(e => e.id === t0.episodeId) : null;
         return `<div class="f full"><label>Thuộc đợt điều trị</label>
           <div id="oDot" class="tooth-info" style="margin-top:0">${Cust.moTaDot(e0)}</div>
           <input type="hidden" name="episodeId" value="${h(e0 ? e0.id : '')}"></div>`;
       })()}
       <div class="f full"><label>Công đoạn đã làm trong buổi này</label>
-        <div id="oCongDoan">${Cust.khoiCongDoan(v && v.treatmentId ? db.treatments.find(x => x.id === v.treatmentId) : null, v)}</div>
+        <div id="oCongDoan">${Cust.khoiCongDoanNhieu(Cust.dsDichVuCua(v), v)}</div>
         <div class="combo-hint">Tick công đoạn nào thì công đoạn đó được ghi là <b>đã làm</b> trong hạng mục điều trị,
           người làm lấy theo <b>bác sĩ</b> chọn ở trên — đây là căn cứ tính hoa hồng.</div></div>
       <div class="f full"><label>Diễn biến bệnh</label><textarea name="db" rows="3" required>${h((v&&v.db)||'')}</textarea></div>
@@ -2740,13 +2745,34 @@ const Cust = {
     if (!q || !(q.buoc || []).length)
       return '<span class="sub-line">Dịch vụ này chưa gắn quy trình công đoạn nào — đặt trong Cài đặt → Quy trình.</span>';
     const xong = {}; (t.cd || []).forEach(x => xong[x.b] = x);
-    const cua = new Set((v && v.congDoan) || []);
     return `<div class="check-row">${q.buoc.map(b => {
       const da = xong[b.b], ai = da ? ((staffById(da.s) || {}).name || '') : '';
+      const tick = Cust.daTickCD(v, t.id, b.b);
       return `<label title="${da ? 'Đã làm ' + fmtD(da.d) + (ai ? ' — ' + h(ai) : '') : 'Chưa làm'}">
-        <input type="checkbox" name="congDoan" value="${b.b}"${cua.has(b.b) ? ' checked' : ''}>
-        ${h(b.t)}${da ? (cua.has(b.b) ? '' : ' ✓') : ''}</label>`;
+        <input type="checkbox" name="congDoan" value="${t.id}|${b.b}"${tick ? ' checked' : ''}>
+        ${h(b.t)}${da ? (tick ? '' : ' ✓') : ''}</label>`;
     }).join('')}</div>`;
+  },
+  /* Danh sách dịch vụ của một buổi. Bản cũ chỉ có treatmentId (một dịch vụ), bản mới
+     có treatmentIds — đọc được cả hai để hồ sơ cũ không mất liên kết. */
+  dsDichVuCua(v){
+    if (!v) return [];
+    if (Array.isArray(v.treatmentIds) && v.treatmentIds.length) return v.treatmentIds.slice();
+    return v.treatmentId ? [v.treatmentId] : [];
+  },
+  /* Ô tick công đoạn mang CẢ mã dịch vụ: "tid|buoc". Hai dịch vụ cùng quy trình thì mã
+     công đoạn trùng nhau (hai cái "su_mai"), chỉ ghi mã bước là tick một cái ăn sang
+     cả cái kia. Bản cũ lưu mã bước trần nên vẫn phải nhận. */
+  daTickCD(v, tid, b){
+    const ds = (v && v.congDoan) || [];
+    return ds.includes(tid + '|' + b) || (ds.includes(b) && this.dsDichVuCua(v)[0] === tid);
+  },
+  khoiCongDoanNhieu(ids, v){
+    const ds = (ids || []).map(id => db.treatments.find(t => t.id === id)).filter(Boolean);
+    if (!ds.length) return '<span class="sub-line">Tick dịch vụ ở trên để thấy các công đoạn.</span>';
+    return ds.map(t => `<div style="margin-bottom:8px">
+      <div class="sub-line" style="font-weight:600">${h(t.name)}${t.tooth ? ' — R' + h(t.tooth) : ''}</div>
+      ${this.khoiCongDoan(t, v)}</div>`).join('');
   },
   moTaDot(e){
     return e ? `<b>${h(e.ten || '(chưa đặt tên)')}</b> — mở ${fmtD(e.tuNgay)}${e.status ? ' · ' + h(e.status) : ''}`
@@ -2755,8 +2781,8 @@ const Cust = {
   /* Đổi dịch vụ thì đợt điều trị, bác sĩ, người phụ và công đoạn đều bám theo */
   doiDichVuDienBien(){
     const f = document.querySelector('#modalBody form'); if (!f) return;
-    const id = (f.querySelector('[name="treatmentId"]') || {}).value;
-    const t = db.treatments.find(x => x.id === id);
+    const ids = [...f.querySelectorAll('[name="treatmentIds"]:checked')].map(x => x.value);
+    const t = db.treatments.find(x => x.id === ids[0]);
     const dat = (n, val) => { const o = f.querySelector(`[name="${n}"]`); if (o && val) o.value = val; };
     if (t) {
       if (!(f.querySelector('[name="doctorId"]') || {}).value) dat('doctorId', t.doctorId);
@@ -2766,8 +2792,13 @@ const Cust = {
     const e = t && t.episodeId ? (db.episodes || []).find(x => x.id === t.episodeId) : null;
     const oe = f.querySelector('[name="episodeId"]'); if (oe) oe.value = e ? e.id : '';
     const hd = document.getElementById('oDot'); if (hd) hd.innerHTML = this.moTaDot(e);
+    /* Vẽ lại bảng công đoạn nhưng GIỮ những ô đang tick — đổi dịch vụ mà mất hết tick
+       của dịch vụ kia thì tick lại từ đầu. */
     const cd = document.getElementById('oCongDoan');
-    if (cd) cd.innerHTML = this.khoiCongDoan(t || null, null);
+    if (cd) {
+      const giu = [...f.querySelectorAll('[name="congDoan"]:checked')].map(x => x.value);
+      cd.innerHTML = this.khoiCongDoanNhieu(ids, {congDoan: giu, treatmentIds: ids});
+    }
   },
   visitSave(ev, vid, cid){
     ev.preventDefault();
@@ -2777,6 +2808,10 @@ const Cust = {
     if (!c.record.dienBien) c.record.dienBien = [];
     /* FormData chỉ giữ một giá trị cho các ô trùng tên — công đoạn phải gom tay */
     d.congDoan = [...ev.target.querySelectorAll('[name="congDoan"]:checked')].map(x => x.value);
+    d.treatmentIds = [...ev.target.querySelectorAll('[name="treatmentIds"]:checked')].map(x => x.value);
+    /* Vẫn ghi treatmentId = dịch vụ đầu tiên. Bảng lương, phiếu theo dõi và dòng thời
+       gian đều đang đọc trường này; bỏ đi là chúng mất chỗ bám. */
+    d.treatmentId = d.treatmentIds[0] || '';
     const cu = vid && c.record.dienBien.find(x => x.id === vid);
     this.ghiCongDoan(d, (cu && cu.congDoan) || []);
     if (cu) Object.assign(cu, d);
@@ -2787,18 +2822,32 @@ const Cust = {
      chỗ hoa hồng và tiến độ đọc tới. Bỏ tick thì chỉ gỡ đúng công đoạn mà CHÍNH buổi
      này từng ghi, không đụng vào công đoạn của buổi khác. */
   ghiCongDoan(d, cuaCu){
-    const t = db.treatments.find(x => x.id === d.treatmentId);
-    if (!t) return;
-    t.cd = t.cd || [];
-    cuaCu.filter(b => !d.congDoan.includes(b)).forEach(b => { t.cd = t.cd.filter(x => x.b !== b); });
-    d.congDoan.forEach(b => {
-      const co = t.cd.find(x => x.b === b);
-      if (co) { if (d.doctorId) co.s = d.doctorId; if (d.date) co.d = d.date; }
-      else t.cd.push({b, s: d.doctorId || '', d: d.date || todayISO()});
+    /* Một buổi nay đụng được nhiều dịch vụ nên ô tick mang "mãDịchVụ|mãBước". Bản cũ
+       lưu mã bước trần thì quy về dịch vụ chính của buổi đó. */
+    const tach = x => {
+      const i = String(x).indexOf('|');
+      return i < 0 ? {tid: d.treatmentId, b: String(x)} : {tid: x.slice(0, i), b: x.slice(i + 1)};
+    };
+    const moi = (d.congDoan || []).map(tach);
+    const cu = (cuaCu || []).map(tach);
+    /* Gom theo từng dịch vụ rồi mới ghi: bỏ tick chỉ được gỡ đúng công đoạn của chính
+       buổi này và chính dịch vụ đó, không đụng tới dịch vụ khác. */
+    [...new Set(moi.concat(cu).map(x => x.tid).filter(Boolean))].forEach(tid => {
+      const t = db.treatments.find(x => x.id === tid);
+      if (!t) return;
+      const bMoi = moi.filter(x => x.tid === tid).map(x => x.b);
+      const bCu  = cu.filter(x => x.tid === tid).map(x => x.b);
+      t.cd = t.cd || [];
+      bCu.filter(b => !bMoi.includes(b)).forEach(b => { t.cd = t.cd.filter(x => x.b !== b); });
+      bMoi.forEach(b => {
+        const co = t.cd.find(x => x.b === b);
+        if (co) { if (d.doctorId) co.s = d.doctorId; if (d.date) co.d = d.date; }
+        else t.cd.push({b, s: d.doctorId || '', d: d.date || todayISO()});
+      });
+      /* Làm xong công đoạn nào là ca đó đang chạy — trạng thái "Chưa điều trị" hết đúng */
+      if (t.cd.length && t.status === 'Chưa điều trị') t.status = 'Đang điều trị';
+      t._up = Date.now();
     });
-    /* Làm xong công đoạn nào là ca đó đang chạy — trạng thái "Chưa điều trị" hết đúng */
-    if (t.cd.length && t.status === 'Chưa điều trị') t.status = 'Đang điều trị';
-    t._up = Date.now();
   },
   visitDel(vid, cid){
     if (!confirm('Xóa diễn biến này khỏi bệnh án?')) return;
@@ -2815,8 +2864,9 @@ const Cust = {
       return `<div class="tl-item clickable" onclick="Cust.visitForm('${v.id||''}','${c.id}')" title="Bấm để sửa">
         <span class="tl-date num">${fmtD(v.date)}</span>
         <b>${h(v.db)}</b><p>${(() => {
-          const t = v.treatmentId ? db.treatments.find(x => x.id === v.treatmentId) : null;
-          return t ? `<span class="pill info">${h(t.name)}${t.tooth?' · R'+h(t.tooth):''}</span><br>` : '';
+          /* Mot buoi ghi chung cho nhieu dich vu thi hien het, khong chi hien cai dau */
+          const ds = Cust.dsDichVuCua(v).map(id => db.treatments.find(x => x.id === id)).filter(Boolean);
+          return ds.length ? ds.map(t => `<span class="pill info">${h(t.name)}${t.tooth?' · R'+h(t.tooth):''}</span>`).join(' ') + '<br>' : '';
         })()}${h(v.xt||'')}${bs?` <span class="sub-line">· BS ${h(bs.name)}</span>`:''}${
           (() => { const pt = staffById(v.assistantId); return pt ? ` <span class="sub-line">· phụ: ${h(pt.name)}</span>` : ''; })()}${
           (() => { const e=(db.episodes||[]).find(x=>x.id===v.episodeId); return e?` <span class="pill mutedp">${h(e.ten||'đợt')}</span>`:''; })()}</p></div>`;
@@ -5077,10 +5127,10 @@ Object.assign(HoSo, {
     const oDai = (ten, v, ph) => `<textarea name="${ten}" rows="2" placeholder="${h(ph||'')}"
       style="min-height:0">${h(v || '')}</textarea>`;
     const cu = ds.map(v => {
-      const dv = v.treatmentId ? db.treatments.find(x => x.id === v.treatmentId) : null;
+      const ds = Cust.dsDichVuCua(v).map(id => db.treatments.find(x => x.id === id)).filter(Boolean);
       return `<tr>
         <td style="width:118px"><input type="date" name="bb_${v.id}_date" value="${h(v.date || '')}"></td>
-        <td>${dv ? `<div class="sub-line">${h(dv.name)}${dv.tooth ? ' — R' + h(dv.tooth) : ''}</div>` : ''}
+        <td>${ds.length ? `<div class="sub-line">${ds.map(t => h(t.name) + (t.tooth ? ' — R' + h(t.tooth) : '')).join('; ')}</div>` : ''}
           ${oDai('bb_' + v.id + '_db', v.db)}</td>
         <td>${oDai('bb_' + v.id + '_xt', v.xt, 'Chỉ định — xử trí')}</td>
         <td>${oDai('bb_' + v.id + '_dan', v.dan, 'Dặn dò')}</td></tr>`;
@@ -5133,9 +5183,9 @@ Object.assign(HoSo, {
     const rows = ds.map(v => {
       const bs = staffById(v.doctorId), pt = staffById(v.assistantId);
       const ky = [bs ? 'BS: ' + h(bs.name) : '', pt ? 'Phụ tá: ' + h(pt.name) : ''].filter(Boolean).join(' · ');
-      const dv = v.treatmentId ? db.treatments.find(x => x.id === v.treatmentId) : null;
+      const ds = Cust.dsDichVuCua(v).map(id => db.treatments.find(x => x.id === id)).filter(Boolean);
       return `<tr><td style="width:104px">${fmtD(v.date)}</td>
-        <td>${dv ? '<i>' + h(dv.name) + (dv.tooth ? ' — R' + h(dv.tooth) : '') + '</i><br>' : ''}${h(v.db||'')}</td>
+        <td>${ds.length ? '<i>' + ds.map(t => h(t.name) + (t.tooth ? ' — R' + h(t.tooth) : '')).join('; ') + '</i><br>' : ''}${h(v.db||'')}</td>
         <td>${h(v.xt||'')}${v.dan?'<br><i>Dặn dò: '+h(v.dan)+'</i>':''}</td>
         <td style="width:22%">${ky ? '<i>'+ky+'</i>' : ''}<br><br></td></tr>`;
     }).join('');
