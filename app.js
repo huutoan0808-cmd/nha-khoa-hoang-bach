@@ -707,7 +707,7 @@ const NAV = [
 
 const App = {
   cur:'dashboard',
-  state:{calDate:todayISO(), custSel:'c1', custQ:'', treatCust:'c1', hrTab:'payroll', invQ:'', rp:{type:'month', y:(new Date()).getFullYear(), m:(new Date()).getMonth()+1, q:Math.floor((new Date()).getMonth()/3)+1}, toothSel:null},
+  state:{calDate:todayISO(), custSel:'c1', custQ:'', treatCust:'c1', hrTab:'payroll', invQ:'', rp:{type:'month', y:(new Date()).getFullYear(), m:(new Date()).getMonth()+1, q:Math.floor((new Date()).getMonth()/3)+1, d:todayISO(), tu:todayISO(), den:todayISO()}, toothSel:null},
 
   /* Cả phần mềm chỉ có MỘT khách đang xem. Trước đây tab Khách hàng giữ custSel còn
      tab Điều trị giữ treatCust riêng, nên chọn khách bên này rồi bấm sang bên kia là
@@ -9069,19 +9069,42 @@ SCREENS.lab = () => {
 
 /* ---------- Báo cáo ---------- */
 const Rep = {
-  set(k, v){ App.state.rp[k] = k==='type'?v:num(v); App.render(); },
+  /* type và ba ô ngày là CHUỖI, mấy ô còn lại là số — num() một cái ngày thì ra NaN
+     và cả màn báo cáo trắng bệch. */
+  set(k, v){ App.state.rp[k] = ['type','d','tu','den'].includes(k) ? v : num(v); App.render(); },
+  /* Lùi / tới một ngày cho nhanh, khỏi bấm vào ô lịch */
+  doiNgay(b){ const rp = App.state.rp; rp.d = isoAdd(rp.d || todayISO(), b); App.render(); },
+  homNay(){ App.state.rp.d = todayISO(); App.render(); },
   range(){
-    const {type, y, m, q} = App.state.rp;
+    const {type, y, m, q, d, tu, den} = App.state.rp;
+    if (type==='day') { const n = d || todayISO(); return [n, n, 'ngày ' + fmtD(n)]; }
+    if (type==='range') {
+      let a = tu || todayISO(), b = den || todayISO();
+      if (a > b) { const t = a; a = b; b = t; }      /* gõ ngược thì tự đảo lại */
+      return [a, b, 'từ ' + fmtD(a) + ' đến ' + fmtD(b)];
+    }
     if (type==='month') { const mm = String(m).padStart(2,'0'); return [y+'-'+mm+'-01', y+'-'+mm+'-31', 'tháng '+m+'/'+y]; }
     if (type==='quarter') { const sm = (q-1)*3+1, em = q*3; return [y+'-'+String(sm).padStart(2,'0')+'-01', y+'-'+String(em).padStart(2,'0')+'-31', 'quý '+q+'/'+y]; }
     return [y+'-01-01', y+'-12-31', 'năm '+y];
   },
+  /* Doanh thu từng ngày trong kỳ — để dò ra NGÀY nào lệch so với sổ tiền, chứ nhìn
+     một cục tổng tháng thì không biết bắt đầu tìm từ đâu. */
+  theoNgay(recs){
+    const map = {};
+    recs.forEach(r => { const k = r.date || '(không có ngày)';
+      const o = map[k] || (map[k] = {tien: 0, so: 0, cu: 0});
+      o.tien += r.amount; o.so++; if (r.old) o.cu += r.amount; });
+    return Object.entries(map).sort((a, b) => a[0] < b[0] ? -1 : 1);
+  },
   csv(){
     const [from, to, label] = this.range();
     const recs = db.receipts.filter(r=>r.date>=from && r.date<=to).sort((a,b)=>a.date<b.date?-1:1);
-    let csv = '﻿Ngày,Số phiếu,Khách hàng,Nội dung,Nhóm dịch vụ,Hình thức,Số tiền,Số HĐĐT,Mã tra cứu\n';
+    let csv = '﻿Ngày,Số phiếu,Khách hàng,Nội dung,Nhóm dịch vụ,Hình thức,Người thu,Sổ cũ,Số tiền,Số HĐĐT,Mã tra cứu\n';
     recs.forEach(r => { const c = custById(r.customerId);
-      csv += [fmtD(r.date), r.no, '"'+(c?c.name:'')+'"', '"'+(r.desc||'').replace(/"/g,'""')+'"', r.group||'', r.method, r.amount, r.invoice?r.invoice.no:'', r.invoice?r.invoice.code:''].join(',') + '\n'; });
+      const ng = staffById(r.staffId) || staffById(r.doctorId);
+      csv += [fmtD(r.date), r.no, '"'+(c?c.name:'')+'"', '"'+(r.desc||'').replace(/"/g,'""')+'"', r.group||'', r.method,
+        '"'+(ng?ng.name:'')+'"', r.old?'x':'', r.amount, r.invoice?r.invoice.no:'', r.invoice?r.invoice.code:''].join(',') + '\n'; });
+    csv += ',,,,,,,Tổng,' + recs.reduce((s,r)=>s+r.amount,0) + '\n';
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
     a.download = 'bao-cao-thu-' + label.replace(/[ /]/g,'-') + '.csv';
@@ -9211,22 +9234,54 @@ SCREENS.reports = () => {
   const byMethod = {}; recs.forEach(r=>byMethod[r.method]=(byMethod[r.method]||0)+r.amount);
 
   // Lương ước tính trong kỳ (số tháng trong kỳ × quỹ lương hiện tại)
-  const months = type==='month'?1:type==='quarter'?3:12;
+  /* Kỳ theo ngày hoặc theo khoảng thì quy ra số tháng cho đúng — để nguyên 12 như
+     trước là một ngày cũng gánh quỹ lương cả năm, tỷ suất thành vô nghĩa. */
+  const soNgayKy = Math.max(1, Math.round((new Date(to+'T00:00') - new Date(from+'T00:00')) / 864e5) + 1);
+  const months = type==='month'?1:type==='quarter'?3:type==='year'?12:(soNgayKy/30.44);
   const M = monthOf(todayISO());
   const payroll = db.staff.reduce((s,st)=>s + st.base + HR.commissionOf(st,M) + HR.bonusOf(st.id,M) - HR.penaltyOf(st.id,M),0);
 
   const mm = Array.from({length:12},(_,i)=>i+1);
+  const motNgay = type === 'day';
+  const oNgay = 'padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit';
+  /* Bảng từng phiếu thu — đây mới là thứ đối chiếu được với sổ tiền ngoài quầy:
+     từng tờ một, ai thu, thu cho ai, bao nhiêu. */
+  const phieuRows = recs.slice().sort((a,b) => (a.date+a.no) < (b.date+b.no) ? -1 : 1).map(r => {
+    const kh = custById(r.customerId);
+    const nguoi = staffById(r.staffId) || staffById(r.doctorId);
+    return `<tr><td class="num">${fmtD(r.date)}<br><span class="sub-line num">${h(r.no||'—')}</span></td>
+      <td><b>${h(kh ? kh.name : '(khách đã xóa)')}</b><br><span class="sub-line">${h(r.desc||'')}</span></td>
+      <td>${h(r.group||'Khác')}</td>
+      <td>${h(r.method||'')}${r.old ? '<br><span class="pill mutedp">sổ cũ</span>' : ''}</td>
+      <td>${h(nguoi ? nguoi.name : '—')}</td>
+      <td class="r num" style="font-weight:600">${money(r.amount)}</td></tr>`;
+  }).join('') || '<tr><td colspan="6" class="sub-line">Không có phiếu thu nào trong kỳ.</td></tr>';
+  const ngayRows = Rep.theoNgay(recs).map(([d, o]) =>
+    `<tr><td class="num">${d === '(không có ngày)' ? '<span class="pill danger">thiếu ngày</span>' : fmtD(d)}</td>
+      <td class="num">${o.so}</td>
+      <td class="r num" style="font-weight:600">${money(o.tien)}</td>
+      <td class="r num">${o.cu ? '<span class="sub-line">' + money(o.cu) + '</span>' : ''}</td></tr>`).join('');
+  const tienCu = recs.filter(r => r.old).reduce((s,r)=>s+r.amount, 0);
+
   return `
   <div class="page-head"><h1>Báo cáo</h1><span class="spacer"></span>
     <button class="btn" onclick="Rep.csv()">Xuất CSV (Excel)</button>
     <button class="btn primary" onclick="Rep.printReport()">${IC.print} In báo cáo</button>
-    <div class="sub">dành cho kế toán — tổng hợp theo tháng, quý, năm từ sổ phiếu thu</div></div>
+    <div class="sub">dành cho kế toán — tổng hợp theo ngày, tháng, quý, năm từ sổ phiếu thu</div></div>
   <div class="date-nav mb">
-    <select onchange="Rep.set('type',this.value)" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit">
-      ${[['month','Theo tháng'],['quarter','Theo quý'],['year','Theo năm']].map(([k,l])=>`<option value="${k}"${type===k?' selected':''}>${l}</option>`).join('')}</select>
-    ${type==='month'?`<select onchange="Rep.set('m',this.value)" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit">${mm.map(x=>`<option value="${x}"${m===x?' selected':''}>Tháng ${x}</option>`).join('')}</select>`:''}
-    ${type==='quarter'?`<select onchange="Rep.set('q',this.value)" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit">${[1,2,3,4].map(x=>`<option value="${x}"${q===x?' selected':''}>Quý ${x}</option>`).join('')}</select>`:''}
-    <input type="number" value="${y}" min="2020" max="2040" onchange="Rep.set('y',this.value)" style="width:90px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit">
+    <select onchange="Rep.set('type',this.value)" style="${oNgay}">
+      ${[['day','Theo ngày'],['range','Theo khoảng ngày'],['month','Theo tháng'],['quarter','Theo quý'],['year','Theo năm']]
+        .map(([k,l])=>`<option value="${k}"${type===k?' selected':''}>${l}</option>`).join('')}</select>
+    ${motNgay?`<button class="btn small" onclick="Rep.doiNgay(-1)" title="Ngày trước">◀</button>
+      <input type="date" value="${h(App.state.rp.d||todayISO())}" onchange="Rep.set('d',this.value)" style="${oNgay}">
+      <button class="btn small" onclick="Rep.doiNgay(1)" title="Ngày sau">▶</button>
+      <button class="btn small" onclick="Rep.homNay()">Hôm nay</button>`:''}
+    ${type==='range'?`<input type="date" value="${h(App.state.rp.tu||todayISO())}" onchange="Rep.set('tu',this.value)" style="${oNgay}">
+      <span class="sub-line">đến</span>
+      <input type="date" value="${h(App.state.rp.den||todayISO())}" onchange="Rep.set('den',this.value)" style="${oNgay}">`:''}
+    ${type==='month'?`<select onchange="Rep.set('m',this.value)" style="${oNgay}">${mm.map(x=>`<option value="${x}"${m===x?' selected':''}>Tháng ${x}</option>`).join('')}</select>`:''}
+    ${type==='quarter'?`<select onchange="Rep.set('q',this.value)" style="${oNgay}">${[1,2,3,4].map(x=>`<option value="${x}"${q===x?' selected':''}>Quý ${x}</option>`).join('')}</select>`:''}
+    ${type==='day'||type==='range'?'':`<input type="number" value="${y}" min="2020" max="2040" onchange="Rep.set('y',this.value)" style="width:90px;${oNgay}">`}
   </div>
   <div id="reportBody">
   <div class="kpis">
@@ -9251,7 +9306,8 @@ SCREENS.reports = () => {
       <tbody>${Object.entries(byMethod).map(([k,v])=>`<tr><td>${h(k)}</td><td class="r num">${money(v)}</td></tr>`).join('')||'<tr><td colspan="2" class="sub-line">Không có dữ liệu.</td></tr>'}</tbody></table></div></div>
       <div class="card"><div class="card-h"><h2>Chi phí nhân sự (ước tính kỳ)</h2></div>
       <div class="card-b">
-        <div class="hbar"><div class="hb-top"><b>Quỹ lương ${months} tháng (theo tháng hiện tại)</b><span class="num">${money(payroll*months)}</span></div></div>
+        <div class="hbar"><div class="hb-top"><b>Quỹ lương ${
+          type==='day'||type==='range' ? soNgayKy + ' ngày' : months + ' tháng'} (theo tháng hiện tại)</b><span class="num">${money(payroll*months)}</span></div></div>
         <div class="sub-line" style="margin-top:6px">Gồm lương cứng + hoa hồng + thưởng − phạt. BHXH doanh nghiệp đóng thêm ${money(db.staff.reduce((s,st)=>s+st.base*0.215,0)*months)}.</div>
       </div></div>
       <div class="card"><div class="card-h"><h2>Tỷ suất nhanh</h2></div>
@@ -9261,6 +9317,23 @@ SCREENS.reports = () => {
       </div></div>
     </div>
   </div>
+  ${ngayRows && !motNgay ? `<div class="card"><div class="card-h"><h2>Doanh thu từng ngày</h2>
+    <span class="hint">dò xem ngày nào lệch so với sổ tiền</span></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Ngày</th><th>Số phiếu</th><th class="r">Doanh thu</th><th class="r">trong đó sổ cũ</th></tr></thead>
+    <tbody>${ngayRows}
+      <tr><td style="font-weight:700">Tổng</td><td class="num" style="font-weight:700">${recs.length}</td>
+        <td class="r num" style="font-weight:700">${money(total)}</td>
+        <td class="r num">${tienCu?money(tienCu):''}</td></tr></tbody></table></div></div>` : ''}
+  <div class="card"><div class="card-h"><h2>Phiếu thu trong kỳ</h2>
+    <span class="hint">đối chiếu từng tờ với sổ tiền ngoài quầy</span></div>
+    <div class="tbl-wrap"><table style="min-width:760px">
+    <thead><tr><th>Ngày / Số</th><th>Khách · nội dung</th><th>Nhóm</th><th>Hình thức</th><th>Người thu</th><th class="r">Số tiền</th></tr></thead>
+    <tbody>${phieuRows}
+      ${recs.length?`<tr><td colspan="5" style="font-weight:700">Tổng ${recs.length} phiếu</td>
+        <td class="r num" style="font-weight:700">${money(total)}</td></tr>`:''}</tbody></table></div>
+    ${tienCu?`<div class="note-block" style="margin:12px">Trong đó <b>${money(tienCu)}</b> là phiếu thu nhập từ <b>sổ giấy cũ</b>
+      (đánh dấu "sổ cũ") — tiền này đã thu từ trước khi dùng phần mềm. Nếu sổ tiền của phòng khám
+      không tính lại khoản đó thì hai bên lệch nhau đúng con số này.</div>`:''}</div>
   </div>`;
 };
 
