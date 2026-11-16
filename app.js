@@ -3027,6 +3027,11 @@ SCREENS.benhan = () => {
         fmtD(e.tuNgay)}${e.denNgay ? ' – ' + fmtD(e.denNgay) : ''}${e.lyDo ? ' · ' + h(e.lyDo) : ''}</option>`).join('')}
     </select></div></div>` : ''}
 
+  <div class="card mb"><div class="card-h"><h2>Chẩn đoán</h2>
+    <span class="hint">vấn đề đứng đầu in vào dòng Bệnh chính của bệnh án</span><span class="spacer"></span>
+    <button class="btn small primary" onclick="Cust.vanDeForm()">${IC.plus} Thêm chẩn đoán</button></div>
+    <div class="card-b">${Cust.vanDeHTML(c)}</div></div>
+
   ${HoSo.cardHTML(c)}`;
 };
 
@@ -3879,10 +3884,9 @@ SCREENS.treatment = () => {
     <div class="sub">${h(c.name)} · ${h(c.code||'')}${c.allergy?' · ⚕ '+h(c.allergy):''}</div></div>
   ${dauTrang}
   ${Cust.soDoCardHTML(c)}
-  <div class="card mb"><div class="card-h"><h2>Chẩn đoán</h2>
-    <span class="hint">vấn đề đứng đầu in vào dòng Bệnh chính của bệnh án</span><span class="spacer"></span>
-    <button class="btn small primary" onclick="Cust.vanDeForm()">${IC.plus} Thêm chẩn đoán</button></div>
-    <div class="card-b">${Cust.vanDeHTML(c)}</div></div>
+  ${/* Khối "Chẩn đoán" đã chuyển sang tab Bệnh án điện tử — đó là mục của hồ sơ bệnh
+        án, không phải việc ghi hằng ngày ở ghế. Chẩn đoán cho từng răng vẫn ghi ngay
+        trên sơ đồ phía trên, và ô chẩn đoán khi thêm dịch vụ vẫn còn. */''}
   <div class="card"><div class="card-h"><h2>Kế hoạch điều trị</h2>
     <span class="hint">thêm bớt thoải mái — chưa phải hạng mục chính thức</span><span class="spacer"></span>
     <button class="btn small primary" onclick="Treat.khThem()">${IC.plus} Thêm dịch vụ</button>
