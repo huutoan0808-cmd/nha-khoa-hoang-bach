@@ -234,6 +234,10 @@ const Sync = {
         sh[rid] = this.plain(rec);
       });
     });
+    /* Kết quả của Cơ sở CĐHA (cdha.html ghi). Chỉ đọc: không nằm trong SYNC_TABLES nên
+       không bao giờ bị đẩy ngược lên đè mất kết luận KTV vừa ghi. */
+    const kq = (byTbl.cdha || []).filter(r => !r.deleted).map(r => r.data);
+    if (JSON.stringify(kq) !== JSON.stringify(db.cdhaKQ || [])) { db.cdhaKQ = kq; updated++; }
     return {added, updated, removed};
   },
 

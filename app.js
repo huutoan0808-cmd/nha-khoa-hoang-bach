@@ -3902,6 +3902,38 @@ const Treat = {
   printRx(id){ DT.inDon(id); },
 };
 
+/* ---------- Kết quả từ Cơ sở Chẩn đoán hình ảnh ----------
+   Trang cdha.html (dùng chung tài khoản, chung Supabase) ghi kết quả chụp vào các dòng
+   tbl='cdha' của bảng records. Phần mềm nha khoa CHỈ ĐỌC những dòng này (Sync.pull
+   chép vào db.cdhaKQ) và không bao giờ đẩy ngược lên — nên không có chuyện hai bên ghi
+   đè nhau. Bác sĩ chỉ định chụp bằng cách thêm dịch vụ nhóm "Chẩn đoán hình ảnh"; để
+   trạng thái "Báo giá" thì khoản đó không tính vào nợ ở phòng khám, vì cơ sở CĐHA
+   là đơn vị thu tiền chụp. */
+const CDHA = {
+  TT: {cho:'Chờ chụp', chup:'Đang chụp', doc:'Chờ đọc KQ', xong:'Đã trả KQ', huy:'Huỷ'},
+  MAU: {cho:'warn', chup:'info', doc:'info', xong:'ok', huy:'danger'},
+  ds(){ return db.cdhaKQ || []; },
+  cua(t){ return this.ds().find(x => x.treatmentId === t.id) || null; },
+  dong(k){
+    return `<br><span class="pill ${this.MAU[k.status]||'mutedp'}" title="Cơ sở CĐHA">CĐHA: ${h(this.TT[k.status]||k.status)}</span>`
+      + (k.conclusion ? `<br><span class="sub-line">KL: ${h(k.conclusion)}</span>` : '');
+  },
+  the(cid){
+    const ds = this.ds().filter(x => x.customerId === cid && x.status !== 'huy')
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    if (!ds.length) return '';
+    return `<div class="card mb"><div class="card-h"><h2>Kết quả chẩn đoán hình ảnh</h2>
+      <span class="hint">do Cơ sở CĐHA Hoàng Bách – Thời Đại ghi · chỉ xem</span><span class="spacer"></span>
+      <a class="btn small" href="cdha.html">Mở trang CĐHA</a></div>
+      <div class="tbl-wrap"><table><thead><tr><th>Ngày</th><th>Kỹ thuật</th><th>Kết luận</th><th>Trạng thái</th></tr></thead><tbody>
+      ${ds.map(k => `<tr><td class="num">${fmtD(k.date)}<br><span class="sub-line num">${h(k.code||'')}</span></td>
+        <td>${h((k.items||[]).map(i => i.name).join(', '))}${k.region ? '<br><span class="sub-line">' + h(k.region) + '</span>' : ''}</td>
+        <td>${k.conclusion ? h(k.conclusion) : '<span class="sub-line">chưa có</span>'}${k.technician ? '<br><span class="sub-line">KTV: ' + h(k.technician) + '</span>' : ''}</td>
+        <td><span class="pill ${this.MAU[k.status]||'mutedp'}">${h(this.TT[k.status]||k.status)}</span></td></tr>`).join('')}
+      </tbody></table></div></div>`;
+  },
+};
+
 SCREENS.treatment = () => {
   const cid = App.state.treatCust || App.state.custSel || (db.customers[0] && db.customers[0].id);
   App.chonKhach(cid);
@@ -3921,7 +3953,8 @@ SCREENS.treatment = () => {
     const st = trangThaiMau(t.status);
     const phu = staffById(t.assistantId);
     const q = QT.cua(t), xong = (t.cd||[]).length;
-    return `<tr class="clickable" onclick="Treat.itemForm('${t.id}')"><td><b>${h(t.name)}</b><br><span class="sub-line">${h(t.group)}</span></td>
+    const kq = CDHA.cua(t);
+    return `<tr class="clickable" onclick="Treat.itemForm('${t.id}')"><td><b>${h(t.name)}</b><br><span class="sub-line">${h(t.group)}</span>${kq ? CDHA.dong(kq) : ''}</td>
     <td class="num">${h(t.tooth||'—')}</td>
     <td>${(() => {
       /* Ai làm thì lấy từ công đoạn đã ghi — form hạng mục không còn hỏi bác sĩ nữa.
@@ -4036,6 +4069,7 @@ SCREENS.treatment = () => {
     <button class="btn small primary" onclick="Treat.khThem()">${IC.plus} Thêm dịch vụ</button></div>
     <div class="tbl-wrap"><table><thead><tr><th>Dịch vụ</th><th>Răng</th><th>Bác sĩ · người phụ</th><th>Trạng thái</th><th class="r">Đơn giá</th><th>Công đoạn</th></tr></thead><tbody>${itemRows}</tbody></table></div>
     ${Treat.khChuaChotHTML(c)}</div>
+  ${CDHA.the(cid)}
   <div class="card mb"><div class="card-h"><h2>Sơ đồ tiến trình điều trị</h2>
     <span class="hint">bấm vào răng để đổi trạng thái · màu răng nói về tiến độ, không phải bệnh lý</span>
     <span class="spacer"></span>

@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>CĐHA Hoàng Bách – Thời Đại</title>
+<meta name="theme-color" content="#0d1a22">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Trang làm việc của Cơ sở Chẩn đoán hình ảnh. Dùng chung tài khoản và cơ sở dữ liệu
+   Supabase với phần mềm nha khoa: đọc khách + dịch vụ nhóm "Chẩn đoán hình ảnh" mà
+   bác sĩ đã chỉ định, và CHỈ GHI vào các dòng tbl='cdha' / 'cdhaDM' của bảng records.
+   Không bao giờ ghi vào khách hàng hay dịch vụ của phần mềm nha khoa. */
+:root{
+  --bg:#f3f6f8; --panel:#ffffff; --ink:#14212b; --muted:#5b6b78; --line:#d9e1e7;
+  --accent:#0f6a86; --accent-ink:#ffffff; --accent-soft:#e2f0f5;
+  --ok:#1f7a4d; --ok-soft:#e3f3ea; --warn:#9a6200; --warn-soft:#fbf0d9;
+  --info:#3a4fb0; --info-soft:#e6e9fa; --bad:#b3261e; --bad-soft:#fbe5e3;
+  --film:#0d1a22;
+  --f-body:"Be Vietnam Pro",system-ui,"Segoe UI",Arial,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  --r:8px; color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0c151b; --panel:#13212a; --ink:#e3ecf1; --muted:#93a6b3; --line:#243845;
+  --accent:#4cb3d4; --accent-ink:#06141b; --accent-soft:#163543;
+  --ok:#5fcf95; --ok-soft:#173326; --warn:#e8b552; --warn-soft:#3a2c10;
+  --info:#9aa9ff; --info-soft:#232a52; --bad:#ff8a80; --bad-soft:#3d1a18; --film:#050b0f; color-scheme:dark}}
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.top{position:sticky;top:0;z-index:5;background:var(--film);color:#e8f2f6}
+header.top .wrap{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding-block:10px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.01em;min-width:0}
+.brand svg{flex:none}
+.brand small{display:block;font-weight:400;font-size:12px;color:#8fb3c2}
+nav.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-left:auto;align-items:center}
+nav.tabs a{color:#bcd3dd;text-decoration:none;padding:6px 12px;border-radius:6px;font-weight:500}
+nav.tabs a:hover{background:#1b2f3a;color:#fff}
+nav.tabs a[aria-current="page"]{background:#1f4655;color:#fff}
+nav.tabs .me{color:#8fb3c2;font-size:12px;padding-left:8px}
+main{padding-block:20px 48px}
+h1{font-size:22px;margin:0;text-wrap:balance}
+h2{font-size:16px;margin:0;text-wrap:balance}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.spread{justify-content:space-between}
+.stack{display:flex;flex-direction:column;gap:16px}
+.muted{color:var(--muted)}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r)}
+.pad{padding:16px}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kpi{padding:14px 16px}
+.kpi .lab{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.kpi .val{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px}
+.kpi .sub{font-size:12px;color:var(--muted)}
+@media (max-width:760px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 12px;border-radius:6px;font-weight:500}
+button:hover{border-color:var(--accent)}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,tr:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.primary:hover{filter:brightness(1.08)}
+button.ghost{background:transparent;border-color:transparent;color:var(--accent);padding:4px 8px}
+button.danger{color:var(--bad);border-color:var(--bad-soft)}
+button.danger.armed{background:var(--bad);color:#fff;border-color:var(--bad)}
+button:disabled{opacity:.5;cursor:not-allowed}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 10px;min-width:0;width:100%}
+textarea{min-height:90px;resize:vertical}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:500;min-width:0}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:640px){.grid2,.grid3,.grid4{grid-template-columns:minmax(0,1fr)}.span2{grid-column:auto!important}}
+.span2{grid-column:span 2}
+.tablebox{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+tbody tr.click{cursor:pointer}
+tbody tr.click:hover td{background:var(--accent-soft)}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.st-cho{background:var(--warn-soft);color:var(--warn)}
+.st-chup{background:var(--info-soft);color:var(--info)}
+.st-doc{background:var(--accent-soft);color:var(--accent)}
+.st-xong{background:var(--ok-soft);color:var(--ok)}
+.st-huy{background:var(--bad-soft);color:var(--bad)}
+.src{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:4px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.src.app{border-color:var(--accent);color:var(--accent)}
+.tag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.03em;padding:1px 7px;border-radius:4px;background:var(--accent-soft);color:var(--accent);margin:0 4px 4px 0}
+.debt{color:var(--bad);font-weight:600}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px;background:var(--panel);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.empty{padding:32px 16px;text-align:center;color:var(--muted)}
+.note{font-size:13px;color:var(--warn);background:var(--warn-soft);padding:8px 12px;border-radius:6px}
+.note.info{color:var(--accent);background:var(--accent-soft)}
+.ov{position:fixed;inset:0;background:rgba(6,14,19,.55);z-index:20;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:max(24px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) 24px max(12px,env(safe-area-inset-left,0px))}
+.dlg{background:var(--panel);color:var(--ink);border-radius:10px;width:min(820px,100%);border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.dlg header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.dlg .body{padding:18px;display:flex;flex-direction:column;gap:16px}
+.dlg footer{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding:14px 18px;border-top:1px solid var(--line)}
+.sec-t{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.svc-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px}
+.svc{display:flex;gap:8px;align-items:flex-start;border:1px solid var(--line);border-radius:6px;padding:8px 10px;cursor:pointer}
+.svc input{width:auto;margin-top:3px}
+.svc.on{border-color:var(--accent);background:var(--accent-soft)}
+.svc .p{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
+.sugg{border:1px solid var(--line);border-radius:6px;max-height:240px;overflow-y:auto}
+.sugg button{display:flex;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);border-radius:0;gap:10px;align-items:center}
+.sugg button:last-child{border-bottom:0}
+.sumbox{display:flex;flex-direction:column;gap:4px;background:var(--bg);border-radius:6px;padding:12px 14px}
+.sumbox .l{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
+.sumbox .l.big{font-size:17px;font-weight:700}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:30;font-weight:500;max-width:calc(100% - 32px)}
+.bars{display:flex;flex-direction:column;gap:8px}
+.bar{display:grid;grid-template-columns:150px minmax(0,1fr) 120px;gap:10px;align-items:center}
+.bar .t{height:10px;border-radius:5px;background:var(--accent-soft);overflow:hidden}
+.bar .t i{display:block;height:100%;background:var(--accent)}
+@media (max-width:520px){.bar{grid-template-columns:100px minmax(0,1fr) 92px}}
+@media (max-width:640px){.hide-sm{display:none}}
+.login{max-width:380px;margin:48px auto}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect x="1" y="1" width="28" height="28" rx="6" fill="#1f4655"/><circle cx="15" cy="15" r="8" fill="none" stroke="#7fd3ec" stroke-width="2"/><path d="M15 7v16M7 15h16" stroke="#7fd3ec" stroke-width="1.2" opacity=".6"/><circle cx="15" cy="15" r="2.4" fill="#e8f2f6"/></svg>
+      <div style="min-width:0">Cơ sở Chẩn đoán hình ảnh Hoàng Bách – Thời Đại<small>C22 Lê Hồng Phong, phường Rạch Giá, tỉnh An Giang</small></div>
+    </div>
+    <nav class="tabs" id="tabs" hidden>
+      <a href="#hom-nay" data-v="hom-nay">Hôm nay</a>
+      <a href="#khach-hang" data-v="khach-hang">Khách hàng</a>
+      <a href="#thong-ke" data-v="thong-ke">Thống kê</a>
+      <a href="#danh-muc" data-v="danh-muc">Danh mục</a>
+      <a href="./" title="Quay về phần mềm nha khoa">← Nha khoa</a>
+      <span class="me" id="me"></span>
+    </nav>
+  </div>
+</header>
+<main class="wrap" id="app"><div class="panel empty">Đang mở…</div></main>
+<div id="modal-root"></div>
+
+<script src="config.js?v=1"></script>
+<script src="cloud.js?v=1"></script>
+<script>
+(() => {
+"use strict";
+/* ---------- Cấu hình cơ sở ---------- */
+const NHOM_CDHA = "Chẩn đoán hình ảnh";
+/* Dịch vụ thuộc nhóm trên nhưng KHÔNG làm ở cơ sở CĐHA: khám tư vấn (0đ) và phim quanh
+   chóp (máy ECO-X-S chụp ngoài miệng, không chụp được phim trong miệng). */
+const KHONG_PHAI_CDHA = /kh[aá]m|t[uư] v[aấ]n|quanh ch[oó]p|c[aá]nh c[aắ]n|phim c[aắ]n/i;
+const DM_MAC_DINH = {
+  services: [
+    {id:"pano", name:"Phim toàn cảnh (Panorama)", group:"Phim 2D", price:150000, active:true},
+    {id:"ceph", name:"Phim sọ nghiêng (Cephalometric)", group:"Phim 2D", price:350000, active:true},
+    {id:"tmj",  name:"Phim khớp thái dương hàm", group:"Phim 2D", price:150000, active:true},
+    {id:"cbct", name:"CT Cone Beam", group:"CT Cone Beam", price:650000, active:true},
+  ],
+  referrers: [
+    {id:"gq", name:"Nha khoa Hoàng Bách – Gò Quao", place:"33 Đường 3/2, xã Gò Quao", phone:"0776 262 242", rate:0},
+  ],
+  ktv: "Lê Hoàng Ân",
+};
+const GROUPS = ["Phim 2D","CT Cone Beam","Khác"];
+const NOI_APP = "Nha khoa Hoàng Bách – Thời Đại";
+/* Giờ hoạt động đã đăng ký (ngoài giờ hành chính BVĐK Kiên Giang của KTV phụ trách) */
+const HOURS = {wk:[[690,750],[1050,1140]], we:[[480,1020]]};
+const HOURS_TEXT = "T2–T6: 11:30–12:30 và 17:30–19:00 · T7, CN: 08:00–17:00";
+function inHours(d){const m=d.getHours()*60+d.getMinutes(),w=d.getDay();return (w===0||w===6?HOURS.we:HOURS.wk).some(([a,b])=>m>=a&&m<b)}
+const STATUS = [{k:"cho",t:"Chờ chụp"},{k:"chup",t:"Đang chụp"},{k:"doc",t:"Chờ đọc KQ"},{k:"xong",t:"Đã trả KQ"},{k:"huy",t:"Huỷ"}];
+const ST = Object.fromEntries(STATUS.map(s=>[s.k,s.t]));
+const TON_NGAY = 30; /* chỉ định chưa chụp trong 30 ngày gần nhất thì còn hiện ở danh sách chờ */
+
+const S = { customers:{}, treatments:[], staff:{}, cdha:{}, dm:null, loaded:false, err:"",
+  view:"hom-nay", day:today(), stFilter:"all", q:"", from:monthStart(), to:today() };
+
+/* ---------- tiện ích ---------- */
+function pad2(n){return String(n).padStart(2,"0")}
+function ymd(d){return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate())}
+function today(){return ymd(new Date())}
+function monthStart(){const d=new Date();return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-01"}
+function addDays(s,n){const d=new Date(s+"T00:00:00");d.setDate(d.getDate()+n);return ymd(d)}
+function vnDate(s){if(!s)return "";const [y,m,d]=String(s).slice(0,10).split("-");return d+"/"+m+"/"+y}
+function money(n){return Math.round(Number(n)||0).toLocaleString("vi-VN")+" đ"}
+function num(v){const n=Number(String(v??"").replace(/[^\d-]/g,""));return isFinite(n)?n:0}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function fold(s){return String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/đ/g,"d").replace(/Đ/g,"D").toLowerCase()}
+function yobOf(k){if(!k)return "";if(k.yob)return String(k.yob);if(k.dob)return String(k.dob).slice(0,4);return ""}
+function ageOf(k){const y=+yobOf(k);return y?new Date().getFullYear()-y:""}
+function hhmm(ts){if(!ts)return "";const d=new Date(ts);return pad2(d.getHours())+":"+pad2(d.getMinutes())}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function dm(){return S.dm||DM_MAC_DINH}
+function refById(id){return (dm().referrers||[]).find(r=>r.id===id)}
+let toastT;function toast(msg){clearTimeout(toastT);document.querySelectorAll(".toast").forEach(e=>e.remove());const t=document.createElement("div");t.className="toast";t.setAttribute("role","status");t.textContent=msg;document.body.appendChild(t);toastT=setTimeout(()=>t.remove(),3000)}
+function pill(k){return `<span class="pill st-${k}">${ST[k]||k}</span>`}
+
+/* ---------- đọc / ghi Supabase ---------- */
+const TRANG = 1000;
+async function docHet(bang, loc, chon){
+  const ra=[];
+  for(let tu=0;;tu+=TRANG){
+    const p = await Cloud.auth(`/rest/v1/${bang}?select=${chon}&${loc}&order=id.asc&limit=${TRANG}&offset=${tu}`,{timeout:45000})||[];
+    ra.push(...p); if(p.length<TRANG||ra.length>200000)break;
+  }
+  return ra;
+}
+const thieuBang = e => /does not exist|schema cache|Could not find the table|404/i.test(e&&e.message||"");
+/* Chỉ lấy đúng mấy trường cần, khỏi kéo cả bệnh án nặng về */
+const CHON_KH = "id,tbl,deleted,updated_at,code:data->>code,name:data->>name,phone:data->>phone,dob:data->>dob,gender:data->>gender,street:data->>street,ward:data->>ward,province:data->>province";
+const CHON_DV = "id,tbl,deleted,updated_at,customerId:data->>customerId,name:data->>name,grp:data->>group,price:data->>price,date:data->>date,tooth:data->>tooth,doctorId:data->>doctorId,status:data->>status";
+const LOC_DV = "tbl=eq.treatments&data->>group=eq."+encodeURIComponent(NHOM_CDHA);
+async function caHaiKho(loc, chon){
+  let rows = await docHet("records", loc, chon);
+  try{ rows = rows.concat(await docHet("emr", loc, chon)); }catch(e){ if(!thieuBang(e)) throw e; }
+  const m = {};
+  rows.forEach(r=>{const o=m[r.id];if(!o||Date.parse(r.updated_at||0)>Date.parse(o.updated_at||0))m[r.id]=r});
+  return Object.values(m).filter(r=>!r.deleted && r.deleted!=="true");
+}
+const rid = r => String(r.id).slice(String(r.tbl).length+1);
+let dangTai=false, lanDauKH=0;
+async function taiDuLieu(lang){
+  if(dangTai)return; dangTai=true;
+  try{
+    const canKH = !lang || Date.now()-lanDauKH>5*60000;
+    const [kh, dv, ns, ca] = await Promise.all([
+      canKH ? caHaiKho("tbl=eq.customers", CHON_KH) : null,
+      caHaiKho(LOC_DV, CHON_DV),
+      canKH ? docHet("records","tbl=eq.staff","id,tbl,deleted,name:data->>name,role:data->>role") : null,
+      docHet("records","tbl=in.(cdha,cdhaDM)","id,tbl,deleted,updated_at,data"),
+    ]);
+    if(kh){S.customers={};kh.forEach(r=>{S.customers[rid(r)]={id:rid(r),code:r.code,name:r.name,phone:r.phone,dob:r.dob,gender:r.gender,addr:[r.street,r.ward,r.province].filter(Boolean).join(", ")}});lanDauKH=Date.now()}
+    if(ns){S.staff={};ns.filter(r=>!r.deleted).forEach(r=>{S.staff[rid(r)]={name:r.name,role:r.role}})}
+    S.treatments = dv.map(r=>({id:rid(r),customerId:r.customerId,name:r.name,price:num(r.price),date:(r.date||"").slice(0,10),tooth:r.tooth,doctorId:r.doctorId,status:r.status}))
+      .filter(t=>!KHONG_PHAI_CDHA.test(t.name||""));
+    S.cdha={}; S.dm=null;
+    ca.forEach(r=>{ if(r.deleted)return; if(r.tbl==="cdhaDM"){S.dm=Object.assign({},DM_MAC_DINH,r.data||{})} else S.cdha[rid(r)]=r.data; });
+    S.loaded=true; S.err="";
+  }catch(e){
+    S.err = /Failed to fetch|NetworkError|aborted/i.test(e.message)?"Mất kết nối tới máy chủ, đang thử lại.":("Không đọc được dữ liệu: "+e.message);
+    if(/JWT|token|401/i.test(e.message)&&!Cloud.loggedIn()){render();return}
+  }finally{dangTai=false}
+  if(!document.querySelector("#modal-root .ov")) render(); else S.canVe=true;
+}
+async function ghi(tbl, id, data, xoa){
+  await Cloud.auth("/rest/v1/records?on_conflict=id",{method:"POST",headers:{Prefer:"resolution=merge-duplicates"},
+    body:[{id:tbl+":"+id,tbl,data,deleted:!!xoa,updated_at:new Date().toISOString()}]});
+}
+async function luu(fn, okMsg){
+  try{await fn(); if(okMsg)toast(okMsg); return true}
+  catch(e){toast("Chưa lưu được: "+e.message);return false}
+}
+
+/* ---------- Gộp chỉ định từ app + ca CĐHA thành danh sách ca ---------- */
+function dsCa(){
+  const out=[], daCo={};
+  Object.values(S.cdha).forEach(c=>{ if(c.treatmentId) daCo[c.treatmentId]=1; });
+  /* Chỉ định từ phần mềm nha khoa: có ca rồi thì dùng ca, chưa thì là ca ảo "Chờ chụp" */
+  S.treatments.forEach(t=>{
+    if(daCo[t.id]) return;
+    out.push({id:"t_"+t.id, ao:true, treatmentId:t.id, customerId:t.customerId, date:t.date, createdAt:0,
+      items:[{name:t.name,price:t.price}], discount:0, paid:0, status:"cho", tooth:t.tooth, doctorId:t.doctorId});
+  });
+  Object.values(S.cdha).forEach(c=>{
+    const t = c.treatmentId && S.treatments.find(x=>x.id===c.treatmentId);
+    out.push(t ? Object.assign({}, c, {_t:t}) : c);
+  });
+  return out;
+}
+function khachCua(ca){
+  const k = ca.customerId && S.customers[ca.customerId];
+  return k ? Object.assign({}, ca.khach||{}, k, {tuApp:true}) : Object.assign({tuApp:false}, ca.khach||{});
+}
+function noiGui(ca){
+  if(ca.treatmentId){ const bs = S.staff[ca.doctorId || (ca._t||{}).doctorId]; return NOI_APP + (bs&&bs.name?" · "+bs.name:""); }
+  const r = ca.refId && refById(ca.refId); return r ? r.name : "Khách tự đến";
+}
+const tong = ca => (ca.items||[]).reduce((a,i)=>a+num(i.price),0);
+const phaiThu = ca => Math.max(0,tong(ca)-num(ca.discount));
+const no = ca => ca.status==="huy"?0:Math.max(0,phaiThu(ca)-num(ca.paid));
+function nextCode(){
+  const d=new Date(), base="CD"+String(d.getFullYear()).slice(2)+pad2(d.getMonth()+1)+pad2(d.getDate())+"-";
+  let max=0; Object.values(S.cdha).forEach(c=>{const s=c.code||"";if(s.startsWith(base)){const n=parseInt(s.slice(base.length),10);if(n>max)max=n}});
+  return base+String(max+1).padStart(3,"0");
+}
+
+/* ---------- định tuyến ---------- */
+const VIEWS=["hom-nay","khach-hang","thong-ke","danh-muc"];
+function route(){const h=location.hash.replace("#","");S.view=VIEWS.includes(h)?h:"hom-nay";render()}
+window.addEventListener("hashchange",route);
+
+/* ---------- vẽ ---------- */
+const app=document.getElementById("app");
+function render(){
+  S.canVe=false;
+  const nav=document.getElementById("tabs");
+  if(!Cloud.configured()){app.innerHTML=`<div class="panel pad">Chưa cấu hình kết nối cơ sở dữ liệu.</div>`;return}
+  if(!Cloud.loggedIn()){nav.hidden=true;app.innerHTML=vLogin();bindLogin();return}
+  nav.hidden=false; document.getElementById("me").textContent=Cloud.who();
+  nav.querySelectorAll("a[data-v]").forEach(a=>{if(a.dataset.v===S.view)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
+  const fid=document.activeElement&&document.activeElement.id, sel=document.activeElement&&document.activeElement.selectionStart;
+  let html="";
+  if(S.err) html+=`<div class="note">${esc(S.err)}</div>`;
+  if(!S.loaded) html+=`<div class="panel empty">Đang tải danh sách khách và chỉ định từ phần mềm nha khoa…</div>`;
+  else if(S.view==="hom-nay") html+=vToday();
+  else if(S.view==="khach-hang") html+=vKhach();
+  else if(S.view==="thong-ke") html+=vStats();
+  else html+=vDM();
+  app.innerHTML=`<div class="stack">${html}</div>`;
+  if(fid){const el=document.getElementById(fid);if(el&&el.closest("#app")){el.focus();try{if(sel!=null)el.setSelectionRange(sel,sel)}catch(_){}}}
+}
+function vLogin(){return `<form class="panel pad stack login" id="f-login">
+  <div><h1>Đăng nhập</h1><div class="muted">Dùng tài khoản của phần mềm nha khoa Hoàng Bách.</div></div>
+  <label class="f"><span>Email</span><input id="lg-u" type="email" autocomplete="username" required></label>
+  <label class="f"><span>Mật khẩu</span><input id="lg-p" type="password" autocomplete="current-password" required></label>
+  <button class="primary" id="lg-b">Đăng nhập</button><div id="lg-e" class="debt"></div></form>`}
+function bindLogin(){
+  const f=document.getElementById("f-login"); document.getElementById("lg-u").focus();
+  f.addEventListener("submit",async e=>{e.preventDefault();const b=document.getElementById("lg-b");b.disabled=true;
+    try{await Cloud.login(document.getElementById("lg-u").value,document.getElementById("lg-p").value);S.loaded=false;render();taiDuLieu()}
+    catch(err){document.getElementById("lg-e").textContent=/Invalid login/i.test(err.message)?"Sai email hoặc mật khẩu.":err.message;b.disabled=false}});
+}
+function dongCa(ca,i,tonCu){
+  const k=khachCua(ca);
+  return `<tr class="click" data-ca="${esc(ca.id)}" tabindex="0">
+    <td class="mono muted">${i+1}</td>
+    <td>${ca.code?`<span class="mono">${esc(ca.code)}</span>`:`<span class="muted">chưa tiếp nhận</span>`}<div class="muted">${tonCu?vnDate(ca.date):hhmm(ca.createdAt)}</div></td>
+    <td><strong>${esc(k.name||"(không rõ tên)")}</strong> <span class="src ${k.tuApp?"app":""}">${k.tuApp?esc(k.code||"Nha khoa"):"Khách ngoài"}</span><div class="muted">${esc([k.gender,yobOf(k)?yobOf(k)+" · "+ageOf(k)+" tuổi":"",k.phone].filter(Boolean).join(" · "))}</div></td>
+    <td>${(ca.items||[]).map(i=>`<span class="tag">${esc(i.name)}</span>`).join("")}${(ca.region||ca.tooth)?`<div class="muted">${esc(ca.region||("R"+ca.tooth))}</div>`:""}</td>
+    <td class="hide-sm">${esc(noiGui(ca))}</td>
+    <td>${pill(ca.status)}</td>
+    <td class="num">${money(phaiThu(ca))}${no(ca)?`<div class="debt">nợ ${money(no(ca))}</div>`:""}</td></tr>`;
+}
+const DAU_BANG=`<thead><tr><th>#</th><th>Mã phiếu</th><th>Khách hàng</th><th>Dịch vụ</th><th class="hide-sm">Nơi chỉ định</th><th>Trạng thái</th><th class="num">Phải thu</th></tr></thead>`;
+function vToday(){
+  const all=dsCa(), day=S.day;
+  const list=all.filter(c=>c.date===day);
+  const ton=all.filter(c=>c.date<day && c.date>=addDays(day,-TON_NGAY) && (c.status==="cho"||c.status==="chup"||c.status==="doc")).sort((a,b)=>a.date.localeCompare(b.date));
+  const active=list.filter(c=>c.status!=="huy");
+  const cho=active.filter(c=>c.status==="cho"||c.status==="chup").length, doc=active.filter(c=>c.status==="doc").length;
+  const thu=active.reduce((a,c)=>a+num(c.paid),0), tongNo=active.reduce((a,c)=>a+no(c),0);
+  const counts=Object.fromEntries(STATUS.map(s=>[s.k,list.filter(c=>c.status===s.k).length]));
+  const shown=(S.stFilter==="all"?list:list.filter(c=>c.status===S.stFilter)).sort((a,b)=>(a.createdAt||9e15)-(b.createdAt||9e15));
+  return `
+  <div class="row spread">
+    <div><h1>Ca chụp ${day===today()?"hôm nay":"ngày "+vnDate(day)}</h1><div class="muted">${list.length} ca · Giờ hoạt động ${HOURS_TEXT}</div></div>
+    <div class="row"><input type="date" id="day" value="${day}" style="width:auto" aria-label="Chọn ngày">
+      <button data-act="reload" title="Tải lại từ máy chủ">Làm mới</button>
+      <button class="primary" data-act="new">+ Khách ngoài</button></div>
+  </div>
+  <div class="note info">Khách bác sĩ chỉ định chụp trong phần mềm nha khoa tự hiện ở đây với trạng thái <b>Chờ chụp</b>. Khách tự đến hoặc nơi khác gửi thì bấm <b>+ Khách ngoài</b>.</div>
+  <div class="kpis">
+    <div class="panel kpi"><div class="lab">Lượt chụp</div><div class="val">${active.length}</div><div class="sub">${list.filter(c=>c.treatmentId).length} từ nha khoa · ${list.filter(c=>!c.treatmentId).length} khách ngoài</div></div>
+    <div class="panel kpi"><div class="lab">Đang chờ chụp</div><div class="val" style="color:var(--warn)">${cho}</div><div class="sub">${doc} ca chờ đọc kết quả</div></div>
+    <div class="panel kpi"><div class="lab">Đã thu</div><div class="val">${money(thu)}</div><div class="sub">tiền mặt + chuyển khoản</div></div>
+    <div class="panel kpi"><div class="lab">Còn nợ</div><div class="val" style="color:${tongNo?"var(--bad)":"inherit"}">${money(tongNo)}</div><div class="sub">${active.filter(c=>no(c)).length} ca chưa thu đủ</div></div>
+  </div>
+  <div class="chips" role="group" aria-label="Lọc trạng thái">
+    <button class="chip" data-st="all" aria-pressed="${S.stFilter==="all"}">Tất cả · ${list.length}</button>
+    ${STATUS.map(s=>`<button class="chip" data-st="${s.k}" aria-pressed="${S.stFilter===s.k}">${s.t} · ${counts[s.k]}</button>`).join("")}
+  </div>
+  <div class="panel tablebox">${shown.length?`<table>${DAU_BANG}<tbody>${shown.map((c,i)=>dongCa(c,i)).join("")}</tbody></table>`
+    :`<div class="empty">${list.length?"Không có ca nào ở trạng thái này.":"Chưa có ca nào trong ngày."}</div>`}</div>
+  ${ton.length?`<div class="stack" style="gap:8px"><h2>Chỉ định ngày trước chưa xong · ${ton.length}</h2>
+    <div class="panel tablebox"><table>${DAU_BANG}<tbody>${ton.map((c,i)=>dongCa(c,i,true)).join("")}</tbody></table></div></div>`:""}`;
+}
+function khoaNguoi(ca){const k=khachCua(ca);return ca.customerId?("app:"+ca.customerId):("ng:"+fold(k.name)+"|"+String(k.phone||"").replace(/\D/g,""))}
+function vKhach(){
+  const q=fold(S.q.trim()), g={};
+  dsCa().forEach(c=>{const key=khoaNguoi(c);(g[key]||(g[key]={key,ds:[],k:khachCua(c)})).ds.push(c)});
+  let list=Object.values(g).map(x=>{const song=x.ds.filter(c=>c.status!=="huy");return Object.assign(x,{lan:song.length,cuoi:x.ds.map(c=>c.date).sort().pop()||"",no:song.reduce((a,c)=>a+no(c),0)})});
+  if(q) list=list.filter(x=>fold(x.k.name).includes(q)||String(x.k.phone||"").includes(q)||fold(x.k.code).includes(q));
+  list.sort((a,b)=>b.cuoi.localeCompare(a.cuoi));
+  const rows=list.slice(0,300).map(x=>`<tr class="click" data-nguoi="${esc(x.key)}" tabindex="0">
+    <td><strong>${esc(x.k.name||"")}</strong> <span class="src ${x.k.tuApp?"app":""}">${x.k.tuApp?esc(x.k.code||"Nha khoa"):"Khách ngoài"}</span><div class="muted">${esc([x.k.gender,yobOf(x.k)].filter(Boolean).join(" · "))}</div></td>
+    <td class="mono">${esc(x.k.phone||"")}</td><td class="hide-sm">${esc(x.k.addr||"")}</td>
+    <td class="num">${x.lan}</td><td>${vnDate(x.cuoi)}</td><td class="num">${x.no?`<span class="debt">${money(x.no)}</span>`:"—"}</td></tr>`).join("");
+  return `<div><h1>Khách hàng CĐHA</h1><div class="muted">${list.length} người đã có chỉ định hoặc đã chụp. Sửa thông tin khách nha khoa thì sửa bên phần mềm nha khoa.</div></div>
+  <input id="q" type="search" placeholder="Tìm theo tên (không dấu cũng được), SĐT hoặc mã KH…" value="${esc(S.q)}" aria-label="Tìm khách">
+  <div class="panel tablebox">${rows?`<table><thead><tr><th>Họ tên</th><th>Điện thoại</th><th class="hide-sm">Địa chỉ</th><th class="num">Số lần</th><th>Gần nhất</th><th class="num">Còn nợ</th></tr></thead><tbody>${rows}</tbody></table>`:`<div class="empty">Không tìm thấy khách nào.</div>`}</div>`;
+}
+function vStats(){
+  const list=dsCa().filter(c=>c.date>=S.from&&c.date<=S.to&&c.status!=="huy"&&!c.ao);
+  const rev=list.reduce((a,c)=>a+phaiThu(c),0), paid=list.reduce((a,c)=>a+num(c.paid),0), disc=list.reduce((a,c)=>a+num(c.discount),0);
+  const byDv={}; list.forEach(c=>{const t=tong(c)||1,f=phaiThu(c)/t;(c.items||[]).forEach(i=>{const k=i.name;byDv[k]=byDv[k]||{n:0,v:0};byDv[k].n++;byDv[k].v+=num(i.price)*f})});
+  const dv=Object.entries(byDv).sort((a,b)=>b[1].v-a[1].v), maxV=Math.max(1,...dv.map(x=>x[1].v));
+  const byRef={}; list.forEach(c=>{const k=c.treatmentId?"_app":(c.refId||"_self");byRef[k]=byRef[k]||{n:0,v:0};byRef[k].n++;byRef[k].v+=phaiThu(c)});
+  const refRows=Object.entries(byRef).sort((a,b)=>b[1].v-a[1].v).map(([k,x])=>{const r=k.startsWith("_")?null:refById(k),rate=r?num(r.rate):0;
+    const ten=k==="_app"?NOI_APP:k==="_self"?"Khách tự đến":(r?r.name:"(đã xoá)");
+    return `<tr><td><strong>${esc(ten)}</strong>${r&&r.place?`<div class="muted">${esc(r.place)}</div>`:""}</td><td class="num">${x.n}</td><td class="num">${money(x.v)}</td><td class="num">${r?rate+"%":"—"}</td><td class="num"><strong>${r&&rate?money(x.v*rate/100):"—"}</strong></td></tr>`}).join("");
+  const chuaChup=dsCa().filter(c=>c.ao&&c.date>=S.from&&c.date<=S.to).length;
+  return `<div class="row spread"><div><h1>Thống kê</h1><div class="muted">Chỉ tính ca đã tiếp nhận, không tính phiếu huỷ.${chuaChup?` Có ${chuaChup} chỉ định trong khoảng này chưa được tiếp nhận.`:""}</div></div>
+  <div class="row"><label class="f"><span>Từ ngày</span><input type="date" id="from" value="${S.from}"></label><label class="f"><span>Đến ngày</span><input type="date" id="to" value="${S.to}"></label>
+  <button data-act="csv" style="align-self:flex-end">Xuất CSV</button></div></div>
+  <div class="kpis">
+    <div class="panel kpi"><div class="lab">Lượt chụp</div><div class="val">${list.length}</div><div class="sub">${list.filter(c=>c.treatmentId).length} từ nha khoa</div></div>
+    <div class="panel kpi"><div class="lab">Doanh thu</div><div class="val">${money(rev)}</div><div class="sub">đã giảm ${money(disc)}</div></div>
+    <div class="panel kpi"><div class="lab">Đã thu</div><div class="val">${money(paid)}</div><div class="sub">${rev?Math.round(paid/rev*100):0}% doanh thu</div></div>
+    <div class="panel kpi"><div class="lab">Công nợ</div><div class="val" style="color:${rev-paid>0?"var(--bad)":"inherit"}">${money(Math.max(0,rev-paid))}</div><div class="sub">${list.filter(c=>no(c)).length} ca chưa thu đủ</div></div>
+  </div>
+  <div class="grid2" style="align-items:start">
+    <div class="panel pad stack"><h2>Theo kỹ thuật</h2>${dv.length?`<div class="bars">${dv.map(([n,x])=>`<div class="bar"><div><strong>${esc(n)}</strong><div class="muted" style="font-size:12px">${x.n} lượt</div></div><div class="t"><i style="width:${(x.v/maxV*100).toFixed(1)}%"></i></div><div class="num">${money(x.v)}</div></div>`).join("")}</div>`:`<div class="empty">Chưa có ca nào.</div>`}</div>
+    <div class="panel stack" style="gap:0"><div class="pad"><h2>Nơi chỉ định &amp; hoa hồng</h2></div><div class="tablebox">${refRows?`<table><thead><tr><th>Nơi gửi</th><th class="num">Ca</th><th class="num">Doanh thu</th><th class="num">Tỷ lệ</th><th class="num">Hoa hồng</th></tr></thead><tbody>${refRows}</tbody></table>`:`<div class="empty">Chưa có dữ liệu.</div>`}</div></div>
+  </div>`;
+}
+function vDM(){
+  const d=dm();
+  const svc=d.services.slice().sort((a,b)=>GROUPS.indexOf(a.group)-GROUPS.indexOf(b.group)).map(s=>`<tr class="click" data-svc="${esc(s.id)}" tabindex="0"><td>${esc(s.name)}${s.active===false?` <span class="muted">(ngưng)</span>`:""}</td><td class="muted hide-sm">${esc(s.group)}</td><td class="num">${money(s.price)}</td></tr>`).join("");
+  const refs=d.referrers.map(r=>`<tr class="click" data-ref="${esc(r.id)}" tabindex="0"><td><strong>${esc(r.name)}</strong><div class="muted">${esc(r.place||"")}</div></td><td class="mono hide-sm">${esc(r.phone||"")}</td><td class="num">${num(r.rate)}%</td></tr>`).join("");
+  return `<div><h1>Danh mục</h1><div class="muted">Bảng giá dùng cho khách ngoài. Khách từ nha khoa lấy giá theo dịch vụ bác sĩ đã chỉ định.</div></div>
+  <div class="grid2" style="align-items:start">
+    <div class="panel stack" style="gap:0"><div class="pad row spread"><h2>Kỹ thuật &amp; giá</h2><button data-act="svc-new">+ Thêm</button></div><div class="tablebox"><table><thead><tr><th>Kỹ thuật</th><th class="hide-sm">Loại</th><th class="num">Giá</th></tr></thead><tbody>${svc}</tbody></table></div></div>
+    <div class="panel stack" style="gap:0"><div class="pad row spread"><h2>Nơi gửi khách khác</h2><button data-act="ref-new">+ Thêm</button></div><div class="tablebox">${refs?`<table><thead><tr><th>Nơi gửi</th><th class="hide-sm">SĐT</th><th class="num">Hoa hồng</th></tr></thead><tbody>${refs}</tbody></table>`:`<div class="empty">Chưa có.</div>`}</div>
+      <div class="pad muted" style="font-size:12px">${esc(NOI_APP)} không cần thêm ở đây: khách bác sĩ chỉ định tự hiện qua.</div></div>
+  </div>
+  <label class="f" style="max-width:320px"><span>Kỹ thuật viên mặc định</span><input id="dm-ktv" value="${esc(d.ktv||"")}"></label>`;
+}
+
+/* ---------- hộp thoại ---------- */
+const mroot=document.getElementById("modal-root");
+function openModal(html,mount){
+  mroot.innerHTML=`<div class="ov" data-ov><div class="dlg" role="dialog" aria-modal="true">${html}</div></div>`;
+  const dlg=mroot.querySelector(".dlg");
+  mroot.querySelector("[data-ov]").addEventListener("mousedown",e=>{if(e.target.matches("[data-ov]"))closeModal()});
+  dlg.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",closeModal));
+  mount&&mount(dlg);
+  const f=dlg.querySelector("[autofocus]")||dlg.querySelector("input,select,textarea,button");f&&f.focus();
+}
+function closeModal(){mroot.innerHTML="";if(S.canVe)render()}
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&mroot.innerHTML)closeModal()});
+function armDelete(btn,fn){btn.addEventListener("click",()=>{if(btn.classList.contains("armed"))fn();else{btn.classList.add("armed");btn.dataset.t=btn.textContent;btn.textContent="Bấm lần nữa để xác nhận";setTimeout(()=>{btn.classList.remove("armed");btn.textContent=btn.dataset.t},3500)}})}
+const PAY=["Tiền mặt","Chuyển khoản","Thẻ"];
+function oTien(p,ca){return `<div class="grid2" style="align-items:end">
+  <div class="grid2">
+    <label class="f"><span>Giảm giá (đ)</span><input id="${p}-disc" inputmode="numeric" value="${num(ca.discount)}"></label>
+    <label class="f"><span>Khách trả (đ)</span><input id="${p}-paid" inputmode="numeric" value="${num(ca.paid)}"></label>
+    <label class="f"><span>Hình thức</span><select id="${p}-pay">${PAY.map(x=>`<option ${ca.payMethod===x?"selected":""}>${x}</option>`).join("")}</select></label>
+    <button type="button" id="${p}-full">Thu đủ</button></div>
+  <div class="sumbox" id="${p}-sum"></div></div>`}
+function ganTien(dlg,p,tongFn){
+  const $=i=>dlg.querySelector("#"+p+"-"+i);
+  const calc=()=>{const t=tongFn(),d=num($("disc").value),pd=num($("paid").value),n=Math.max(0,t-d);
+    $("sum").innerHTML=`<div class="l"><span>Tổng</span><span>${money(t)}</span></div><div class="l"><span>Giảm</span><span>− ${money(d)}</span></div><div class="l big"><span>Phải thu</span><span>${money(n)}</span></div><div class="l" style="color:${n-pd>0?"var(--bad)":"var(--ok)"}"><span>${n-pd>0?"Còn nợ":"Đã đủ"}</span><span>${money(Math.max(0,n-pd))}</span></div>`;return n};
+  ["disc","paid"].forEach(i=>$(i).addEventListener("input",calc));
+  $("full").onclick=()=>{$("paid").value=calc();calc()};
+  calc(); return {calc, val:()=>({discount:num($("disc").value),paid:num($("paid").value),payMethod:$("pay").value})};
+}
+const canhBaoGio=()=>inHours(new Date())?"":`<div class="note">Bây giờ nằm ngoài giờ hoạt động đã đăng ký (${HOURS_TEXT}). Chụp ngoài giờ này là trái giấy phép.</div>`;
+
+/* --- Ca: tiếp nhận / cập nhật kết quả --- */
+function openCa(id){
+  const ca = dsCa().find(c=>c.id===id); if(!ca)return;
+  const k=khachCua(ca);
+  let st = ca.ao ? "chup" : ca.status;
+  openModal(`
+  <header><div><h2>${esc(k.name||"")}</h2><div class="muted mono" style="font-size:12px">${ca.code?esc(ca.code)+" · ":""}${vnDate(ca.date)}${ca.treatmentId?" · chỉ định từ nha khoa":""}</div></div><button class="ghost" data-close>Đóng</button></header>
+  <div class="body">
+    ${ca.ao?canhBaoGio():""}
+    <div class="grid3">
+      <div><div class="sec-t">Khách</div>${esc([k.gender,yobOf(k)?yobOf(k)+" ("+ageOf(k)+" tuổi)":""].filter(Boolean).join(" · ")||"—")}<div class="mono">${esc(k.phone||"")}</div><div class="muted">${esc(k.addr||"")}</div></div>
+      <div><div class="sec-t">Nơi chỉ định</div>${esc(noiGui(ca))}${ca.treatmentId&&ca._t?`<div class="muted">Bên nha khoa: ${esc(ca._t.status||"")}</div>`:""}</div>
+      <div><div class="sec-t">Kỹ thuật</div>${(ca.items||[]).map(i=>`<span class="tag">${esc(i.name)}</span>`).join("")}<div class="muted">${money(tong(ca))}</div></div>
+    </div>
+    <div><div class="sec-t" style="margin-bottom:6px">Trạng thái</div><div class="chips" id="c-st">${STATUS.map(s=>`<button type="button" class="chip" data-k="${s.k}" aria-pressed="${st===s.k}">${s.t}</button>`).join("")}</div></div>
+    <div class="grid3">
+      <label class="f"><span>Vùng / răng chụp</span><input id="c-region" value="${esc(ca.region||(ca.tooth?"R"+ca.tooth:""))}"></label>
+      <label class="f"><span>Lý do chụp</span><input id="c-clin" value="${esc(ca.clinical||"")}"></label>
+      <label class="f"><span>Kỹ thuật viên</span><input id="c-ktv" value="${esc(ca.technician||dm().ktv||"")}"></label>
+    </div>
+    <label class="f"><span>Kết luận / mô tả hình ảnh</span><textarea id="c-kl" placeholder="Nhập kết quả đọc phim… Bác sĩ nha khoa sẽ thấy kết luận này trong hồ sơ khách.">${esc(ca.conclusion||"")}</textarea></label>
+    ${oTien("c",ca)}
+    <div class="row"><button type="button" id="c-copy">Chép kết quả để gửi khách</button></div>
+  </div>
+  <footer>${ca.ao?"":`<button class="danger" id="c-del" style="margin-right:auto">Xoá ca</button>`}<button data-close>Đóng</button><button class="primary" id="c-save">${ca.ao?"Tiếp nhận & lưu":"Lưu"}</button></footer>`,
+  dlg=>{
+    const $=i=>dlg.querySelector("#"+i);
+    dlg.querySelectorAll("#c-st .chip").forEach(b=>b.onclick=()=>{st=b.dataset.k;dlg.querySelectorAll("#c-st .chip").forEach(x=>x.setAttribute("aria-pressed",x===b))});
+    const tien=ganTien(dlg,"c",()=>tong(ca));
+    $("c-copy").onclick=()=>{const txt=`CƠ SỞ CHẨN ĐOÁN HÌNH ẢNH HOÀNG BÁCH – THỜI ĐẠI\nĐịa chỉ: C22 Lê Hồng Phong, phường Rạch Giá, tỉnh An Giang\n\nKẾT QUẢ CHẨN ĐOÁN HÌNH ẢNH\nKhách: ${k.name||""}${yobOf(k)?" ("+yobOf(k)+")":""}\nNgày: ${vnDate(ca.date)}${ca.code?" · Mã phiếu: "+ca.code:""}\nKỹ thuật: ${(ca.items||[]).map(i=>i.name).join(", ")}${$("c-region").value?" · Vùng: "+$("c-region").value:""}\nKết luận: ${$("c-kl").value.trim()||"(chưa có)"}`;
+      navigator.clipboard.writeText(txt).then(()=>toast("Đã chép kết quả"),()=>{$("c-kl").select();toast("Không chép tự động được, đã chọn sẵn phần kết luận.")})};
+    $("c-save").onclick=async()=>{
+      const btn=$("c-save");btn.disabled=true;
+      const id = ca.ao ? ca.id : ca.id;
+      const data = Object.assign({}, ca, tien.val(), {status:st, region:$("c-region").value.trim(), clinical:$("c-clin").value.trim(),
+        technician:$("c-ktv").value.trim(), conclusion:$("c-kl").value.trim(), updatedAt:Date.now(), by:Cloud.who()});
+      delete data.ao; delete data._t;
+      if(ca.ao){ data.code=nextCode(); data.createdAt=Date.now(); data.tiepNhan=today();
+        data.khach={name:k.name||"",phone:k.phone||"",yob:yobOf(k),gender:k.gender||"",addr:k.addr||""}; }
+      if(st==="xong"&&!data.traKQ) data.traKQ=Date.now();
+      const ok=await luu(()=>ghi("cdha",id,data),"Đã lưu "+(data.code||""));
+      if(ok){S.cdha[id]=data;closeModal();render()} else btn.disabled=false;
+    };
+    if(!ca.ao) armDelete($("c-del"),async()=>{
+      if(await luu(()=>ghi("cdha",ca.id,{id:ca.id},true),"Đã xoá ca")){delete S.cdha[ca.id];closeModal();render()}});
+  });
+}
+
+/* --- Khách ngoài: tiếp nhận mới --- */
+function newCa(preset){
+  const svcs=dm().services.filter(s=>s.active!==false);
+  const chosen=new Set(); let khApp=preset&&preset.customerId||null;
+  openModal(`
+  <header><h2>Tiếp nhận khách ngoài</h2><button class="ghost" data-close>Đóng</button></header>
+  <form class="body" id="f-new" autocomplete="off">
+    ${canhBaoGio()}
+    <div class="stack" style="gap:8px">
+      <div class="sec-t">Khách hàng</div>
+      <input id="n-find" placeholder="Tìm khách đã có (trong phần mềm nha khoa hoặc đã chụp trước) theo SĐT, tên, mã KH…" autofocus>
+      <div id="n-sugg"></div><div id="n-picked" class="muted"></div>
+      <div class="grid4">
+        <label class="f span2"><span>Họ và tên *</span><input id="n-name" required></label>
+        <label class="f"><span>Năm sinh</span><input id="n-yob" inputmode="numeric" maxlength="4"></label>
+        <label class="f"><span>Giới tính</span><select id="n-gender"><option value="">—</option><option>Nam</option><option>Nữ</option></select></label>
+      </div>
+      <div class="grid3"><label class="f"><span>Điện thoại</span><input id="n-phone" inputmode="tel"></label><label class="f span2"><span>Địa chỉ</span><input id="n-addr"></label></div>
+    </div>
+    <div class="stack" style="gap:8px"><div class="sec-t">Kỹ thuật chụp *</div>
+      <div class="svc-list">${svcs.map(s=>`<label class="svc"><input type="checkbox" value="${esc(s.id)}"><span>${esc(s.name)}</span><span class="p">${money(s.price)}</span></label>`).join("")}</div></div>
+    <div class="grid4">
+      <label class="f"><span>Nơi gửi</span><select id="n-ref"><option value="">Khách tự đến</option>${dm().referrers.map(r=>`<option value="${esc(r.id)}">${esc(r.name)}</option>`).join("")}</select></label>
+      <label class="f"><span>Vùng / răng</span><input id="n-region" placeholder="vd R38, R48"></label>
+      <label class="f"><span>Lý do chụp</span><input id="n-clin" placeholder="vd nhổ răng khôn, implant"></label>
+      <label class="f"><span>Kỹ thuật viên</span><input id="n-ktv" value="${esc(dm().ktv||"")}"></label>
+    </div>
+    ${oTien("n",{})}
+  </form>
+  <footer><button data-close>Huỷ</button><button class="primary" id="n-save">Lưu phiếu</button></footer>`,
+  dlg=>{
+    const $=i=>dlg.querySelector("#"+i);
+    const fill=(k,cid)=>{khApp=cid||null;$("n-name").value=k.name||"";$("n-yob").value=yobOf(k);$("n-gender").value=k.gender||"";$("n-phone").value=k.phone||"";$("n-addr").value=k.addr||"";
+      $("n-picked").innerHTML=(cid?`Khách nha khoa <span class="mono">${esc(k.code||"")}</span>, kết quả sẽ hiện trong hồ sơ bên nha khoa. `:"Khách đã chụp trước. ")+`<button type="button" class="ghost" id="n-un">Đổi khách khác</button>`;
+      $("n-un").onclick=()=>{khApp=null;$("n-picked").innerHTML="";["n-name","n-yob","n-phone","n-addr"].forEach(i=>$(i).value="");$("n-find").focus()};
+      $("n-sugg").innerHTML="";$("n-find").value="";};
+    $("n-find").addEventListener("input",e=>{const q=fold(e.target.value.trim());if(q.length<2){$("n-sugg").innerHTML="";return}
+      const m=s=>fold(s.name).includes(q)||String(s.phone||"").replace(/\D/g,"").includes(q.replace(/\D/g,"")||"@@")||fold(s.code).includes(q);
+      const a=Object.values(S.customers).filter(m).slice(0,6).map(k=>({k,cid:k.id}));
+      const seen={}; const b=Object.values(S.cdha).filter(c=>!c.customerId&&c.khach&&m(c.khach)).filter(c=>{const kk=fold(c.khach.name)+c.khach.phone;if(seen[kk])return false;return seen[kk]=1}).slice(0,4).map(c=>({k:c.khach,cid:null}));
+      const all=a.concat(b);
+      $("n-sugg").innerHTML=all.length?`<div class="sugg">${all.map((x,i)=>`<button type="button" data-i="${i}"><strong>${esc(x.k.name)}</strong><span class="muted">${esc(yobOf(x.k))}</span><span class="src ${x.cid?"app":""}">${x.cid?esc(x.k.code||"Nha khoa"):"Đã chụp"}</span><span class="mono muted" style="margin-left:auto">${esc(x.k.phone||"")}</span></button>`).join("")}</div>`:`<div class="muted">Không thấy, nhập khách mới bên dưới.</div>`;
+      $("n-sugg").querySelectorAll("[data-i]").forEach(bt=>bt.onclick=()=>{const x=all[+bt.dataset.i];fill(x.k,x.cid)});});
+    const tongFn=()=>svcs.filter(s=>chosen.has(s.id)).reduce((a,s)=>a+num(s.price),0);
+    const tien=ganTien(dlg,"n",tongFn);
+    dlg.querySelectorAll(".svc input").forEach(cb=>cb.addEventListener("change",()=>{cb.checked?chosen.add(cb.value):chosen.delete(cb.value);cb.closest(".svc").classList.toggle("on",cb.checked);tien.calc()}));
+    $("f-new").addEventListener("submit",e=>e.preventDefault());
+    $("n-save").onclick=async()=>{
+      const name=$("n-name").value.trim();
+      if(!name){toast("Cần nhập họ tên khách.");$("n-name").focus();return}
+      if(!chosen.size){toast("Chọn ít nhất một kỹ thuật.");return}
+      const btn=$("n-save");btn.disabled=true;
+      const id=uid();
+      const data=Object.assign({id,code:nextCode(),customerId:khApp||"",date:S.view==="hom-nay"?S.day:today(),createdAt:Date.now(),tiepNhan:today(),
+        khach:{name,yob:$("n-yob").value.trim(),gender:$("n-gender").value,phone:$("n-phone").value.trim(),addr:$("n-addr").value.trim()},
+        items:svcs.filter(s=>chosen.has(s.id)).map(s=>({name:s.name,price:num(s.price),group:s.group})),
+        refId:$("n-ref").value,region:$("n-region").value.trim(),clinical:$("n-clin").value.trim(),technician:$("n-ktv").value.trim(),
+        status:"cho",conclusion:"",by:Cloud.who(),updatedAt:Date.now()},tien.val());
+      const ok=await luu(()=>ghi("cdha",id,data),"Đã lưu phiếu cho "+name);
+      if(ok){S.cdha[id]=data;closeModal();render()}else btn.disabled=false;
+    };
+  });
+}
+function openNguoi(key){
+  const ds=dsCa().filter(c=>khoaNguoi(c)===key).sort((a,b)=>b.date.localeCompare(a.date)); if(!ds.length)return;
+  const k=khachCua(ds[0]);
+  openModal(`<header><div><h2>${esc(k.name)}</h2><div class="muted" style="font-size:12px">${esc([k.code,k.phone,k.addr].filter(Boolean).join(" · "))}</div></div><button class="ghost" data-close>Đóng</button></header>
+  <div class="body"><div class="panel tablebox"><table><thead><tr><th>Ngày</th><th>Kỹ thuật</th><th>Kết luận</th><th>TT</th><th class="num">Tiền</th></tr></thead><tbody>
+  ${ds.map(c=>`<tr class="click" data-o="${esc(c.id)}"><td>${vnDate(c.date)}<div class="mono muted" style="font-size:12px">${esc(c.code||"")}</div></td><td>${(c.items||[]).map(i=>`<span class="tag">${esc(i.name)}</span>`).join("")}</td><td style="min-width:160px">${esc(c.conclusion||"—")}</td><td>${pill(c.status)}</td><td class="num">${money(phaiThu(c))}${no(c)?`<div class="debt">nợ ${money(no(c))}</div>`:""}</td></tr>`).join("")}
+  </tbody></table></div></div><footer><button data-close>Đóng</button></footer>`,
+  dlg=>dlg.querySelectorAll("[data-o]").forEach(tr=>tr.onclick=()=>{closeModal();openCa(tr.dataset.o)}));
+}
+/* --- Danh mục --- */
+async function luuDM(d,msg){const ok=await luu(()=>ghi("cdhaDM","main",d),msg);if(ok){S.dm=d;render()}return ok}
+function editSvc(id){
+  const d=JSON.parse(JSON.stringify(dm())), s=id?d.services.find(x=>x.id===id):{id:uid(),name:"",group:"Phim 2D",price:0,active:true};
+  openModal(`<header><h2>${id?"Sửa kỹ thuật":"Thêm kỹ thuật"}</h2><button class="ghost" data-close>Đóng</button></header>
+  <div class="body"><label class="f"><span>Tên</span><input id="s-name" value="${esc(s.name)}" autofocus></label>
+  <div class="grid2"><label class="f"><span>Loại</span><select id="s-g">${GROUPS.map(g=>`<option ${s.group===g?"selected":""}>${g}</option>`).join("")}</select></label><label class="f"><span>Giá (đ)</span><input id="s-p" inputmode="numeric" value="${num(s.price)}"></label></div>
+  <label class="row" style="gap:8px"><input type="checkbox" id="s-a" style="width:auto" ${s.active!==false?"checked":""}> Đang áp dụng</label></div>
+  <footer><button data-close>Huỷ</button><button class="primary" id="s-save">Lưu</button></footer>`,
+  dlg=>{const $=i=>dlg.querySelector("#"+i);$("s-save").onclick=async()=>{const name=$("s-name").value.trim();if(!name){toast("Cần nhập tên.");return}
+    Object.assign(s,{name,group:$("s-g").value,price:num($("s-p").value),active:$("s-a").checked});if(!id)d.services.push(s);
+    if(await luuDM(d,"Đã lưu "+name))closeModal()}});
+}
+function editRef(id){
+  const d=JSON.parse(JSON.stringify(dm())), r=id?d.referrers.find(x=>x.id===id):{id:uid(),name:"",place:"",phone:"",rate:0};
+  openModal(`<header><h2>${id?"Sửa nơi gửi":"Thêm nơi gửi"}</h2><button class="ghost" data-close>Đóng</button></header>
+  <div class="body"><div class="grid2"><label class="f"><span>Tên bác sĩ / phòng khám</span><input id="r-n" value="${esc(r.name)}" autofocus></label><label class="f"><span>Địa chỉ</span><input id="r-pl" value="${esc(r.place||"")}"></label></div>
+  <div class="grid2"><label class="f"><span>Điện thoại</span><input id="r-ph" value="${esc(r.phone||"")}"></label><label class="f"><span>Hoa hồng (% doanh thu)</span><input id="r-rt" inputmode="decimal" value="${num(r.rate)}"></label></div></div>
+  <footer>${id?`<button class="danger" id="r-del" style="margin-right:auto">Xoá</button>`:""}<button data-close>Huỷ</button><button class="primary" id="r-save">Lưu</button></footer>`,
+  dlg=>{const $=i=>dlg.querySelector("#"+i);
+    $("r-save").onclick=async()=>{const name=$("r-n").value.trim();if(!name){toast("Cần nhập tên.");return}
+      Object.assign(r,{name,place:$("r-pl").value.trim(),phone:$("r-ph").value.trim(),rate:Math.min(100,Math.max(0,parseFloat(String($("r-rt").value).replace(",","."))||0))});
+      if(!id)d.referrers.push(r); if(await luuDM(d,"Đã lưu "+name))closeModal()};
+    if(id)armDelete($("r-del"),async()=>{d.referrers=d.referrers.filter(x=>x.id!==id);if(await luuDM(d,"Đã xoá"))closeModal()});});
+}
+/* --- CSV --- */
+function xuatCsv(){
+  const list=dsCa().filter(c=>!c.ao&&c.date>=S.from&&c.date<=S.to).sort((a,b)=>a.date.localeCompare(b.date)||(a.createdAt||0)-(b.createdAt||0));
+  const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+  const head=["Ngày","Mã phiếu","Mã KH nha khoa","Họ tên","Năm sinh","Giới tính","SĐT","Kỹ thuật","Vùng/răng","Nơi chỉ định","Trạng thái","Tổng","Giảm","Phải thu","Đã trả","Còn nợ","Hình thức","KTV","Kết luận"];
+  const lines=[head.map(q).join(",")].concat(list.map(c=>{const k=khachCua(c);return [vnDate(c.date),c.code,k.tuApp?k.code:"",k.name,yobOf(k),k.gender,k.phone,(c.items||[]).map(i=>i.name).join("; "),c.region,noiGui(c),ST[c.status],tong(c),num(c.discount),phaiThu(c),num(c.paid),no(c),c.payMethod,c.technician,c.conclusion].map(q).join(",")}));
+  const blob=new Blob(["﻿"+lines.join("\r\n")],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`cdha_${S.from}_${S.to}.csv`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
+}
+
+/* ---------- sự kiện ---------- */
+app.addEventListener("click",e=>{
+  const t=e.target.closest("[data-act],[data-st],[data-ca],[data-nguoi],[data-svc],[data-ref]");if(!t)return;
+  const a=t.dataset.act;
+  if(a==="new")newCa(); else if(a==="reload"){taiDuLieu();toast("Đang tải lại…")} else if(a==="csv")xuatCsv();
+  else if(a==="svc-new")editSvc(); else if(a==="ref-new")editRef();
+  else if(t.dataset.st){S.stFilter=t.dataset.st;render()}
+  else if(t.dataset.ca)openCa(t.dataset.ca); else if(t.dataset.nguoi)openNguoi(t.dataset.nguoi);
+  else if(t.dataset.svc)editSvc(t.dataset.svc); else if(t.dataset.ref)editRef(t.dataset.ref);
+});
+app.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.matches("tr.click"))e.target.click()});
+app.addEventListener("input",e=>{if(e.target.id==="q"){S.q=e.target.value;render()}});
+app.addEventListener("change",e=>{
+  const id=e.target.id,v=e.target.value;
+  if(id==="day"&&v){S.day=v;S.stFilter="all";render()}
+  if(id==="from"&&v){S.from=v;render()} if(id==="to"&&v){S.to=v;render()}
+  if(id==="dm-ktv"){const d=JSON.parse(JSON.stringify(dm()));d.ktv=v.trim();luuDM(d,"Đã lưu kỹ thuật viên mặc định")}
+});
+document.getElementById("me").addEventListener("click",()=>{});
+
+/* ---------- khởi động ---------- */
+route();
+if(Cloud.loggedIn()) taiDuLieu();
+/* Tự làm mới 30 giây/lần để thấy chỉ định mới từ phòng khám */
+setInterval(()=>{ if(!document.hidden&&Cloud.loggedIn()&&!(document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName))) taiDuLieu(true) },30000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&Cloud.loggedIn())taiDuLieu(true)});
+})();
+</script>
+</body>
+</html>
