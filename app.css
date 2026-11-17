@@ -297,7 +297,22 @@ input[type=checkbox],input[type=radio]{
 .arch{display:flex;gap:4px;justify-content:center;overflow-x:auto;padding:2px}
 /* Lưới chọn số răng trong hộp thoại. Ô chỉ rộng 30px mà .btn là flex không đặt
    justify-content, nên chữ số bị dồn sát mép trái — phải canh giữa lại. */
-.chon-rang{justify-content:center}
+.chon-rang{justify-content:center;flex-direction:column;gap:1px;line-height:1.1}
+/* Dấu chấm dưới số răng: răng này đã có tình trạng / dịch vụ / đang điều trị / hàng lab.
+   Bốn khâu nằm ở bốn màn khác nhau, nhưng nhìn một con số răng là biết đủ. */
+.cham-hang{display:flex;gap:2px;height:4px;align-items:center;justify-content:center}
+.cham-hang i{width:4px;height:4px;border-radius:50%;display:block}
+.cham-tt{background:var(--danger)}
+.cham-dv{background:var(--info)}
+.cham-dt{background:var(--ok)}
+.cham-lab{background:var(--warn)}
+/* Răng đang chọn có nền đậm, chấm màu chìm vào đó — viền trắng quanh chấm để vẫn
+   đọc được răng đó có gì. */
+.chon-rang.primary .cham-hang{height:5px}
+.chon-rang.primary .cham-hang i{box-shadow:0 0 0 1px var(--accent-contrast)}
+.chu-thich-rang{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;margin-top:6px}
+.chu-thich-rang i{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:4px}
+.ho-so-rang{margin-top:8px}
 /* Hàng răng nằm giữa hộp thoại. min-width:max-content giữ cho 16 răng không rớt
    xuống dòng; rộng hơn khung thì khung tự cuộn ngang. */
 .hang-rang{display:flex;flex-wrap:nowrap;justify-content:center;gap:3px;align-items:center;

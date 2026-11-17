@@ -2543,7 +2543,8 @@ const Cust = {
       <div class="f full"><label>Chẩn đoán (tên bệnh kèm mã ICD)</label>
         ${Combo.html('cbVanDe','icd', v.icd ? icdName(v.icd) : '', icdOptions(),
           'Gõ tên bệnh hoặc mã ICD, vd: viem tuy, K04')}</div>
-      <div class="f"><label>Răng / vị trí</label><input name="rang" value="${h(v.rang||'')}" placeholder="R36, hàm trên, 2 hàm..."></div>
+      <div class="f full"><label>Răng / vị trí</label>
+        ${Tooth.chonSoHTML('rang', {giaTri: v.rang || '', khach: c.id})}</div>
       <div class="f"><label>Ngày phát hiện</label><input type="date" name="ngay" value="${h(v.ngay||todayISO())}"></div>
       <div class="f"><label>Tình trạng</label><select name="tinhTrang">
         ${['Chưa điều trị','Đang điều trị','Đã xử lý','Theo dõi'].map(x=>`<option${v.tinhTrang===x?' selected':''}>${x}</option>`).join('')}</select></div>
@@ -3351,7 +3352,7 @@ const Treat = {
     App.modal('Thêm dịch vụ — ' + c.name, `
     <form class="form-grid" onsubmit="Treat.khThemSave(event)">
       <div class="f full"><label>Chọn răng trên sơ đồ</label>
-        ${Tooth.chonSoHTML('rang')}</div>
+        ${Tooth.chonSoHTML('rang', {khach: c.id})}</div>
       <div class="f full"><label>Dịch vụ</label>
         ${Combo.html('cbKHDv', 'dichVu', '', Svc.goiY(1), 'Gõ tên dịch vụ, vd: cao voi, tay trang',
           v => Treat.khChonDV(v), 'Chọn dịch vụ là tự điền giá.')}</div>
@@ -3609,7 +3610,7 @@ const Treat = {
           <b>Cài đặt → Bảng giá dịch vụ</b>.</div></div>
       <input type="hidden" name="group" value="${h(t.group||'')}">
       <div class="f full"><label>Răng / vị trí</label>
-        <input name="tooth" value="${h(t.tooth||'')}" placeholder="Vd: 36, 37, 46 — cách nhau bằng dấu phẩy" oninput="Treat.tinhLai()">
+        ${Tooth.chonSoHTML('tooth', {giaTri: t.tooth || '', khach: App.state.treatCust, onchon: 'Treat.tinhLai()'})}
         <div class="combo-hint">Ghi nhiều răng thì <b>số lượng tự đếm theo số răng</b>. Ghi kiểu "2 hàm" thì số lượng để 1.</div></div>
       <div class="f"><label>Đơn giá / răng (₫)</label>${Tien.o('donGia', t.donGia != null ? t.donGia : t.price, 'required oninput="Treat.tinhLai()"')}</div>
       <div class="f"><label>Số lượng</label><input type="number" name="sl" min="1" step="1" value="${t.sl||1}" oninput="Treat.tinhLai()"></div>
@@ -5779,23 +5780,103 @@ const Tooth = {
   },
   /* Lưới chọn số răng cho các hộp thoại không gắn với sơ đồ của một khách cụ thể
      (vd: thêm dịch vụ vào kế hoạch). Bấm để chọn / bỏ chọn, có thể chọn nhiều răng. */
-  chonSoHTML(ten){
+  /* ---------- Hồ sơ của MỘT cái răng, gom từ cả bốn khâu ----------
+     Khám ghi tình trạng, trang Dịch vụ ghi dịch vụ và tiến trình, Lab ghi hàng đặt.
+     Bốn chỗ đó cùng nói về một cái răng nhưng nằm bốn màn khác nhau; hỏi "răng 36 đang
+     thế nào" thì phải mở ba bốn chỗ mới trả lời được. Hàm này trả lời một lần. */
+  hoSoRang(c, n){
+    if (!c) return null;
+    const tt = (c.teeth || {})[n];
+    const kh = (c.teethKH || {})[n] || {};
+    const st = (c.teethST || {})[n];
+    const dt = (db.treatments || []).filter(t => t.customerId === c.id && Tooth.rangCua(t).includes(+n));
+    const lab = (db.labs || []).filter(l => l.customerId === c.id
+      && String(l.teeth || '').split(/[^0-9]+/).includes(String(n)));
+    const moTa = tt ? Tooth.moTa(n, tt) : '';
+    return {
+      n: +n,
+      tinhTrang: (moTa && moTa !== 'Bình thường') ? moTa : '',
+      chanDoan: kh.chanDoan ? icdName(kh.chanDoan) : '',
+      dichVu: kh.dichVu || '',
+      dieuTri: dt, lab,
+      sauDT: st ? Tooth.moTa(n, st) : '',
+      /* Có gì đáng để chấm một dấu lên con số răng không */
+      coTT: !!(moTa && moTa !== 'Bình thường'),
+      coDV: !!(kh.dichVu || dt.length),
+      coDT: dt.some(t => t.status === 'Đang điều trị' || t.status === 'Hoàn tất'),
+      coLab: lab.length > 0,
+    };
+  },
+  /* Một dòng tóm tắt cho tooltip trên con số răng */
+  tomTatRang(c, n){
+    const r = this.hoSoRang(c, n);
+    if (!r) return 'Răng ' + n;
+    const ds = ['Răng ' + n];
+    if (r.tinhTrang) ds.push('Tình trạng: ' + r.tinhTrang);
+    if (r.chanDoan)  ds.push('Chẩn đoán: ' + r.chanDoan);
+    if (r.dichVu)    ds.push('Dịch vụ: ' + r.dichVu);
+    r.dieuTri.forEach(t => ds.push('Điều trị: ' + t.name + ' — ' + t.status));
+    r.lab.forEach(l => ds.push('Lab: ' + (l.type||'') + ' · ' + (l.labName||'') + ' — ' + labStatus(l)[1]));
+    if (ds.length === 1) ds.push('chưa ghi gì');
+    return ds.join('\n');
+  },
+  /* Khối chi tiết dưới sơ đồ — hiện đủ bốn khâu của những răng đang chọn */
+  chiTietHTML(c, ds){
+    if (!c) return '<span class="sub-line">Chọn khách hàng trước thì sơ đồ mới hiện được hồ sơ của từng răng.</span>';
+    if (!ds || !ds.length) return '<span class="sub-line">Bấm vào một răng để xem răng đó đang có gì: tình trạng, chẩn đoán, dịch vụ, tiến trình điều trị, hàng lab.</span>';
+    return ds.map(n => {
+      const r = Tooth.hoSoRang(c, n);
+      const d = [];
+      if (r.tinhTrang) d.push(`<b>Tình trạng:</b> ${h(r.tinhTrang)}`);
+      if (r.chanDoan)  d.push(`<b>Chẩn đoán:</b> ${h(r.chanDoan)}`);
+      if (r.dichVu)    d.push(`<b>Dịch vụ:</b> ${h(r.dichVu)}`);
+      r.dieuTri.forEach(t => d.push(`<b>Điều trị:</b> ${h(t.name)} <span class="pill ${trangThaiMau(t.status)}">${h(t.status)}</span>`
+        + ((t.cd || []).length ? ` <span class="sub-line">${t.cd.length} công đoạn đã làm</span>` : '')));
+      r.lab.forEach(l => d.push(`<b>Lab:</b> ${h(l.type||'')} · ${h(l.labName||'')}
+        <span class="pill ${labStatus(l)[0]}">${h(labStatus(l)[1])}</span>`));
+      if (r.sauDT) d.push(`<b>Sau điều trị:</b> ${h(r.sauDT)}`);
+      return `<div class="tooth-info" style="margin:6px 0"><b>Răng ${n}</b>${
+        d.length ? '<br>' + d.join('<br>') : ' — <span class="sub-line">chưa ghi gì cho răng này</span>'}</div>`;
+    }).join('');
+  },
+  /* ---------- Lưới chọn số răng dùng chung cho MỌI hộp thoại ----------
+     opt: {giaTri, khach (id khách), khachTu (tên ô chứa id khách trong cùng form),
+           onchon (JS chạy sau mỗi lần bấm), nhieu:false để chỉ chọn một răng}
+     Sơ đồ này không phải cái lưới trơ như trước: mỗi con số mang dấu cho biết răng đó
+     đã có tình trạng / dịch vụ / đang điều trị / có hàng lab, rê chuột ra tóm tắt, bấm
+     vào thì bên dưới hiện đủ hồ sơ của răng — cùng một dữ liệu mà bốn màn đang dùng. */
+  chonSoHTML(ten, opt){
+    opt = opt || {};
+    const id = 'cr' + Math.random().toString(36).slice(2, 8);
+    const chon = Tooth.tachSo(opt.giaTri);
+    const c = opt.khach ? custById(opt.khach) : null;
     /* Mỗi hàm 16 răng phải nằm GỌN MỘT HÀNG thì mới ra hình cung hàm; rớt xuống
        dòng là nhìn không còn ra trái phải trên dưới nữa. Nút co lại vừa đủ, và cho
        cuộn ngang khi màn hình quá hẹp thay vì xuống dòng. */
-    const hang = ds => ds.map(n => `<button type="button" class="btn small chon-rang" data-n="${n}"
-      onclick="Tooth.chonSo(this,'${ten}')"
-      style="flex:none;min-width:0;width:30px;padding:5px 0;font-size:12px">${n}</button>`).join('');
+    const hang = ds => ds.map(n => {
+      const r = c ? Tooth.hoSoRang(c, n) : null;
+      const cham = r ? [r.coTT && 'cham-tt', r.coDV && 'cham-dv', r.coDT && 'cham-dt', r.coLab && 'cham-lab']
+        .filter(Boolean) : [];
+      return `<button type="button" class="btn small chon-rang${chon.includes(n) ? ' primary' : ''}" data-n="${n}"
+        onclick="Tooth.chonSo(this,'${ten}')" title="${h(c ? Tooth.tomTatRang(c, n) : 'Răng ' + n)}"
+        style="flex:none;min-width:0;width:30px;padding:4px 0 2px;font-size:12px">${n}
+        <span class="cham-hang">${cham.map(k => `<i class="${k}"></i>`).join('')}</span></button>`;
+    }).join('');
     const cung = (tren, duoi, nua) =>
       `<div class="hang-rang">${hang(tren.slice(0,nua))}<span style="flex:none;width:12px"></span>${hang(tren.slice(nua))}</div>
        <div class="hang-rang">${hang(duoi.slice(0,nua))}<span style="flex:none;width:12px"></span>${hang(duoi.slice(nua))}</div>`;
-    const bo = Tooth.bo();
+    /* Răng đã chọn nằm ở bộ nào thì mở sẵn bộ đó, khỏi phải tự đi tìm */
+    const bo = chon.length ? (chon.some(n => n >= 51) ? 'sua' : 'vv') : Tooth.bo();
     /* Vẽ sẵn CẢ HAI bộ rồi ẩn một bộ, chứ không vẽ lại khi bấm. Lưới này nằm trong hộp
        thoại, mà App.render() chỉ vẽ lại màn chính nên bấm sẽ không ăn; còn vẽ lại cả
        hộp thoại thì bay mất chẩn đoán và dịch vụ đang gõ dở ở dưới.
        Ẩn/hiện cũng giữ nguyên răng đã chọn ở bộ kia — chọn R54 rồi đổi sang răng vĩnh
        viễn thì R54 vẫn nằm trong danh sách, vì có ca đụng cả hai bộ. */
-    return `<input type="hidden" name="${ten}" value="">
+    return `<div class="chon-rang-box" data-id="${id}" data-ten="${h(ten)}"
+      data-kh="${h(opt.khach || '')}" data-khtu="${h(opt.khachTu || '')}"
+      data-mot="${opt.nhieu === false ? '1' : ''}" data-onchon="${h(opt.onchon || '')}">
+      <input type="text" name="${ten}" value="${h(opt.giaTri || '')}" placeholder="Bấm răng trên sơ đồ, hoặc gõ: 36, 37"
+        oninput="Tooth.goTay(this)" style="margin-bottom:6px">
       <div class="subtabs" style="margin-bottom:6px">
         <button type="button" class="subtab ${bo==='vv'?'active':''}" data-bo="vv" onclick="Tooth.doiBoLuoi(this,'vv')">Răng vĩnh viễn</button>
         <button type="button" class="subtab ${bo==='sua'?'active':''}" data-bo="sua" onclick="Tooth.doiBoLuoi(this,'sua')">Răng sữa</button>
@@ -5804,25 +5885,67 @@ const Tooth = {
         <div data-bo="vv"${bo==='vv'?'':' style="display:none"'}>${cung(TEETH_UP, TEETH_DN, 8)}</div>
         <div data-bo="sua"${bo==='sua'?'':' style="display:none"'}>${cung(TEETH_UP_S, TEETH_DN_S, 5)}</div>
       </div>
-      <div class="combo-hint">Đang chọn: <b id="soRangDaChon">chưa chọn răng nào</b> —
-        bấm lần nữa để bỏ chọn. Không chọn răng nào thì dịch vụ tính cho cả hàm.</div>`;
+      ${c ? `<div class="combo-hint chu-thich-rang">
+        <span><i class="cham-tt"></i> có tình trạng</span>
+        <span><i class="cham-dv"></i> có dịch vụ</span>
+        <span><i class="cham-dt"></i> đang/đã điều trị</span>
+        <span><i class="cham-lab"></i> có hàng lab</span></div>` : ''}
+      <div class="combo-hint">Đang chọn: <b class="so-rang-da-chon">${chon.length ? chon.map(n=>'R'+n).join(', ') : 'chưa chọn răng nào'}</b>
+        — bấm lần nữa để bỏ chọn.${opt.nhieu === false ? '' : ' Không chọn răng nào thì tính cho cả hàm.'}</div>
+      <div class="ho-so-rang">${Tooth.chiTietHTML(c, chon)}</div>
+    </div>`;
+  },
+  /* "36, 37" / "R36" / "16-17" -> [36, 37] */
+  tachSo(v){
+    return [...new Set(String(v == null ? '' : v).split(/[^0-9]+/)
+      .map(x => parseInt(x, 10)).filter(n => !isNaN(n) && n >= 11 && n <= 85))].sort((a,b)=>a-b);
+  },
+  /* Gõ tay vào ô thì các nút trên sơ đồ phải sáng theo, không thì hai bên nói hai kiểu */
+  goTay(inp){
+    const box = inp.closest('.chon-rang-box'); if (!box) return;
+    const ds = Tooth.tachSo(inp.value);
+    box.querySelectorAll('.chon-rang').forEach(b => b.classList.toggle('primary', ds.includes(+b.dataset.n)));
+    Tooth.sauChon(box, ds, false);
   },
   /* Đổi bộ ngay tại chỗ, không vẽ lại gì. Có ghi vào App.state để sơ đồ bên ngoài
      lần vẽ sau cũng theo cùng một bộ. */
   doiBoLuoi(btn, b){
     App.state.boRang = b;
-    const hop = btn.closest('.f') || btn.closest('form') || document;
+    /* Khoanh đúng cái hộp đang bấm — một form có thể có nhiều sơ đồ, đổi bộ ở hộp này
+       mà kéo theo hộp kia thì người ta mất chỗ đang chọn dở. */
+    const hop = btn.closest('.chon-rang-box') || btn.closest('.f') || btn.closest('form') || document;
     hop.querySelectorAll('.subtab[data-bo]').forEach(x => x.classList.toggle('active', x.dataset.bo === b));
     hop.querySelectorAll('div[data-bo]').forEach(x => { x.style.display = x.dataset.bo === b ? '' : 'none'; });
   },
   chonSo(btn, ten){
+    const box = btn.closest('.chon-rang-box');
+    if (!box) return;
+    /* Hộp nào chỉ lấy MỘT răng (vd: xem hồ sơ răng) thì bấm cái mới là bỏ cái cũ */
+    if (box.dataset.mot && !btn.classList.contains('primary'))
+      box.querySelectorAll('.chon-rang.primary').forEach(b => b.classList.remove('primary'));
     btn.classList.toggle('primary');
-    const f = btn.closest('form'); if (!f) return;
-    const ds = [...f.querySelectorAll('.chon-rang.primary')].map(b => +b.dataset.n).sort((a, b) => a - b);
-    const o = f.querySelector('[name="' + ten + '"]');
+    const ds = [...box.querySelectorAll('.chon-rang.primary')].map(b => +b.dataset.n).sort((a, b) => a - b);
+    const o = box.querySelector('[name="' + ten + '"]');
     if (o) o.value = ds.join(', ');
-    const nhan = f.querySelector('#soRangDaChon');
+    Tooth.sauChon(box, ds, true);
+  },
+  /* Cập nhật dòng "đang chọn" và khối hồ sơ răng, rồi chạy lệnh mà hộp thoại gửi kèm
+     (tính lại tiền, đếm số lượng theo số răng…). Dùng chung cho cả bấm lẫn gõ tay. */
+  sauChon(box, ds, chayOnchon){
+    const nhan = box.querySelector('.so-rang-da-chon');
     if (nhan) nhan.textContent = ds.length ? ds.map(n => 'R' + n).join(', ') : 'chưa chọn răng nào';
+    const o = box.querySelector('.ho-so-rang');
+    if (o) {
+      /* Khách lấy từ ô trong form nếu hộp thoại có chọn khách (phiếu lab), không thì
+         lấy khách đã gắn sẵn lúc mở hộp. */
+      let cid = box.dataset.kh || '';
+      const f = box.closest('form');
+      if (box.dataset.khtu && f) cid = (f.querySelector('[name="' + box.dataset.khtu + '"]') || {}).value || cid;
+      o.innerHTML = Tooth.chiTietHTML(cid ? custById(cid) : null, ds);
+    }
+    if (chayOnchon && box.dataset.onchon) {
+      try { (new Function(box.dataset.onchon)).call(box); } catch(e){}
+    }
   },
   tomTatHTML(c, lop){
     const {dong, khung, note} = this.tomTat(c, lop);
@@ -9132,7 +9255,7 @@ const Lab = {
     <form class="form-grid" onsubmit="Lab.save(event,'${id||''}')">
       <div class="f full"><label>Khách hàng</label>
         ${Combo.html('cbLabCust','customerName', custLabel(custById(l.customerId)), custOptions(),
-          'Gõ tên, số điện thoại hoặc mã KH', pickCustomerInto)}
+          'Gõ tên, số điện thoại hoặc mã KH', Lab.chonKhachLab)}
         <input type="hidden" name="customerId" value="${h(l.customerId||'')}"></div>
       <div class="f full"><label>Lab</label>
         ${Combo.html('cbLabName','labName', l.labName||'', BangLab.ten().concat(LABS), 'Gõ tên lab',
@@ -9140,7 +9263,9 @@ const Lab = {
       <div class="f"><label>Loại răng / phục hình</label>
         ${Combo.html('cbLabType','type', l.type||'', BangLab.goiY(l.labName), 'Gõ loại phục hình', Lab.chonLoai)}
         <div class="combo-hint" id="labGhi">${h((BangLab.mon(l.labName, l.type)||{}).ghi || '')}</div></div>
-      <div class="f"><label>Vị trí răng</label><input name="teeth" value="${h(l.teeth||'')}" placeholder="R36, R44–R46..."></div>
+      <div class="f full"><label>Vị trí răng</label>
+        ${Tooth.chonSoHTML('teeth', {giaTri: l.teeth || '', khach: l.customerId || '', khachTu: 'customerId',
+          onchon: 'Lab.theoRang()'})}</div>
       <div class="f"><label>Số lượng (đơn vị)</label>
         <input type="number" name="qty" value="${l.qty||1}" min="1" oninput="Lab.tinhTien()"></div>
       <div class="f"><label>Đơn giá lab (đ)</label>
@@ -9190,6 +9315,26 @@ const Lab = {
     const sl = num((document.querySelector('[name="qty"]')||{}).value) || 1;
     const o = document.getElementById('labTien');
     if (o) o.textContent = money(g * sl);
+  },
+  /* Chọn răng trên sơ đồ thì số đơn vị đi theo số răng — đặt 3 cái mão mà ghi số
+     lượng 1 là trả tiền lab thiếu, mà sửa tay thì hay quên. */
+  theoRang(){
+    const f = document.querySelector('#modalBody form'); if (!f) return;
+    const ds = Tooth.tachSo((f.querySelector('[name="teeth"]') || {}).value);
+    const q = f.querySelector('[name="qty"]');
+    if (ds.length && q) q.value = ds.length;
+    Lab.tinhTien();
+  },
+  /* Đổi khách trong phiếu lab thì sơ đồ răng phải vẽ lại theo hồ sơ khách mới —
+     không thì mấy cái chấm vẫn là của khách trước, nhìn vào là tin nhầm. */
+  chonKhachLab(v, inp){
+    pickCustomerInto(v, inp);
+    const f = inp.form; if (!f) return;
+    const box = f.querySelector('.chon-rang-box'); if (!box) return;
+    const cid = (f.querySelector('[name="customerId"]') || {}).value || '';
+    const giu = (f.querySelector('[name="teeth"]') || {}).value || '';
+    box.outerHTML = Tooth.chonSoHTML('teeth', {giaTri: giu, khach: cid, khachTu: 'customerId',
+      onchon: 'Lab.theoRang()'});
   },
   save(ev, id){
     ev.preventDefault();
