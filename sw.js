@@ -1,5 +1,15 @@
-const CACHE = 'nkhb-app-v74';
-const ASSETS = ['.', 'index.html', 'app.css', 'qrcode.lib.js', 'qr.js', 'config.js', 'cloud.js', 'sync.js', 'importer.js', 'danhgia.js', 'donthuoc.js', 'luong.js', 'minhchung.js', 'wards.js', 'vatlieu.js', 'banggia.js', 'banglab.js', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const CACHE = 'nkhb-app-v75';
+/* Phải liệt kê ĐỦ mọi tệp index.html gọi tới. Thiếu một tệp thì lúc mất mạng trình
+   duyệt lấy được trang nhưng không lấy được tệp đó, app trắng màn hoặc thiếu hẳn một
+   mảng chức năng mà không báo gì. Trước đây thiếu tám tệp: vet, ky, lienthong, pdf,
+   saoluu, khoagio, mahoa, congviec — trong đó vet.js là nhật ký lưu vết, thứ bắt buộc
+   phải có với bệnh án điện tử. */
+const ASSETS = ['.', 'index.html', 'app.css',
+  'qrcode.lib.js', 'qr.js', 'config.js', 'cloud.js', 'wards.js', 'vatlieu.js',
+  'banggia.js', 'banglab.js', 'vet.js', 'ky.js', 'lienthong.js', 'donthuoc.js',
+  'pdf.js', 'saoluu.js', 'khoagio.js', 'mahoa.js', 'sync.js', 'importer.js',
+  'danhgia.js', 'luong.js', 'minhchung.js', 'congviec.js', 'app.js',
+  'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
