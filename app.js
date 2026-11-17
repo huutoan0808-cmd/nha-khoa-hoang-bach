@@ -623,10 +623,15 @@ function pickCustomerInto(v, inp){
   if (hid) hid.value = c ? c.id : '';
 }
 const staffById = id => db.staff.find(s => s.id === id);
+/* Phiếu thu đánh dấu HỦY thì không còn là tiền: không vào doanh thu, không trừ công nợ,
+   không vào hoa hồng, không vào bảng lương. Nhưng vẫn nằm nguyên trong danh sách —
+   gạch ngang, kèm tên người hủy, giờ hủy và lý do. Xóa hẳn một chứng từ tiền là mất
+   dấu, hỏi lại không ai trả lời được; đánh dấu thì vẫn truy được. */
+const ptSong = r => !!r && !r.huy;
 const custDebt = c => {
   const billed = db.treatments.filter(t => t.customerId === c.id && t.status !== 'Báo giá').reduce((s,t) => s + t.price, 0);
   /* Bỏ qua phiếu thu nhập từ sổ cũ: khoản nợ mang sang đã là số còn lại sau những lần thu đó */
-  const paid = db.receipts.filter(r => r.customerId === c.id && !r.old).reduce((s,r) => s + r.amount, 0);
+  const paid = db.receipts.filter(r => r.customerId === c.id && !r.old && ptSong(r)).reduce((s,r) => s + r.amount, 0);
   return Math.max(0, billed - paid);
 };
 const custLastVisit = c => { const ds = db.receipts.filter(r => r.customerId===c.id).map(r=>r.date).concat(db.appointments.filter(a=>a.customerId===c.id && a.date<=todayISO()).map(a=>a.date)); return ds.sort().pop() || ''; };
@@ -716,6 +721,21 @@ const App = {
     if (!id) return;
     this.state.custSel = id;
     this.state.treatCust = id;
+  },
+  /* Dọn sạch bản cũ đang nằm trong máy rồi tải lại: xóa cache của service worker và
+     gọi lại trang kèm dấu thời gian, để trình duyệt không lấy bản cũ trong bộ nhớ ra
+     dùng. Dữ liệu bệnh nhân nằm ở chỗ khác, không bị đụng tới. */
+  async taiLai(){
+    try {
+      if (window.caches) for (const k of await caches.keys()) await caches.delete(k);
+      if (navigator.serviceWorker) {
+        const ds = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(ds.map(x => x.update().catch(() => x.unregister())));
+      }
+    } catch(e){}
+    const u = new URL(location.href);
+    u.searchParams.set('tailai', Date.now());
+    location.replace(u.toString());
   },
   go(id){
     if (!Perm.tabs().includes(id)) { App.toast('Bạn không có quyền vào mục này'); return; }
@@ -1211,7 +1231,7 @@ const SCREENS = {};
 /* ---------- Tổng quan ---------- */
 SCREENS.dashboard = () => {
   const T = todayISO();
-  const revToday = db.receipts.filter(r => r.date === T).reduce((s,r)=>s+r.amount,0);
+  const revToday = db.receipts.filter(r => r.date === T && ptSong(r)).reduce((s,r)=>s+r.amount,0);
   const apptToday = db.appointments.filter(a => a.date === T && a.status !== 'Hủy');
   const unconfirmed = apptToday.filter(a => a.status === 'Chờ xác nhận').length;
   const newCust = db.customers.filter(c => monthOf(c.createdAt) === monthOf(T)).length;
@@ -1221,11 +1241,11 @@ SCREENS.dashboard = () => {
   // 7 ngày doanh thu
   let bars = '', maxRev = 1;
   const days = [];
-  for (let i = 6; i >= 0; i--) { const d = isoAdd(T,-i); const v = db.receipts.filter(r=>r.date===d).reduce((s,r)=>s+r.amount,0); days.push([d,v]); if (v>maxRev) maxRev=v; }
+  for (let i = 6; i >= 0; i--) { const d = isoAdd(T,-i); const v = db.receipts.filter(r=>r.date===d && ptSong(r)).reduce((s,r)=>s+r.amount,0); days.push([d,v]); if (v>maxRev) maxRev=v; }
   bars = days.map(([d,v],i) => `<div class="bar-wrap"><div class="bar ${i===6?'today':''}" style="height:${Math.max(3,Math.round(v/maxRev*100))}%" title="${fmtD(d)}: ${money(v)}"></div><span class="x-label">${i===6?'Hôm nay':WEEKD[new Date(d+'T00:00').getDay()]}</span></div>`).join('');
 
   // Doanh thu nhóm dịch vụ tháng này
-  const mRec = db.receipts.filter(r => monthOf(r.date) === monthOf(T));
+  const mRec = db.receipts.filter(r => monthOf(r.date) === monthOf(T) && ptSong(r));
   const mTotal = mRec.reduce((s,r)=>s+r.amount,0) || 1;
   const byGroup = {};
   mRec.forEach(r => byGroup[r.group||'Khác'] = (byGroup[r.group||'Khác']||0) + r.amount);
@@ -1253,7 +1273,7 @@ SCREENS.dashboard = () => {
   ${Att.myCardHTML()}
   ${typeof CV !== 'undefined' ? CV.theTongQuan() : ''}
   <div class="kpis">
-    ${Perm.can('thu') ? `<div class="card kpi"><div class="k-label">Doanh thu hôm nay</div><div class="k-value num">${money(revToday)}</div><div class="k-note">${db.receipts.filter(r=>r.date===T).length} phiếu thu</div></div>` : ''}
+    ${Perm.can('thu') ? `<div class="card kpi"><div class="k-label">Doanh thu hôm nay</div><div class="k-value num">${money(revToday)}</div><div class="k-note">${db.receipts.filter(r=>r.date===T && ptSong(r)).length} phiếu thu</div></div>` : ''}
     <div class="card kpi"><div class="k-label">Lịch hẹn hôm nay</div><div class="k-value num">${apptToday.length}</div><div class="k-note">${unconfirmed?`<span class="down">${unconfirmed} chưa xác nhận</span>`:'<span class="up">Đã xác nhận đủ</span>'}</div></div>
     <div class="card kpi"><div class="k-label">Khách mới tháng này</div><div class="k-value num">${newCust}</div><div class="k-note">tổng ${db.customers.length} hồ sơ</div></div>
     ${Perm.can('thu') ? `<div class="card kpi"><div class="k-label">Công nợ phải thu</div><div class="k-value num">${money(debtTotal)}</div><div class="k-note">${debtCount} khách còn nợ</div></div>` : ''}
@@ -3764,12 +3784,49 @@ const Treat = {
         <input name="lyDoSua" required placeholder="Vd: gõ nhầm số tiền, nhập bù phiếu ngày 14/11"
                value="${h(r.lyDoSua||'')}">
         <div class="combo-hint">Bắt buộc ghi — lý do này vào nhật ký lưu vết cùng với tên người sửa và giờ sửa.</div></div>
+      <div class="f full"><div class="check-row">
+        <label><input type="checkbox" name="old"${r.old?' checked':''}> Phiếu <b>sổ cũ</b> — tiền đã thu trước khi dùng phần mềm</label></div>
+        <div class="combo-hint">Tick thì phiếu này <b>không trừ vào công nợ</b> (số nợ mang sang đã là số còn lại
+          sau lần thu đó) và được tách riêng trong báo cáo để đối chiếu với sổ tiền.</div></div>
       <div class="note-block full">Lần sửa này được ghi vào <b>Nhật ký lưu vết</b>: ai sửa, sửa lúc nào,
         trường nào đổi từ giá trị cũ sang giá trị mới. Nhật ký chỉ thêm, không xóa hay sửa được.</div>
       <div class="form-actions full">
-        <button type="button" class="btn" onclick="App.closeModal()">Hủy</button>
+        ${r.huy
+          ? `<button type="button" class="btn" onclick="Treat.phieuBoHuy('${rid}')">Bỏ đánh dấu hủy</button>`
+          : `<button type="button" class="btn danger" onclick="Treat.phieuHuy('${rid}')">Đánh dấu hủy phiếu</button>`}
+        <span class="spacer"></span>
+        <button type="button" class="btn" onclick="App.closeModal()">Đóng</button>
         <button class="btn primary">Lưu thay đổi</button></div>
     </form>`);
+  },
+  /* Đánh dấu hủy chứ KHÔNG xóa: phiếu vẫn nằm trong sổ, gạch ngang, kèm người hủy,
+     giờ hủy và lý do. Xóa hẳn thì tháng sau soát sổ không ai biết đã có phiếu đó. */
+  phieuHuy(rid){
+    if (!Perm.can('thu')) { App.toast('Bạn không có quyền hủy phiếu thu'); return; }
+    const r = db.receipts.find(x => x.id === rid); if (!r) return;
+    const f = document.querySelector('#modalBody form');
+    const lyDo = ((f && (f.querySelector('[name="lyDoSua"]')||{}).value) || '').trim();
+    if (!lyDo) { App.toast('Ghi lý do vào ô "Lý do sửa" trước khi hủy phiếu'); return; }
+    if (!confirm('Đánh dấu HỦY phiếu ' + (r.no || '') + ' — ' + money(r.amount) + '?\n\n'
+      + 'Phiếu vẫn nằm trong danh sách nhưng không còn tính vào doanh thu, công nợ và hoa hồng.\n'
+      + 'Lý do: ' + lyDo
+      + (r.invoice ? '\n\nPHIẾU NÀY ĐÃ PHÁT HÀNH HĐĐT ' + r.invoice.no + ' — hóa đơn phải xử lý riêng theo quy định thuế.' : ''))) return;
+    const me = Att.myStaff();
+    Object.assign(r, {huy: 1, lyDoSua: lyDo,
+      huyBoi: (me ? me.name : (Cloud.who ? Cloud.who() : '')) || '', huyLuc: new Date().toISOString(), _up: Date.now()});
+    save(); App.closeModal(); App.render();
+    App.toast('Đã đánh dấu hủy phiếu ' + (r.no || '') + ' — đã ghi vào nhật ký lưu vết');
+  },
+  phieuBoHuy(rid){
+    if (!Perm.can('thu')) { App.toast('Bạn không có quyền sửa phiếu thu'); return; }
+    const r = db.receipts.find(x => x.id === rid); if (!r) return;
+    if (!confirm('Bỏ đánh dấu hủy cho phiếu ' + (r.no || '') + '?\n\nPhiếu sẽ tính lại vào doanh thu và công nợ.')) return;
+    const me = Att.myStaff();
+    delete r.huy; delete r.huyBoi; delete r.huyLuc;
+    r.suaBoi = (me ? me.name : (Cloud.who ? Cloud.who() : '')) || '';
+    r.suaLuc = new Date().toISOString(); r._up = Date.now();
+    save(); App.closeModal(); App.render();
+    App.toast('Đã bỏ đánh dấu hủy — phiếu tính lại vào doanh thu');
   },
   phieuLuu(ev, rid){
     ev.preventDefault();
@@ -3778,17 +3835,21 @@ const Treat = {
     const me = Att.myStaff();
     let ngay = d.date || r.date;
     if (ngay > todayISO()) { ngay = todayISO(); App.toast('Không ghi phiếu thu cho ngày tương lai — đã để về hôm nay'); }
-    const cu = {date: r.date, amount: r.amount, desc: r.desc, method: r.method, staffId: r.staffId};
+    /* So bản trước với bản sau trên cùng một dạng — r.old là true/không có, đem so
+       thẳng với ô tick thì lần nào cũng báo "đã đổi". */
+    const chuan = x => [x.date, x.amount, x.desc, x.method, x.staffId, !!x.old].join('|');
+    const truoc = chuan(r);
+    if (d.old) r.old = true; else delete r.old;
     Object.assign(r, {date: ngay, amount: num(d.amount), desc: d.desc, method: d.method,
       staffId: d.staffId, lyDoSua: (d.lyDoSua || '').trim(),
       suaBoi: (me ? me.name : (Cloud.who ? Cloud.who() : '')) || '', suaLuc: new Date().toISOString(), _up: Date.now()});
     /* Không phải gọi Vet thêm: Vet.quet() chạy ngay trong save(), tự so bản cũ với bản
        mới và ghi đủ ai / lúc nào / trường nào / từ giá trị nào sang giá trị nào — kể cả
        ô Lý do sửa, vì nó cũng là một trường của phiếu. */
-    const doi = Object.keys(cu).filter(k => String(cu[k]) !== String(r[k]));
+    const doi = truoc !== chuan(r);
     save();
     App.closeModal(); App.render();
-    App.toast(doi.length ? 'Đã sửa phiếu thu ✓ — đã ghi vào nhật ký lưu vết' : 'Không có gì thay đổi');
+    App.toast(doi ? 'Đã sửa phiếu thu ✓ — đã ghi vào nhật ký lưu vết' : 'Không có gì thay đổi');
   },
   invoice(rid){
     const r = db.receipts.find(x=>x.id===rid);
@@ -3807,6 +3868,8 @@ const Treat = {
       <div style="text-align:right">Số: <b>${h(r.no)}</b><br>Ngày ${ngay.getDate()} tháng ${ngay.getMonth()+1} năm ${ngay.getFullYear()}</div>
     </div>
     <h1>PHIẾU THU</h1>
+    ${r.huy ? `<div style="border:2px solid #b3261e;color:#b3261e;text-align:center;font-weight:700;
+      padding:8px;margin:0 0 10px;letter-spacing:2px">PHIẾU ĐÃ HỦY — KHÔNG CÓ GIÁ TRỊ THANH TOÁN</div>` : ''}
     <table class="no-border">
       <tr><td style="width:34%">Họ tên người nộp tiền:</td><td><b>${h(c?c.name:'')}</b>${c&&c.code?' — '+h(c.code):''}</td></tr>
       ${c&&c.phone?`<tr><td>Điện thoại:</td><td>${h(c.phone)}</td></tr>`:''}
@@ -3822,6 +3885,8 @@ const Treat = {
         const d = new Date(r.suaLuc), p = n => String(n).padStart(2,'0');
         return isNaN(d) ? r.suaLuc : p(d.getDate())+'/'+p(d.getMonth()+1)+'/'+d.getFullYear()+' '+p(d.getHours())+':'+p(d.getMinutes());
       })())}${r.lyDoSua?' — '+h(r.lyDoSua):''}</td></tr>`:''}
+      ${r.huy?`<tr><td>Hủy bởi:</td><td>${h(r.huyBoi||'')}${r.huyLuc?' · '+h(fmtD(r.huyLuc.slice(0,10))):''}${
+        r.lyDoSua?' — '+h(r.lyDoSua):''}</td></tr>`:''}
     </table>
     <div class="sign">
       <div><b>Người nộp tiền</b><br>(Ký, ghi rõ họ tên)<br><br><br><br></div>
@@ -3847,7 +3912,7 @@ SCREENS.treatment = () => {
      thu nhập từ sổ giấy cũ y như custDebt() — số nợ mang sang đã là số CÒN LẠI sau
      những lần thu đó, trừ thêm lần nữa là trang này báo nợ ít hơn mọi trang khác. */
   const total = items.filter(t=>t.status!=='Báo giá').reduce((s,t)=>s+t.price,0);
-  const paid = db.receipts.filter(r=>r.customerId===cid && !r.old).reduce((s,r)=>s+r.amount,0);
+  const paid = db.receipts.filter(r=>r.customerId===cid && !r.old && ptSong(r)).reduce((s,r)=>s+r.amount,0);
   const debt = Math.max(0, total - paid);
   const recs = db.receipts.filter(r=>r.customerId===cid).sort((a,b)=>a.date<b.date?1:-1);
   const rxs = db.rx.filter(r=>r.customerId===cid).sort((a,b)=>a.date<b.date?1:-1);
@@ -3873,10 +3938,14 @@ SCREENS.treatment = () => {
       : '<span class="sub-line">—</span>'}</td></tr>`;
   }).join('') || '<tr><td colspan="6" class="sub-line">Chưa có dịch vụ nào — bấm "Thêm dịch vụ".</td></tr>';
 
-  const recRows = recs.map(r => `<tr><td class="num">${fmtD(r.date)}<br><span class="sub-line num">${h(r.no)}</span></td>
-    <td>${h(r.desc)}<br><span class="sub-line">${h(r.method)} · ${h(r.group||'')}</span>${
+  const recRows = recs.map(r => `<tr${ptSong(r) ? '' : ' style="opacity:.55"'}><td class="num"${
+      ptSong(r) ? '' : ' style="text-decoration:line-through"'}>${fmtD(r.date)}<br><span class="sub-line num">${h(r.no)}</span></td>
+    <td><span${ptSong(r) ? '' : ' style="text-decoration:line-through"'}>${h(r.desc)}</span>${
+      ptSong(r) ? '' : ` <span class="pill danger">ĐÃ HỦY</span><br><span class="sub-line">✕ ${h(r.huyBoi||'')} hủy ${
+        h(fmtD((r.huyLuc||'').slice(0,10)))}${r.lyDoSua ? ' — ' + h(r.lyDoSua) : ''}</span>`}
+      <br><span class="sub-line">${h(r.method)} · ${h(r.group||'')}</span>${
       r.old ? ' <span class="pill mutedp">sổ cũ</span>' : ''}${
-      r.suaLuc ? `<br><span class="sub-line">✎ ${h(r.suaBoi||'')} sửa ${h(fmtD(r.suaLuc.slice(0,10)))}${
+      (r.suaLuc && ptSong(r)) ? `<br><span class="sub-line">✎ ${h(r.suaBoi||'')} sửa ${h(fmtD(r.suaLuc.slice(0,10)))}${
         r.lyDoSua ? ' — ' + h(r.lyDoSua) : ''}</span>` : ''}</td>
     <td class="r num" style="font-weight:600">${money(r.amount)}</td>
     <td>${r.invoice
@@ -3996,7 +4065,7 @@ SCREENS.treatment = () => {
   <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
     <div class="card kpi"><div class="k-label">Tổng kế hoạch (đã duyệt)</div><div class="k-value num">${money(total)}</div><div class="k-note">${items.length} hạng mục · ${items.filter(t=>t.status==='Báo giá').length} đang báo giá</div></div>
     <div class="card kpi"><div class="k-label">Đã thanh toán</div><div class="k-value num" style="color:var(--ok)">${money(paid)}</div><div class="k-note">${total?Math.min(100,Math.round(paid/total*100)):0}% kế hoạch${
-      (() => { const cu = db.receipts.filter(r=>r.customerId===cid && r.old).reduce((s,r)=>s+r.amount,0);
+      (() => { const cu = db.receipts.filter(r=>r.customerId===cid && r.old && ptSong(r)).reduce((s,r)=>s+r.amount,0);
         return cu ? '<br>chưa kể ' + money(cu) + ' đã thu trong sổ cũ' : ''; })()}</div></div>
     <div class="card kpi"><div class="k-label">Còn lại</div><div class="k-value num" ${debt?'style="color:var(--danger)"':''}>${money(debt)}</div><div class="k-note">${debt?'nhắc khách theo lịch trả góp':'không còn công nợ'}</div></div>
   </div>
@@ -5403,7 +5472,7 @@ Object.assign(HoSo, {
   p_phieuthu(c, ep){
     const d = this.dl(ep, 'phieuthu');
     const ds = this.mucCho(ep, 'phieuthu', t => t.status !== 'Báo giá');
-    const daThu = db.receipts.filter(r => r.customerId === c.id).reduce((s,r)=>s+r.amount, 0);
+    const daThu = db.receipts.filter(r => r.customerId === c.id && ptSong(r)).reduce((s,r)=>s+r.amount, 0);
     const bs = this.bacSi(c, ep);
     const thu = staffById(d.thuId) || (typeof Att !== 'undefined' ? Att.myStaff() : null);
     const conLai = custDebt(c);
@@ -7600,7 +7669,7 @@ const QT = {
     const sxNgay = (a, b) => (a.date || '') < (b.date || '') ? -1 : 1;
     Object.keys(theoKhach).forEach(cid => {
       const muc = theoKhach[cid].sort(sxNgay);
-      db.receipts.filter(r => r.customerId === cid && !r.old).sort(sxNgay).forEach(r => {
+      db.receipts.filter(r => r.customerId === cid && !r.old && ptSong(r)).sort(sxNgay).forEach(r => {
         let con = +r.amount || 0;
         const rai = ds => ds.forEach(t => {
           if (con <= 0) return;
@@ -8610,7 +8679,7 @@ grant execute on function gio_ban(date) to anon, authenticated;`,
 const HR = {
   tab(t){ App.state.hrTab = t; App.render(); },
   commissionOf(st, month){
-    const recs = db.receipts.filter(r => monthOf(r.date) === month);
+    const recs = db.receipts.filter(r => monthOf(r.date) === month && ptSong(r));
     /* Hoa hồng theo công đoạn: ai làm bước nào hưởng bước đó, cộng thẳng vào lương */
     const cd = QT.hoaHong(st.id, month);
     if (!st.model || st.model.type === 'congDoan') return cd;
@@ -8624,7 +8693,7 @@ const HR = {
     }
     return cd;
   },
-  revenueOf(st, month){ return db.receipts.filter(r => monthOf(r.date)===month && r.doctorId===st.id).reduce((s,r)=>s+r.amount,0); },
+  revenueOf(st, month){ return db.receipts.filter(r => monthOf(r.date)===month && r.doctorId===st.id && ptSong(r)).reduce((s,r)=>s+r.amount,0); },
   bonusOf(stId, month){ return db.bonuses.filter(b=>b.staffId===stId && monthOf(b.date)===month && b.amount>0).reduce((s,b)=>s+b.amount,0); },
   penaltyOf(stId, month){ return -db.bonuses.filter(b=>b.staffId===stId && monthOf(b.date)===month && b.amount<0).reduce((s,b)=>s+b.amount,0); },
   /* ---------- Kéo thả đổi thứ tự nhân viên trong bảng lương ----------
@@ -9174,12 +9243,12 @@ const Rep = {
   csv(){
     const [from, to, label] = this.range();
     const recs = db.receipts.filter(r=>r.date>=from && r.date<=to).sort((a,b)=>a.date<b.date?-1:1);
-    let csv = '﻿Ngày,Số phiếu,Khách hàng,Nội dung,Nhóm dịch vụ,Hình thức,Người thu,Sổ cũ,Số tiền,Số HĐĐT,Mã tra cứu\n';
+    let csv = '﻿Ngày,Số phiếu,Khách hàng,Nội dung,Nhóm dịch vụ,Hình thức,Người thu,Sổ cũ,Đã hủy,Số tiền,Số HĐĐT,Mã tra cứu\n';
     recs.forEach(r => { const c = custById(r.customerId);
       const ng = staffById(r.staffId) || staffById(r.doctorId);
       csv += [fmtD(r.date), r.no, '"'+(c?c.name:'')+'"', '"'+(r.desc||'').replace(/"/g,'""')+'"', r.group||'', r.method,
-        '"'+(ng?ng.name:'')+'"', r.old?'x':'', r.amount, r.invoice?r.invoice.no:'', r.invoice?r.invoice.code:''].join(',') + '\n'; });
-    csv += ',,,,,,,Tổng,' + recs.reduce((s,r)=>s+r.amount,0) + '\n';
+        '"'+(ng?ng.name:'')+'"', r.old?'x':'', r.huy?'x':'', r.amount, r.invoice?r.invoice.no:'', r.invoice?r.invoice.code:''].join(',') + '\n'; });
+    csv += ',,,,,,,,Tổng,' + recs.filter(r=>!r.huy).reduce((s,r)=>s+r.amount,0) + '\n';
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
     a.download = 'bao-cao-thu-' + label.replace(/[ /]/g,'-') + '.csv';
@@ -9204,9 +9273,23 @@ SCREENS.settings = () => {
   const q = Perm.can('caidat');
   const khoa = q ? '' : ' disabled title="Chỉ quản lý mới sửa được"';
 
+  /* Số bản lấy thẳng từ thẻ <script src="app.js?v=…"> — máy nào mở app cũng thấy ngay
+     mình đang chạy bản nào. Trước đây không hiện ở đâu, nên "sao máy tôi chưa có" là
+     không có cách nào biết do máy cũ hay do phần mềm chưa làm. */
+  const ban = (() => {
+    const t = [...document.querySelectorAll('script[src*="app.js?v="]')][0];
+    const m = t && t.src.match(/v=(\d+)/);
+    return m ? m[1] : '?';
+  })();
   return `
   <div class="page-head"><h1>Cài đặt</h1>
     <div class="sub">${h(cl.name || '')} · ${h(cl.addr || '')}</div></div>
+  <div class="card mb"><div class="card-b" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+    <div style="flex:1;min-width:220px"><b>Bản ${h(ban)}</b>
+      <div class="sub-line">Máy này đang chạy bản <b>${h(ban)}</b>. Số này khác nhau giữa các máy nghĩa là
+        có máy chưa tải bản mới — bấm <b>Tải lại bản mới nhất</b>, rồi so lại.</div></div>
+    <button class="btn" onclick="App.taiLai()">Tải lại bản mới nhất</button>
+  </div></div>
 
   <div class="card mb"><div class="card-h"><h2>Giá và quy trình</h2>
     <span class="hint">sửa ở đây, mọi nơi trong phần mềm dùng theo</span></div>
@@ -9296,17 +9379,22 @@ SCREENS.work = () => CV.man();
 SCREENS.reports = () => {
   const {type, y, m, q} = App.state.rp;
   const [from, to, label] = Rep.range();
+  /* recs = mọi phiếu trong kỳ, kể cả phiếu đã hủy — bảng bên dưới vẫn phải hiện chúng,
+     gạch ngang, để đối chiếu với sổ tiền. Nhưng mọi con số tiền thì tính trên recsCo:
+     phiếu đã hủy không còn là doanh thu. */
   const recs = db.receipts.filter(r=>r.date>=from && r.date<=to);
-  const total = recs.reduce((s,r)=>s+r.amount,0);
-  const invCount = recs.filter(r=>r.invoice).length;
+  const recsCo = recs.filter(ptSong), soHuy = recs.length - recsCo.length;
+  const tienHuy = recs.filter(r=>!ptSong(r)).reduce((s,r)=>s+r.amount,0);
+  const total = recsCo.reduce((s,r)=>s+r.amount,0);
+  const invCount = recsCo.filter(r=>r.invoice).length;
   const newCust = db.customers.filter(c=>c.createdAt>=from && c.createdAt<=to).length;
   const debtTotal = db.customers.reduce((s,c)=>s+custDebt(c),0);
   const invValue = db.inventory.reduce((s,it)=>s+(it.buy||0)*it.stock,0);
 
-  const byGroup = {}; recs.forEach(r=>byGroup[r.group||'Khác']=(byGroup[r.group||'Khác']||0)+r.amount);
+  const byGroup = {}; recsCo.forEach(r=>byGroup[r.group||'Khác']=(byGroup[r.group||'Khác']||0)+r.amount);
   const gRows = Object.entries(byGroup).sort((a,b)=>b[1]-a[1]);
-  const byDoc = {}; recs.forEach(r=>{ if(r.doctorId) byDoc[r.doctorId]=(byDoc[r.doctorId]||0)+r.amount; });
-  const byMethod = {}; recs.forEach(r=>byMethod[r.method]=(byMethod[r.method]||0)+r.amount);
+  const byDoc = {}; recsCo.forEach(r=>{ if(r.doctorId) byDoc[r.doctorId]=(byDoc[r.doctorId]||0)+r.amount; });
+  const byMethod = {}; recsCo.forEach(r=>byMethod[r.method]=(byMethod[r.method]||0)+r.amount);
 
   // Lương ước tính trong kỳ (số tháng trong kỳ × quỹ lương hiện tại)
   /* Kỳ theo ngày hoặc theo khoảng thì quy ra số tháng cho đúng — để nguyên 12 như
@@ -9324,19 +9412,21 @@ SCREENS.reports = () => {
   const phieuRows = recs.slice().sort((a,b) => (a.date+a.no) < (b.date+b.no) ? -1 : 1).map(r => {
     const kh = custById(r.customerId);
     const nguoi = staffById(r.staffId) || staffById(r.doctorId);
-    return `<tr><td class="num">${fmtD(r.date)}<br><span class="sub-line num">${h(r.no||'—')}</span></td>
-      <td><b>${h(kh ? kh.name : '(khách đã xóa)')}</b><br><span class="sub-line">${h(r.desc||'')}</span></td>
+    const huy = !ptSong(r);
+    return `<tr${huy ? ' style="opacity:.55;text-decoration:line-through"' : ''}><td class="num">${fmtD(r.date)}<br><span class="sub-line num">${h(r.no||'—')}</span></td>
+      <td><b>${h(kh ? kh.name : '(khách đã xóa)')}</b><br><span class="sub-line">${h(r.desc||'')}</span>${
+        huy ? '<br><span class="pill danger" style="text-decoration:none">ĐÃ HỦY</span>' : ''}</td>
       <td>${h(r.group||'Khác')}</td>
       <td>${h(r.method||'')}${r.old ? '<br><span class="pill mutedp">sổ cũ</span>' : ''}</td>
       <td>${h(nguoi ? nguoi.name : '—')}</td>
       <td class="r num" style="font-weight:600">${money(r.amount)}</td></tr>`;
   }).join('') || '<tr><td colspan="6" class="sub-line">Không có phiếu thu nào trong kỳ.</td></tr>';
-  const ngayRows = Rep.theoNgay(recs).map(([d, o]) =>
+  const ngayRows = Rep.theoNgay(recsCo).map(([d, o]) =>
     `<tr><td class="num">${d === '(không có ngày)' ? '<span class="pill danger">thiếu ngày</span>' : fmtD(d)}</td>
       <td class="num">${o.so}</td>
       <td class="r num" style="font-weight:600">${money(o.tien)}</td>
       <td class="r num">${o.cu ? '<span class="sub-line">' + money(o.cu) + '</span>' : ''}</td></tr>`).join('');
-  const tienCu = recs.filter(r => r.old).reduce((s,r)=>s+r.amount, 0);
+  const tienCu = recsCo.filter(r => r.old).reduce((s,r)=>s+r.amount, 0);
 
   return `
   <div class="page-head"><h1>Báo cáo</h1><span class="spacer"></span>
@@ -9360,8 +9450,8 @@ SCREENS.reports = () => {
   </div>
   <div id="reportBody">
   <div class="kpis">
-    <div class="card kpi"><div class="k-label">Tổng doanh thu (${label})</div><div class="k-value num">${money(total)}</div><div class="k-note">${recs.length} phiếu thu</div></div>
-    <div class="card kpi"><div class="k-label">HĐĐT đã phát hành</div><div class="k-value num">${invCount}/${recs.length}</div><div class="k-note">${recs.length-invCount} phiếu chưa xuất hóa đơn</div></div>
+    <div class="card kpi"><div class="k-label">Tổng doanh thu (${label})</div><div class="k-value num">${money(total)}</div><div class="k-note">${recsCo.length} phiếu thu${soHuy ? " · <span class=\"down\">" + soHuy + " phiếu đã hủy, không tính</span>" : ""}</div></div>
+    <div class="card kpi"><div class="k-label">HĐĐT đã phát hành</div><div class="k-value num">${invCount}/${recsCo.length}</div><div class="k-note">${recsCo.length-invCount} phiếu chưa xuất hóa đơn</div></div>
     <div class="card kpi"><div class="k-label">Khách hàng mới</div><div class="k-value num">${newCust}</div><div class="k-note">trong kỳ</div></div>
     <div class="card kpi"><div class="k-label">Công nợ hiện tại</div><div class="k-value num">${money(debtTotal)}</div><div class="k-note">giá trị kho: ${money(invValue)}</div></div>
   </div>
@@ -9388,7 +9478,7 @@ SCREENS.reports = () => {
       <div class="card"><div class="card-h"><h2>Tỷ suất nhanh</h2></div>
       <div class="card-b hbars">
         <div class="hbar"><div class="hb-top"><b>Chi phí nhân sự / doanh thu</b><span class="num">${total?Math.round(payroll*months/total*100):0}%</span></div><div class="hb-track"><div class="hb-fill" style="width:${total?Math.min(100,Math.round(payroll*months/total*100)):0}%"></div></div></div>
-        <div class="hbar"><div class="hb-top"><b>Phiếu thu đã có HĐĐT</b><span class="num">${recs.length?Math.round(invCount/recs.length*100):0}%</span></div><div class="hb-track"><div class="hb-fill" style="width:${recs.length?Math.round(invCount/recs.length*100):0}%"></div></div></div>
+        <div class="hbar"><div class="hb-top"><b>Phiếu thu đã có HĐĐT</b><span class="num">${recsCo.length?Math.round(invCount/recsCo.length*100):0}%</span></div><div class="hb-track"><div class="hb-fill" style="width:${recsCo.length?Math.round(invCount/recsCo.length*100):0}%"></div></div></div>
       </div></div>
     </div>
   </div>
@@ -9396,7 +9486,7 @@ SCREENS.reports = () => {
     <span class="hint">dò xem ngày nào lệch so với sổ tiền</span></div>
     <div class="tbl-wrap"><table><thead><tr><th>Ngày</th><th>Số phiếu</th><th class="r">Doanh thu</th><th class="r">trong đó sổ cũ</th></tr></thead>
     <tbody>${ngayRows}
-      <tr><td style="font-weight:700">Tổng</td><td class="num" style="font-weight:700">${recs.length}</td>
+      <tr><td style="font-weight:700">Tổng</td><td class="num" style="font-weight:700">${recsCo.length}</td>
         <td class="r num" style="font-weight:700">${money(total)}</td>
         <td class="r num">${tienCu?money(tienCu):''}</td></tr></tbody></table></div></div>` : ''}
   <div class="card"><div class="card-h"><h2>Phiếu thu trong kỳ</h2>
@@ -9404,8 +9494,10 @@ SCREENS.reports = () => {
     <div class="tbl-wrap"><table style="min-width:760px">
     <thead><tr><th>Ngày / Số</th><th>Khách · nội dung</th><th>Nhóm</th><th>Hình thức</th><th>Người thu</th><th class="r">Số tiền</th></tr></thead>
     <tbody>${phieuRows}
-      ${recs.length?`<tr><td colspan="5" style="font-weight:700">Tổng ${recs.length} phiếu</td>
-        <td class="r num" style="font-weight:700">${money(total)}</td></tr>`:''}</tbody></table></div>
+      ${recsCo.length?`<tr><td colspan="5" style="font-weight:700">Tổng ${recsCo.length} phiếu còn hiệu lực</td>
+        <td class="r num" style="font-weight:700">${money(total)}</td></tr>`:''}
+      ${soHuy?`<tr><td colspan="5" class="sub-line">${soHuy} phiếu đã hủy (không cộng vào doanh thu)</td>
+        <td class="r num sub-line">${money(tienHuy)}</td></tr>`:''}</tbody></table></div>
     ${tienCu?`<div class="note-block" style="margin:12px">Trong đó <b>${money(tienCu)}</b> là phiếu thu nhập từ <b>sổ giấy cũ</b>
       (đánh dấu "sổ cũ") — tiền này đã thu từ trước khi dùng phần mềm. Nếu sổ tiền của phòng khám
       không tính lại khoản đó thì hai bên lệch nhau đúng con số này.</div>`:''}</div>

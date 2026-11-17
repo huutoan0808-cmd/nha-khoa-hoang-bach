@@ -145,7 +145,7 @@ const Luong = {
   labThang(M){
     if (!this._labDaTru) {
       const dau = {};
-      [...db.receipts].sort((a, b) => (a.date || '') < (b.date || '') ? -1 : 1).forEach(r =>
+      [...db.receipts].filter(r => !r.huy).sort((a, b) => (a.date || '') < (b.date || '') ? -1 : 1).forEach(r =>
         (r.mucIds || []).forEach(id => { if (!dau[id]) dau[id] = r; }));
       this._labDaTru = dau;
     }
@@ -158,7 +158,7 @@ const Luong = {
     return ra;
   },
   dtThuan(M, bsId){
-    const thu = db.receipts.filter(r => monthOf(r.date) === M && !r.old && (!bsId || r.doctorId === bsId));
+    const thu = db.receipts.filter(r => monthOf(r.date) === M && !r.old && !r.huy && (!bsId || r.doctorId === bsId));
     const lab = this.labThang(M).filter(x => !bsId || x.r.doctorId === bsId);
     const tongThu = thu.reduce((s, r) => s + (+r.amount || 0), 0), tongLab = lab.reduce((s, x) => s + x.tien, 0);
     return {thu: tongThu, lab: tongLab, thuan: Math.max(0, tongThu - tongLab), soPhieu: thu.length, dsLab: lab};
@@ -179,7 +179,7 @@ const Luong = {
     if (this._km && this._km.M === M) return this._km.ds;
     const cs = this.coSo(M);
     const ra = [], thuCua = {}, henCua = {};
-    db.receipts.forEach(r => { if (r.customerId) (thuCua[r.customerId] = thuCua[r.customerId] || []).push(r); });
+    db.receipts.forEach(r => { if (r.customerId && !r.huy) (thuCua[r.customerId] = thuCua[r.customerId] || []).push(r); });
     (db.appointments || []).forEach(a => { if (a.customerId) (henCua[a.customerId] = henCua[a.customerId] || []).push(a); });
     db.customers.forEach(c => {
       const thu = thuCua[c.id] || [];
@@ -245,7 +245,7 @@ const Luong = {
       && !String(a.id).startsWith('busy') && a.status !== 'Hủy');
     const coDen = a => ['Đang điều trị', 'Hoàn tất'].includes(a.status)
       || ((custById(a.customerId) || {}).record || {dienBien: []}).dienBien.some(v => v.date === a.date)
-      || db.receipts.some(r => r.customerId === a.customerId && r.date === a.date);
+      || db.receipts.some(r => r.customerId === a.customerId && r.date === a.date && !r.huy);
     const den = hen.filter(coDen);
     return {tong: hen.length, den: den.length, tyLe: hen.length ? den.length / hen.length : null,
             vang: hen.filter(a => !coDen(a))};

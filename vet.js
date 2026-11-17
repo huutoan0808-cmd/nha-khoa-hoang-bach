@@ -55,6 +55,8 @@ const VET_TRUONG = {
   date: 'Ngày', amount: 'Số tiền', desc: 'Nội dung', method: 'Hình thức',
   no: 'Số phiếu', staffId: 'Người thu', doctorId: 'Bác sĩ', group: 'Nhóm dịch vụ',
   suaBoi: 'Người sửa', suaLuc: 'Sửa lúc', lyDoSua: 'Lý do sửa',
+  huy: 'Đánh dấu hủy', huyBoi: 'Người hủy', huyLuc: 'Hủy lúc', old: 'Phiếu sổ cũ',
+  lapBoi: 'Người lập', lapLuc: 'Lập lúc',
   name: 'Tên', price: 'Thành tiền', donGia: 'Đơn giá', sl: 'Số lượng',
   giamPct: 'Giảm %', giamTien: 'Giảm tiền', status: 'Trạng thái', tooth: 'Răng',
   phone: 'Điện thoại', dob: 'Ngày sinh', time: 'Giờ', note: 'Ghi chú',
@@ -63,6 +65,7 @@ const VET_TRUONG = {
 /* Trường nào là tiền, trường nào là người — để đọc ra cho dễ soát */
 const VET_TIEN = ['amount', 'price', 'donGia', 'giamTien', 'base', 'buy', 'sell'];
 const VET_LA_NGUOI = ['staffId', 'doctorId', 'assistantId', 'suaBoi', 'lapBoi'];
+const VET_BAT_TAT = ['huy', 'old'];
 
 const VET_ACT = {
   them: 'Thêm mới', sua: 'Sửa', xoa: 'Xóa', khoiphuc: 'Khôi phục',
@@ -182,6 +185,8 @@ const Vet = {
      mã nhân viên ra tên người. "1500000" với "2026-11-16T08:45:00.005Z" thì đúng
      nhưng không ai soát được. */
   doc(k, v){
+    /* Mấy ô bật/tắt: đọc "có / không" chứ không phải "1 / (trống)" */
+    if (VET_BAT_TAT.includes(k)) return (v === '' || v == null || v === false || v === 'false') ? 'không' : 'có';
     if (v === '' || v == null) return '(trống)';
     const s = String(v);
     if (VET_TIEN.includes(k) && /^-?\d+$/.test(s)) return (+s).toLocaleString('vi-VN') + 'đ';

@@ -89,7 +89,7 @@ const DanhGia = {
       if (v.doctorId === st.id && monthOf(v.date) === M) them(c.id).db.push(v);
     }));
     db.receipts.forEach(r => {
-      if (r.doctorId === st.id && monthOf(r.date) === M && !r.old && r.customerId) them(r.customerId).thu.push(r);
+      if (r.doctorId === st.id && monthOf(r.date) === M && !r.old && !r.huy && r.customerId) them(r.customerId).thu.push(r);
     });
     const ds = Object.keys(gap).map(cid => {
       const c = custById(cid); if (!c) return null;
@@ -114,7 +114,7 @@ const DanhGia = {
     const c = custById(cid);
     const gan = d => d && Math.abs(this.cachNgay(d, ngay)) <= 3;
     return ((c && c.record && c.record.dienBien) || []).some(v => gan(v.date))
-      || db.receipts.some(r => r.customerId === cid && gan(r.date));
+      || db.receipts.some(r => r.customerId === cid && gan(r.date) && !r.huy);
   },
   taiKham(st, M, p){
     const T = todayISO();
