@@ -83,8 +83,8 @@ const BANG_LAB = {
      GIÁ KM nên lấy cột đó làm đơn giá, giá niêm yết ghi vào chú thích để đối chiếu.
      Món nào bảng gốc không có KM thì dùng luôn giá niêm yết.
      Hết đợt khuyến mãi nhớ sửa lại — không có gì tự nhắc.
-     Phần PHỤC HÌNH THÁO LẮP của bảng này CHƯA NẠP: trong tệp PDF tên món và giá nằm
-     rời nhau, ghép lại không chắc đúng cặp nào với cặp nào. */
+     KHÔNG có phần phục hình tháo lắp: phòng khám quyết định bỏ, hàng tháo lắp đặt ở
+     lab khác. Đừng nạp thêm vào đây, cũng đừng coi là thiếu sót. */
   'VN Premium Lab': [
     {g:'Sứ không kim loại', n:'Sứ Zirconia UNC',            d:'răng', p:480000,  ghi:'Hàn Quốc · BH 10 năm · giá KM, niêm yết 500.000'},
     {g:'Sứ không kim loại', n:'Sứ Zirconia Hàn',            d:'răng', p:420000,  ghi:'Hàn Quốc · BH 10 năm · giá KM, niêm yết 450.000'},
