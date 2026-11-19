@@ -120,7 +120,9 @@ const Importer = {
     const code = g('code');
     const c = {
       id: uid(),
-      code: (() => { const t = (typeof Cust !== 'undefined' && Cust.tienTo) ? Cust.tienTo() : 'RG';
+      /* Cùng một tiền tố với custCode() ở trên — hai chỗ lệch nhau là bảng con không
+         ghép được vào khách. */
+      code: (() => { const t = (typeof Cust !== 'undefined' && Cust.tienTo) ? Cust.tienTo() : 'KH';
                      return code ? t + '-' + String(code).padStart(4,'0') : t + '-' + seq; })(),
       name: name.toUpperCase(),
       dob: this.toISO(g('dob')),
@@ -158,9 +160,16 @@ const Importer = {
   },
   money(v){ const n = parseFloat(String(v == null ? '' : v).replace(/[^\d.-]/g, '')); return isNaN(n) ? 0 : n; },
   /* Mã KH bên AppSheet ("1", "1.0", 1) → mã trong phần mềm */
+  /* Mã khách dựng lại từ số trong cột "Mã KH" của sheet. PHẢI dùng đúng tiền tố mà
+     phần mềm đang đánh số (Cust.tienTo()), không được viết cứng: trước đây chỗ này
+     ghi cứng 'KH-' trong khi lúc lập hồ sơ lại lấy tiền tố động, nên phòng khám nào
+     đánh mã khác 'KH' là toàn bộ bảng lần điều trị và lịch hẹn không tìm ra khách,
+     rơi hết vào mục "không khớp mã". */
   custCode(v){
     const n = parseInt(String(v).replace(/[^\d]/g, ''), 10);
-    return isNaN(n) ? '' : 'KH-' + String(n).padStart(4, '0');
+    if (isNaN(n)) return '';
+    const tt = (typeof Cust !== 'undefined' && Cust.tienTo) ? Cust.tienTo() : 'KH';
+    return tt + '-' + String(n).padStart(4, '0');
   },
   /* Ngày AppSheet: 24/06/2022 hoặc 2022-06-24 hoặc 2022-06-24 00:00:00 */
   anyDate(v){

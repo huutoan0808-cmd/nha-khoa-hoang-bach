@@ -259,8 +259,11 @@ const Sync = {
     }
     /* Đám mây còn thông tin Gò Quao của máy chưa cập nhật thì sửa sang Thời Đại, và
        giữ "bản đã thấy" là bản cũ để lần đồng bộ sau tự đẩy bản đã sửa lên máy khác. */
+    /* Chỉ chi nhánh Rạch Giá mới sửa — bản Gò Quao chạy chung mã nguồn, để nguyên là
+       cứ mỗi lần đồng bộ lại bị đổi tên cơ sở về Thời Đại. */
     const truoc = JSON.stringify(db.clinic || {});
-    const doi = typeof veThoiDai === 'function' && veThoiDai();
+    const doi = typeof veThoiDai === 'function'
+      && (typeof laRachGia !== 'function' || laRachGia()) && veThoiDai();
     this.clinicSeen = doi ? truoc : JSON.stringify(db.clinic || {});
 
     /* Bộ đếm mã KH / số phiếu thu: luôn lấy giá trị LỚN NHẤT giữa các máy

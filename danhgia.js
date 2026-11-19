@@ -73,12 +73,13 @@ const DanhGia = {
   qc(){
     const cl = db.clinic || {};
     const ten = (cl.legal || '') + (cl.name || '');
-    return cl.qcLuongThuong || (/Thời Đại/i.test(ten) ? '08/2026/QĐ-HB-TĐ'
+    return cl.qcLuongThuong || CFG('qcLuong', '') || (/Thời Đại/i.test(ten) ? '08/2026/QĐ-HB-TĐ'
       : /Gò Quao/i.test(ten) ? '05/2026/QĐ-HB-GQ, sửa đổi theo QĐ 10/2026/QĐ-HB-GQ' : '');
   },
   doiQC(v){ db.clinic.qcLuongThuong = String(v || '').trim(); save(); App.render(); },
   /* Địa danh ghi ở dòng ngày tháng: theo địa chỉ cơ sở, chưa có địa chỉ thì theo tên */
-  noiKy(){ const cl = db.clinic || {}; return /Gò Quao/i.test(cl.addr || cl.name || '') ? 'Gò Quao' : 'Rạch Giá'; },
+  noiKy(){ const cl = db.clinic || {};
+    return CFG('noiKy', '') || (/Gò Quao/i.test(cl.addr || cl.name || '') ? 'Gò Quao' : 'Rạch Giá'); },
   ghiNhanThang(stId, M){ return (db.ghiNhan || []).filter(g => g.staffId === stId && monthOf(g.date) === M); },
 
   /* ---------- Tiêu chí 1: soát hồ sơ bệnh án ---------- */

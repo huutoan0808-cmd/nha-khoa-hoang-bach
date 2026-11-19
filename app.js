@@ -267,12 +267,20 @@ function seed() {
   svc('Thẩm mỹ','Tẩy trắng răng tại ghế',1500000); svc('Thẩm mỹ','Gắn hột (đá) thẩm mỹ',800000);
   svc('Khác','Khám + tư vấn + chụp phim',150000); svc('Khác','Cắt chỉ / tái khám',0);
 
+  /* Thông tin cơ sở lấy từ config.js — tệp duy nhất khác nhau giữa hai chi nhánh.
+     Giá trị dự phòng giữ nguyên của Thời Đại để bản cũ chưa cập nhật config vẫn chạy
+     y như trước. */
+  const g = CFG('gio', {});
   return {ver: 1,
-    clinic: {name:'Nha Khoa Hoàng Bách - Thời Đại', legal:'Công ty TNHH Nha Khoa Hoàng Bách – Thời Đại',
-             authority:'Sở Y tế An Giang', addr:'C22 đường Lê Hồng Phong, phường Rạch Giá, tỉnh An Giang',
-             phone:'0986 262 242', taxCode:'1702345688', maCSKCB:'',
-             phone2:'0707 262 242',
-             caSangVao:'07:00', caSangRa:'12:00', caChieuVao:'13:00', caChieuRa:'17:00',
+    clinic: {name:CFG('name','Nha Khoa Hoàng Bách - Thời Đại'),
+             legal:CFG('legal','Công ty TNHH Nha Khoa Hoàng Bách – Thời Đại'),
+             authority:CFG('authority','Sở Y tế An Giang'),
+             addr:CFG('addr','C22 đường Lê Hồng Phong, phường Rạch Giá, tỉnh An Giang'),
+             phone:CFG('phone','0986 262 242'), taxCode:CFG('taxCode','1702345688'),
+             maCSKCB:CFG('maCSKCB',''), maKH:CFG('maKH','KH'),
+             phone2:CFG('phone2','0707 262 242'),
+             caSangVao:g.caSangVao||'07:00', caSangRa:g.caSangRa||'12:00',
+             caChieuVao:g.caChieuVao||'13:00', caChieuRa:g.caChieuRa||'17:00',
              treCho:5, wifiIp:''},
     seq: {cust: 1, receipt: 1},
     services, staff: [], customers: [], treatments: [], receipts: [], rx: [],
@@ -335,6 +343,10 @@ function save() {
    sửa đè lên thứ người ta cố ý đặt là mất dữ liệu thật. Gọi cả sau khi kéo cài đặt từ
    đám mây, vì đám mây có thể còn giữ bản Gò Quao của máy chưa cập nhật.
    Trả về true nếu có đổi. */
+/* Máy này đang chạy bản của chi nhánh nào — đọc từ config.js. Bản cũ chưa có mục `id`
+   thì coi như Rạch Giá, đúng như hành vi trước nay. */
+function laRachGia() { return String(CFG('id', 'RG')).toUpperCase() === 'RG'; }
+
 function veThoiDai() {
   const cl = db.clinic || (db.clinic = {});
   const ve = [
@@ -396,16 +408,22 @@ function migrate() {
   }
   /* Đổi tên và địa chỉ phòng khám một lần cho các máy đã cài. Đánh dấu để lần sau
      không đè lên nữa — quản lý vẫn sửa lại được trong Cài đặt. */
-  if (!cl.tenTD) {
-    cl.name = 'Nha Khoa Hoàng Bách - Thời Đại';
-    cl.addr = 'C22 đường Lê Hồng Phong, phường Rạch Giá, tỉnh An Giang';
-    cl.tenTD = 1;
+  /* CHỈ chi nhánh Rạch Giá mới chạy mấy bước ép-về-Thời-Đại này. Bản Gò Quao dùng
+     chung mã nguồn, nếu không khoá lại thì cứ mở app lên là tên, địa chỉ, điện thoại
+     của Gò Quao bị đổi về Thời Đại — và veThoiDai() không có cờ chặn nên nó đổi lại
+     sau MỖI lần khởi động lẫn mỗi lần kéo cài đặt từ đám mây. */
+  if (laRachGia()) {
+    if (!cl.tenTD) {
+      cl.name = CFG('name', 'Nha Khoa Hoàng Bách - Thời Đại');
+      cl.addr = CFG('addr', 'C22 đường Lê Hồng Phong, phường Rạch Giá, tỉnh An Giang');
+      cl.tenTD = 1;
+    }
+    veThoiDai();
   }
-  veThoiDai();
   /* Giờ thật của cơ sở Thời Đại từ 04/10/2026: thứ Hai–thứ Sáu đóng cửa 19:00,
      thứ Bảy và Chủ nhật đóng cửa 17:00; nghỉ trưa 12:00–13:30 mọi ngày.
      Đặt một lần rồi đánh dấu, sau đó quản lý tự sửa trong Nhân sự → Chấm công. */
-  if (!cl.caTD) {
+  if (laRachGia() && !cl.caTD) {
     cl.caSangVao = '08:00'; cl.caSangRa = '12:00';
     cl.caChieuVao = '13:30'; cl.caChieuRa = '19:00';
     const tuan = {};
@@ -416,9 +434,21 @@ function migrate() {
     cl.caTuan = tuan;
     cl.caTD = 1;
   }
+  /* Tiền tố mã khách: máy đang chạy mà chưa khai thì ĐỌC NGAY TỪ HỒ SƠ ĐÃ CÓ, lấy
+     tiền tố nào xuất hiện nhiều nhất. Không đoán theo cấu hình — đoán sai là khách
+     mới mang mã khác hẳn khách cũ, nhìn vào tưởng hai phòng khám. */
+  if (!cl.maKH) {
+    const dem = {};
+    (db.customers || []).forEach(c => {
+      const m = String(c.code || '').match(/^([A-Za-z]+)-/);
+      if (m) dem[m[1].toUpperCase()] = (dem[m[1].toUpperCase()] || 0) + 1;
+    });
+    const hay = Object.keys(dem).sort((a, b) => dem[b] - dem[a])[0];
+    cl.maKH = hay || CFG('maKH', 'KH');
+  }
   /* Số điện thoại phòng khám — điền một lần cho máy nào chưa có */
-  if (!cl.phone) cl.phone = '0986 262 242';
-  if (!cl.phone2) cl.phone2 = '0707 262 242';
+  if (!cl.phone) cl.phone = CFG('phone', '0986 262 242');
+  if (!cl.phone2) cl.phone2 = CFG('phone2', '0707 262 242');
   delete cl.shiftStart;
   /* Sơ đồ răng cũ chỉ có một trạng thái mỗi răng: 'rct' (điều trị tủy) và 'crown'
      (bọc sứ chung). Nay nội nha là ô tick riêng, còn răng sứ tách kim loại / toàn sứ.
@@ -1363,7 +1393,7 @@ const Photo = {
 const Cust = {
   /* Ô chọn tỉnh + xã/phường theo địa giới mới, kèm mục "Khác — nhập tay" */
   addrSelects(c){
-    const prov = c.province || 'An Giang';
+    const prov = c.province || CFG('tinh', 'An Giang');
     const wardOpts = WARDS[prov] || [];
     return `
       <div class="f"><label>8. Địa chỉ — Tỉnh, thành phố</label>
@@ -1583,7 +1613,8 @@ const Cust = {
   /* Mã kế tiếp theo bộ đếm, nhưng nhảy qua mã nào đã có người dùng */
   /* Tiền tố mã khách. Mỗi cơ sở một tiền tố riêng để nhìn mã là biết hồ sơ của đâu —
      Rạch Giá (Thời Đại) là RG. Đổi được trong Cài đặt → Thông tin phòng khám. */
-  tienTo(){ return (((db.clinic || {}).maKH || 'RG') + '').trim().toUpperCase() || 'RG'; },
+  tienTo(){ const m = CFG('maKH', 'KH');
+    return (((db.clinic || {}).maKH || m) + '').trim().toUpperCase() || m; },
   maTiepTheo(){
     const co = new Set(db.customers.map(x => Combo.norm(x.code || '')));
     /* Đi tiếp theo số LỚN NHẤT đang có, và giữ đúng bề rộng chữ số của hồ sơ cũ.
@@ -3857,7 +3888,7 @@ const Treat = {
   },
   invoice(rid){
     const r = db.receipts.find(x=>x.id===rid);
-    r.invoice = {no:'1C26THB-'+String(db.seq.receipt+8000).padStart(8,'0'), code:Math.random().toString(16).slice(2,8).toUpperCase(), date:todayISO()};
+    r.invoice = {no:CFG('hdPrefix','1C26THB')+'-'+String(db.seq.receipt+8000).padStart(8,'0'), code:Math.random().toString(16).slice(2,8).toUpperCase(), date:todayISO()};
     save(); App.render(); App.toast('Đã phát hành HĐĐT qua Viettel SInvoice ✓ (mô phỏng — bản thật cần tài khoản SInvoice)');
   },
   printReceipt(rid){
@@ -5499,7 +5530,7 @@ Object.assign(HoSo, {
     const d = this.dl(ep, 'phieuthu');
     return `
     <div class="f"><label>Ngày lập phiếu</label><input type="date" name="ngay" value="${h(d.ngay||todayISO())}"></div>
-    <div class="f"><label>Nơi lập</label><input name="noi" value="${h(d.noi||(db.clinic.addr||'An Giang').split(',').pop().trim())}"></div>
+    <div class="f"><label>Nơi lập</label><input name="noi" value="${h(d.noi||(db.clinic.addr||CFG('tinh','An Giang')).split(',').pop().trim())}"></div>
     <div class="f"><label>Người thu tiền</label><select name="thuId">
       ${db.staff.filter(s=>s.active!==false).map(s=>{const me=Att.myStaff();
         return `<option value="${s.id}"${(d.thuId||(me&&me.id))===s.id?' selected':''}>${h(s.name)}${s.role?' · '+h(s.role):''}</option>`;}).join('')}</select></div>
@@ -5535,7 +5566,7 @@ Object.assign(HoSo, {
     ${d.ghiChu?`<p><i>${h(d.ghiChu)}</i></p>`:''}
     <div class="sign">
       <div><b>Người thu tiền</b><br>(Ký, ghi rõ họ tên)<br><br><br>${h(thu?thu.name:'')}</div>
-      <div>${h(d.noi||'An Giang')}, ngày ${ng.getDate()} tháng ${ng.getMonth()+1} năm ${ng.getFullYear()}<br>
+      <div>${h(d.noi||CFG('tinh','An Giang'))}, ngày ${ng.getDate()} tháng ${ng.getMonth()+1} năm ${ng.getFullYear()}<br>
         <b>Bác sĩ điều trị</b><br>(Ký, ghi rõ họ tên)<br><br><br>${h(bs?bs.name:'')}</div>
     </div>`;
   },
@@ -9688,7 +9719,24 @@ SCREENS.reports = () => {
 
 /* ================= Khởi động ================= */
 load();
+/* Tên, địa chỉ trên thanh đầu và tiêu đề cửa sổ viết sẵn trong index.html cho Thời
+   Đại. Ghi đè lại theo hồ sơ cơ sở lúc mở app, để HAI CHI NHÁNH DÙNG CHUNG ĐÚNG MỘT
+   index.html — khỏi phải nhớ sửa hai tệp mỗi lần đổi gì. Nút CĐHA chỉ hiện ở cơ sở
+   có phòng chẩn đoán hình ảnh. */
+function veThanhDau(){
+  const cl = (typeof db === 'object' && db && db.clinic) || {};
+  const ten = cl.name || CFG('name', ''), diaChi = cl.addr || CFG('addr', '');
+  const o = document.getElementById('tenCoSo');
+  if (o && ten) o.innerHTML = '<b></b><small></small>',
+    o.querySelector('b').textContent = ten,
+    o.querySelector('small').textContent = diaChi;
+  if (ten) document.title = ten + ' — Quản lý phòng khám';
+  const nut = document.getElementById('nutCDHA');
+  if (nut && !CFG('coCDHA', true)) nut.style.display = 'none';
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  veThanhDau();
   $('#restoreFile').addEventListener('change', ev => {
     const f = ev.target.files[0]; if (!f) return;
     if (!confirm('Phục hồi từ file "' + f.name + '"? Dữ liệu hiện tại trên máy sẽ bị THAY THẾ toàn bộ.')) { ev.target.value=''; return; }
