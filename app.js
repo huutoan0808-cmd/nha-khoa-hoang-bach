@@ -7577,6 +7577,23 @@ create policy p_rec   on records    for all to authenticated using (true) with c
         <input name="maKH" value="${h(Cust.tienTo())}" maxlength="6" style="text-transform:uppercase" placeholder="RG">
         <div class="combo-hint">Mã khách mới sẽ là <b>${h(Cust.tienTo())}-1</b>, <b>${h(Cust.tienTo())}-2</b>…
           Mã đã cấp rồi thì giữ nguyên, không đổi theo.</div></div>
+      ${/* Sáu ô dưới đây trước nay KHÔNG có chỗ nào sửa trong giao diện — in sai trên
+            giấy tờ thì phải sửa mã nguồn. Mở thêm cơ sở thứ hai là càng cần. */''}
+      <div class="f full"><label>Tên phòng khám</label>
+        <input name="clName" value="${h(db.clinic.name||'')}" placeholder="${h(CFG('name',''))}">
+        <div class="combo-hint">Hiện trên thanh đầu, trên mọi phiếu in và tiêu đề cửa sổ.</div></div>
+      <div class="f full"><label>Tên pháp nhân</label>
+        <input name="clLegal" value="${h(db.clinic.legal||'')}" placeholder="${h(CFG('legal',''))}">
+        <div class="combo-hint">Tên công ty ghi trên hợp đồng, phiếu thu, văn bản.</div></div>
+      <div class="f full"><label>Địa chỉ</label>
+        <input name="clAddr" value="${h(db.clinic.addr||'')}" placeholder="${h(CFG('addr',''))}"></div>
+      <div class="f"><label>Cơ quan chủ quản</label>
+        <input name="clAuthority" value="${h(db.clinic.authority||'')}" placeholder="Sở Y tế An Giang"></div>
+      <div class="f"><label>Mã số thuế</label>
+        <input name="clTax" value="${h(db.clinic.taxCode||'')}" placeholder="chưa khai"></div>
+      <div class="f"><label>Mã cơ sở khám chữa bệnh</label>
+        <input name="clCSKCB" value="${h(db.clinic.maCSKCB||'')}" placeholder="chưa khai">
+        <div class="combo-hint">Dùng khi kết xuất hồ sơ bệnh án điện tử gửi Bộ Y tế.</div></div>
       <div class="f"><label>Điện thoại phòng khám</label><input name="phone" value="${h(db.clinic.phone||'')}" placeholder="0986 262 242"></div>
       <div class="f"><label>Điện thoại thứ hai</label><input name="phone2" value="${h(db.clinic.phone2||'')}" placeholder="0707 262 242"></div>
       <div class="f full"><label>Địa chỉ mạng phòng khám</label><input name="wifiIp" value="${h(db.clinic.wifiIp||'')}" placeholder="chưa đặt"></div>
@@ -7618,7 +7635,18 @@ create policy p_rec   on records    for all to authenticated using (true) with c
     db.clinic.phone = (d.phone||'').trim();
     db.clinic.phone2 = (d.phone2||'').trim();
     db.clinic.wifiIp = (d.wifiIp||'').trim();
-    save(); App.closeModal(); App.render(); App.toast('Đã lưu cài đặt ✓');
+    /* Thông tin cơ sở: bỏ trống thì GIỮ NGUYÊN giá trị cũ, không xóa trắng — lỡ tay
+       xóa tên phòng khám thì mọi phiếu in ra đều mất tên. */
+    const dat = (k, v) => { v = (v || '').trim(); if (v) db.clinic[k] = v; };
+    dat('name', d.clName); dat('legal', d.clLegal); dat('addr', d.clAddr);
+    dat('authority', d.clAuthority);
+    /* Hai mã này cho phép xóa trắng: khai nhầm mã số thuế của cơ sở kia thì phải
+       bỏ được, để trống còn hơn in sai lên giấy tờ. */
+    db.clinic.taxCode = (d.clTax||'').trim();
+    db.clinic.maCSKCB = (d.clCSKCB||'').trim().toUpperCase();
+    save(); App.closeModal(); App.render();
+    if (typeof veThanhDau === 'function') veThanhDau();
+    App.toast('Đã lưu cài đặt ✓');
   },
 };
 
