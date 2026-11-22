@@ -4,7 +4,8 @@
 
    CÒN THIẾU: hai dòng `u` và `k` bên dưới đang để trống. Phải điền Project URL và
    khoá anon public của project Supabase RIÊNG của Gò Quao thì app mới đăng nhập và
-   đồng bộ được. Lấy ở Supabase → Settings → API.
+   đồng bộ được. Khoá lấy ở Supabase → Settings → API Keys, mục "Publishable key"
+   (giao diện mới gọi tên vậy, chính là khoá "anon public" trước đây).
    Tuyệt đối không dán khoá service_role vào đây.
 
    HAI CHI NHÁNH PHẢI Ở HAI TÊN MÁY CHỦ KHÁC NHAU (ví dụ Gò Quao đặt ở Cloudflare
@@ -12,7 +13,7 @@
    chung một kho dữ liệu trên máy và ghi đè hồ sơ của nhau. */
 const CLINIC_CFG = {
   /* --- Kho dữ liệu trên Supabase: PHẢI ĐIỀN --- */
-  u: "",
+  u: "https://bnduegwyajdgnduhnhwx.supabase.co",
   k: "",
 
   /* --- Chi nhánh nào --- */
