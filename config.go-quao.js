@@ -14,7 +14,7 @@
 const CLINIC_CFG = {
   /* --- Kho dữ liệu trên Supabase: PHẢI ĐIỀN --- */
   u: "https://bnduegwyajdgnduhnhwx.supabase.co",
-  k: "",
+  k: "sb_publishable_U1zIxjkPSyudB-Gba2lS4g_aNkK4-h8",
 
   /* --- Chi nhánh nào --- */
   /* Khác "RG" là phần mềm tự bỏ qua mấy bước nâng cấp chỉ dành cho Thời Đại —
