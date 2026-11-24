@@ -19,6 +19,14 @@ const Importer = {
     /* Huyện Châu Thành (cũ) */
     to('Xã Thạnh Lộc', ['Thạnh Lộc','Mong Thọ','Mong Thọ A','Mong Thọ B']);
     to('Xã Châu Thành', ['Minh Lương','Minh Hòa','Minh Hoà','Giục Tượng']);
+    /* Huyện Gò Quao (cũ) — CHỈ ghép những cặp chắc chắn theo tên, tức xã mới là tên
+       gốc của các xã cũ Bắc/Nam. Những xã còn lại của Gò Quao cũ (Vĩnh Phước A và B,
+       Thủy Liễu, Định An, Vĩnh Thắng, Thới Quản, Hoà Chánh, Thị trấn Gò Quao) chưa
+       ghép vì danh mục mới không có tên tương ứng — phải đối chiếu nghị quyết sáp
+       nhập mới biết xã nào về đâu. Chưa ghép thì phần mềm GIỮ NGUYÊN tên cũ: tra cứu
+       vẫn ra, còn đoán bừa là in sai địa chỉ bệnh nhân lên giấy tờ. */
+    to('Xã Vĩnh Hòa Hưng', ['Vĩnh Hòa Hưng Bắc','Vĩnh Hoà Hưng Bắc','Vĩnh Hòa Hưng Nam','Vĩnh Hoà Hưng Nam']);
+    to('Xã Vĩnh Bình', ['Vĩnh Bình Bắc','Vĩnh Bình Nam']);
     return m;
   })(),
 
