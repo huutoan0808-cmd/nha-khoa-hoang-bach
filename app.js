@@ -287,10 +287,12 @@ function seed() {
     inventory: [], appointments: [], labs: [], attLog: [], bonuses: [], datlich: []};
 }
 
-function load() {
+async function load() {
   db = null;
+  /* Đọc từ IndexedDB; máy cũ còn dữ liệu ở localStorage thì Kho tự chép sang một
+     lần rồi mới xoá bản cũ (xem kho.js). */
   let raw = '';
-  try { raw = localStorage.getItem(DB_KEY) || ''; } catch(e){}
+  try { raw = await Kho.layChuoi(); } catch(e){ raw = ''; }
   /* Bản trên máy đang mã hóa: chưa mở khóa thì chưa có dữ liệu thật. Tuyệt đối
      KHÔNG gọi save() ở nhánh này — save() sẽ ghi đè bản mã hóa bằng dữ liệu rỗng. */
   if (typeof Mahoa !== 'undefined' && Mahoa.laGoi(raw)) {
@@ -312,8 +314,11 @@ function save() {
   if (typeof Sync !== 'undefined' && Sync.hen) { try { Sync.hen(); } catch(e){} }
   const chuoi = JSON.stringify(db);
   if (typeof Mahoa !== 'undefined' && Mahoa.bat()) { Mahoa.ghi(chuoi); return; }
+  /* Ghi qua Kho: IndexedDB nếu dùng được, không thì lùi về localStorage. Lệnh ghi
+     chạy nền nên save() vẫn trả về ngay như trước. */
   try {
-    localStorage.setItem(DB_KEY, chuoi);
+    if (Kho.datChuoi(chuoi) !== false) return;
+    throw new Error('Kho đầy');
   } catch(e) {
     /* Kho trên máy đầy. Thứ ĐƯỢC PHÉP mất là nhật ký, không phải hồ sơ bệnh nhân —
        nên bỏ bớt nhật ký rồi ghi lại. Im lặng nuốt lỗi ở đây là mất dữ liệu mà không
@@ -321,7 +326,7 @@ function save() {
     let cuu = false;
     if (db.vet && db.vet.length > 200) {
       db.vet = db.vet.slice(-200);
-      try { localStorage.setItem(DB_KEY, JSON.stringify(db)); cuu = true; } catch(e2){}
+      try { cuu = Kho.datChuoi(JSON.stringify(db)) !== false; } catch(e2){}
     }
     if (!App._daBaoDay) {
       App._daBaoDay = true;
@@ -9745,8 +9750,25 @@ SCREENS.reports = () => {
   </div>`;
 };
 
+/* Kho báo ngược lên khi cả IndexedDB lẫn localStorage đều không ghi được */
+if (typeof Kho !== 'undefined') Kho.khiDay = () => {
+  if (App._daBaoDay) return;
+  App._daBaoDay = true;
+  setTimeout(() => App.modal('KHÔNG LƯU ĐƯỢC DỮ LIỆU', `
+    <div class="note-block warn-block"><b>Máy này không ghi xuống được.</b>
+      Những gì vừa nhập chỉ đang nằm trong bộ nhớ tạm — tải lại trang là mất.</div>
+    <div class="note-block">Làm ngay theo thứ tự:<br>
+      1. Bấm nút <b>⟳ đồng bộ</b> trên thanh đầu để đẩy dữ liệu lên đám mây.<br>
+      2. Bấm nút <b>⬇ sao lưu</b> để tải một bản về máy.<br>
+      3. Rồi mới tải lại trang.</div>
+    <div class="form-actions"><button class="btn primary" onclick="App.closeModal()">Đã hiểu</button></div>`), 50);
+};
+
 /* ================= Khởi động ================= */
-load();
+/* Đọc kho xong mới vẽ màn hình. Trước đây load() chạy đồng bộ ngay khi nạp script;
+   IndexedDB đọc bất đồng bộ nên phải chờ — không chờ thì màn đầu tiên vẽ bằng dữ
+   liệu rỗng rồi save() ghi đè lên hồ sơ thật. */
+const daNapKho = load();
 /* Tên, địa chỉ trên thanh đầu và tiêu đề cửa sổ viết sẵn trong index.html cho Thời
    Đại. Ghi đè lại theo hồ sơ cơ sở lúc mở app, để HAI CHI NHÁNH DÙNG CHUNG ĐÚNG MỘT
    index.html — khỏi phải nhớ sửa hai tệp mỗi lần đổi gì. Nút CĐHA chỉ hiện ở cơ sở
@@ -9763,7 +9785,10 @@ function veThanhDau(){
   if (nut && !CFG('coCDHA', true)) nut.style.display = 'none';
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  /* CHỜ đọc kho xong. Không chờ thì mọi thứ bên dưới chạy trên db rỗng: màn hình vẽ
+     trắng, Vet.chup() chụp bản rỗng làm mốc, Sync đẩy bản rỗng lên đám mây. */
+  try { await daNapKho; } catch(e){}
   veThanhDau();
   $('#restoreFile').addEventListener('change', ev => {
     const f = ev.target.files[0]; if (!f) return;

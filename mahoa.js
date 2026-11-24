@@ -106,7 +106,7 @@ const Mahoa = {
         while (this.choGhi !== null) {
           const n = this.choGhi; this.choGhi = null;
           if (!this.khoa) break;                 /* chưa mở khóa thì KHÔNG ghi gì cả */
-          localStorage.setItem(DB_KEY, await this.goi(n));
+          Kho.datChuoi(await this.goi(n));
         }
       } catch(e){ /* hết chỗ hoặc lỗi mã hóa — thà không ghi còn hơn ghi bản trần */ }
       finally { this.dangGhi = false; }
@@ -118,7 +118,7 @@ const Mahoa = {
     const k = await this.layKhoaTam();
     if (!k) return false;
     let raw = '';
-    try { raw = localStorage.getItem(DB_KEY) || ''; } catch(e){}
+    try { raw = await Kho.layChuoi(); } catch(e){ raw = ''; }
     if (!this.laGoi(raw)) return false;
     try {
       const d = JSON.parse(await this.moGoi(raw, k));
@@ -131,7 +131,7 @@ const Mahoa = {
   /* ---------- Mở khóa lúc mở phần mềm ---------- */
   async thu(matKhau){
     let raw = '';
-    try { raw = localStorage.getItem(DB_KEY) || ''; } catch(e){}
+    try { raw = await Kho.layChuoi(); } catch(e){ raw = ''; }
     if (!this.laGoi(raw)) return null;
     const k = await this.sinhKhoa(matKhau);
     const chuoi = await this.moGoi(raw, k);      /* sai mật khẩu thì ném lỗi ở đây */
@@ -181,10 +181,11 @@ const Mahoa = {
     }
   },
   /* Quên mật khẩu: bỏ bản trên máy, đăng nhập rồi kéo lại từ đám mây */
-  boQua(){
+  async boQua(){
     if (!confirm('Bỏ bản dữ liệu đã mã hóa trên máy này và tải lại từ đám mây?\n\n' +
       'Phần nào chưa kịp đồng bộ lên đám mây sẽ mất. Chỉ làm khi thật sự không nhớ mật khẩu.')) return;
-    try { localStorage.removeItem(DB_KEY); localStorage.removeItem(this.MUOI_LS); } catch(e){}
+    await Kho.xoaHet();
+    try { localStorage.removeItem(this.MUOI_LS); } catch(e){}
     this.quenKhoa();
     location.replace(location.pathname + location.search);
   },
@@ -196,14 +197,14 @@ const Mahoa = {
     db.clinic = db.clinic || {};
     db.clinic.baoMat = Object.assign({}, db.clinic.baoMat || {}, {maHoa: true});
     /* Ghi lại ngay ở dạng đã mã hóa, đè lên bản trần đang nằm trên máy */
-    localStorage.setItem(DB_KEY, await this.goi(JSON.stringify(db)));
+    Kho.datChuoi(await this.goi(JSON.stringify(db)));
     if (typeof Vet !== 'undefined') Vet.ghi('sua', 'Bật mã hóa dữ liệu lưu trên máy');
   },
   async tat(){
     db.clinic = db.clinic || {};
     db.clinic.baoMat = Object.assign({}, db.clinic.baoMat || {}, {maHoa: false});
     this.quenKhoa();
-    localStorage.setItem(DB_KEY, JSON.stringify(db));
+    Kho.datChuoi(JSON.stringify(db));
     if (typeof Vet !== 'undefined') Vet.ghi('sua', 'Tắt mã hóa dữ liệu lưu trên máy');
   },
   moTa(){
