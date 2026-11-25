@@ -451,6 +451,17 @@ function migrate() {
     const hay = Object.keys(dem).sort((a, b) => dem[b] - dem[a])[0];
     cl.maKH = hay || CFG('maKH', 'KH');
   }
+  /* Tên và địa chỉ trên máy có lúc bị rút gọn thành "Nha Khoa Hoàng Bách" / "Rạch
+     Giá, An Giang" — in lên phiếu thu và bệnh án thì thiếu, giấy tờ phải ghi đủ tên
+     pháp nhân và địa chỉ. Đặt lại đúng MỘT LẦN theo cấu hình chi nhánh, rồi đánh dấu
+     để không đè lên những gì quản lý tự sửa sau này. */
+  if (!cl.tenDu) {
+    const duTen = CFG('name', ''), duAddr = CFG('addr', '');
+    if (duTen && (cl.name || '').length < duTen.length) cl.name = duTen;
+    if (duAddr && (cl.addr || '').length < duAddr.length) cl.addr = duAddr;
+    if (!cl.legal) cl.legal = CFG('legal', '');
+    cl.tenDu = 1;
+  }
   /* Số điện thoại phòng khám — điền một lần cho máy nào chưa có */
   if (!cl.phone) cl.phone = CFG('phone', '0986 262 242');
   if (!cl.phone2) cl.phone2 = CFG('phone2', '0707 262 242');
@@ -1008,7 +1019,10 @@ const App = {
       try { await Vet.day(); } catch(e){}
     }
     Cloud.logout();
-    if (xong) { try { localStorage.removeItem(DB_KEY); } catch(e){} }
+    /* Từ bản 197 dữ liệu nằm trong IndexedDB chứ không còn ở localStorage. Lệnh cũ
+       chỉ xoá localStorage nên đăng xuất KHÔNG xoá được gì — người khác cầm máy vẫn
+       mở ra xem được hồ sơ bệnh nhân. Phải xoá qua Kho. */
+    if (xong) { try { await Kho.xoaHet(); } catch(e){} }
     /* Nạp lại trang, bỏ luôn phần #… trên địa chỉ để ra thẳng ô đăng nhập */
     location.replace(location.pathname + location.search);
   },
@@ -9776,10 +9790,13 @@ const daNapKho = load();
 function veThanhDau(){
   const cl = (typeof db === 'object' && db && db.clinic) || {};
   const ten = cl.name || CFG('name', ''), diaChi = cl.addr || CFG('addr', '');
+  /* Địa chỉ và số điện thoại ghi đủ ngay trên thanh đầu: khách gọi tới hỏi "chỗ mình
+     ở đâu, số nào" thì lễ tân đọc ngay, khỏi mở Cài đặt. */
+  const dt = [cl.phone, cl.phone2].filter(Boolean).join(' · ');
   const o = document.getElementById('tenCoSo');
   if (o && ten) o.innerHTML = '<b></b><small></small>',
     o.querySelector('b').textContent = ten,
-    o.querySelector('small').textContent = diaChi;
+    o.querySelector('small').textContent = diaChi + (dt ? '  ·  ĐT: ' + dt : '');
   if (ten) document.title = ten + ' — Quản lý phòng khám';
   const nut = document.getElementById('nutCDHA');
   if (nut && !CFG('coCDHA', true)) nut.style.display = 'none';
