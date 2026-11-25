@@ -1,6 +1,6 @@
 # Nhánh `go-quao` — bản chạy cho chi nhánh Gò Quao
 
-Nhánh này **chỉ khác nhánh `main` đúng một tệp**: `config.js`.
+Nhánh này **chỉ khác nhánh `main` đúng hai tệp**: `config.js` và `manifest.webmanifest`.
 
 - `main`     → `config.js` là cấu hình **Rạch Giá (Thời Đại)**, chạy ở GitHub Pages.
 - `go-quao`  → `config.js` chép từ `config.go-quao.js`, chạy ở Cloudflare Pages.
@@ -12,14 +12,19 @@ Sửa code ở `main` như bình thường, rồi mang sang đây:
 ```
 git checkout go-quao
 git merge main
-git checkout --ours config.js    # GIỮ config của Gò Quao, đừng lấy của Rạch Giá
-git add config.js
+git checkout --ours config.js manifest.webmanifest   # GIỮ bản của Gò Quao
+git add config.js manifest.webmanifest
 git commit
 git push origin go-quao
 ```
 
-Bước `--ours` là quan trọng nhất: quên nó là bản Gò Quao trỏ vào kho dữ liệu
-Rạch Giá, hai cơ sở ghi đè hồ sơ của nhau.
+Bước `--ours` là quan trọng nhất:
+
+- Quên với `config.js` → bản Gò Quao trỏ vào **kho dữ liệu Rạch Giá**, hai cơ sở
+  ghi đè hồ sơ của nhau.
+- Quên với `manifest.webmanifest` → biểu tượng cài trên điện thoại nhân viên
+  Gò Quao mang tên **"NK Hoàng Bách - Thời Đại"**. Tên trên biểu tượng lấy từ
+  tệp này, không phải từ `config.js`, nên phải sửa riêng.
 
 ## Vì sao phải khác tên máy chủ
 
