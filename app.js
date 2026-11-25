@@ -276,9 +276,13 @@ function seed() {
              legal:CFG('legal','Công ty TNHH Nha Khoa Hoàng Bách – Thời Đại'),
              authority:CFG('authority','Sở Y tế An Giang'),
              addr:CFG('addr','C22 đường Lê Hồng Phong, phường Rạch Giá, tỉnh An Giang'),
-             phone:CFG('phone','0986 262 242'), taxCode:CFG('taxCode','1702345688'),
+             /* Dự phòng chỉ dùng cho bản CHƯA khai cấu hình. Chi nhánh nào cố ý để
+                trống thì để trống — mượn số của chi nhánh kia là in sai số liên hệ
+                lên phiếu thu và bệnh án. */
+             phone:CFG('phone', laRachGia() ? '0986 262 242' : ''),
+             taxCode:CFG('taxCode', laRachGia() ? '1702345688' : ''),
              maCSKCB:CFG('maCSKCB',''), maKH:CFG('maKH','KH'),
-             phone2:CFG('phone2','0707 262 242'),
+             phone2:CFG('phone2', laRachGia() ? '0707 262 242' : ''),
              caSangVao:g.caSangVao||'07:00', caSangRa:g.caSangRa||'12:00',
              caChieuVao:g.caChieuVao||'13:00', caChieuRa:g.caChieuRa||'17:00',
              treCho:5, wifiIp:''},
@@ -463,8 +467,14 @@ function migrate() {
     cl.tenDu = 1;
   }
   /* Số điện thoại phòng khám — điền một lần cho máy nào chưa có */
-  if (!cl.phone) cl.phone = CFG('phone', '0986 262 242');
-  if (!cl.phone2) cl.phone2 = CFG('phone2', '0707 262 242');
+  if (!cl.phone) cl.phone = CFG('phone', laRachGia() ? '0986 262 242' : '');
+  if (!cl.phone2) cl.phone2 = CFG('phone2', laRachGia() ? '0707 262 242' : '');
+  /* Máy Gò Quao lỡ nhận số của Thời Đại từ bản trước thì gỡ ra một lần */
+  if (!laRachGia() && !cl.soDaDon) {
+    if (!CFG('phone2', '') && cl.phone2 === '0707 262 242') cl.phone2 = '';
+    if (!CFG('phone', '') && cl.phone === '0986 262 242') cl.phone = '';
+    cl.soDaDon = 1;
+  }
   delete cl.shiftStart;
   /* Sơ đồ răng cũ chỉ có một trạng thái mỗi răng: 'rct' (điều trị tủy) và 'crown'
      (bọc sứ chung). Nay nội nha là ô tick riêng, còn răng sứ tách kim loại / toàn sứ.
