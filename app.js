@@ -1545,10 +1545,13 @@ const Cust = {
           : 'Đã điền sẵn mã kế tiếp — sửa được nếu phòng khám đánh số theo cách riêng.'}</div></div>
       <div class="f"><label>Ngày lập hồ sơ</label>
         <input type="date" name="createdAt" value="${h(c.createdAt || todayISO())}"></div>
-      <div class="f full"><label>1. Họ và tên (IN HOA)</label><input name="name" required value="${h(c.name||'')}" style="text-transform:uppercase"></div>
+      <div class="f full"><label>1. Họ và tên (IN HOA)</label><input name="name" required value="${h(c.name||'')}" style="text-transform:uppercase"
+          oninput="Cust.doTrung('${id||''}')"></div>
       ${f('2. Ngày sinh','dob',c.dob,'','date')}
       <div class="f"><label>3. Giới tính</label><select name="gender"><option${c.gender==='Nam'?' selected':''}>Nam</option><option${c.gender==='Nữ'?' selected':''}>Nữ</option></select></div>
-      ${f('4. Điện thoại','phone',c.phone,'09xx xxx xxx')}
+      <div class="f"><label>4. Điện thoại</label><input name="phone" value="${h(c.phone||'')}" placeholder="09xx xxx xxx"
+          oninput="Cust.doTrung('${id||''}')"></div>
+      <div class="f full" id="custTrung" style="display:none"></div>
       ${f('5. Nghề nghiệp','job',c.job)}
       ${f('Nơi làm việc','noiLamViec',c.noiLamViec,'Mục 8 mẫu 16/BV-01')}
       ${f('6. Dân tộc','ethnic',c.ethnic||'Kinh')}
@@ -1733,11 +1736,80 @@ const Cust = {
     return ma;
   },
 
+  /* ---------- Dò hồ sơ đã có, tránh lập trùng một người ----------
+     Gò Quao từng có 42 người bị lập hai hồ sơ, tiền và lịch sử điều trị xẻ làm đôi.
+     Gộp lại được nhưng mất công, và trong lúc chưa gộp thì bác sĩ nhìn hồ sơ thiếu
+     mất nửa quá trình điều trị. Chặn ngay lúc nhập rẻ hơn nhiều. */
+  soGon(s){ return String(s || '').replace(/\D/g, ''); },
+  tenGon(s){
+    /* Bỏ cả ghi chú trong ngoặc — sổ cũ hay ghi "NGUYỄN THỊ ĐẦM (HS BÊN 21)" */
+    return Combo.norm(String(s || '').replace(/\(.*?\)/g, '')).replace(/\s+/g, ' ').trim();
+  },
+  /* Trả về danh sách hồ sơ nghi trùng, nặng trước nhẹ sau.
+     muc: 'ca' = trùng cả tên lẫn số · 'sdt' = chỉ trùng số · 'ten' = chỉ trùng tên */
+  timTrung(ten, phone, boQuaId){
+    const t = this.tenGon(ten), s = this.soGon(phone);
+    if (!t && !s) return [];
+    const ra = [];
+    (db.customers || []).forEach(x => {
+      if (!x || x.id === boQuaId) return;
+      const xt = this.tenGon(x.name), xs = this.soGon(x.phone);
+      const giongTen = !!t && xt === t, giongSo = !!s && xs === s;
+      if (giongTen && giongSo) ra.push({c: x, muc: 'ca'});
+      else if (giongSo) ra.push({c: x, muc: 'sdt'});
+      else if (giongTen) ra.push({c: x, muc: 'ten'});
+    });
+    const hang = {ca: 0, sdt: 1, ten: 2};
+    return ra.sort((a, b) => hang[a.muc] - hang[b.muc]).slice(0, 8);
+  },
+  moTaTrung(x){
+    const db_ = ((x.record || {}).dienBien) || [];
+    const lan = db_.length ? ' · khám lần cuối ' + fmtD(db_[db_.length - 1].date) : ' · chưa có lần khám nào';
+    return h(x.code || '') + ' — ' + h(x.name || '') + (x.phone ? ' · ' + h(x.phone) : '') + lan;
+  },
+  /* Nhắc ngay trong lúc gõ, chưa chặn gì cả */
+  doTrung(id){
+    const o = document.getElementById('custTrung');
+    const fm = document.getElementById('custForm');
+    if (!o || !fm) return;
+    const ds = this.timTrung((fm.name || {}).value, (fm.phone || {}).value, id || null);
+    if (!ds.length) { o.style.display = 'none'; o.innerHTML = ''; return; }
+    const nang = ds.some(x => x.muc === 'ca');
+    o.style.display = '';
+    o.innerHTML = `<div class="note-block" style="background:var(--${nang ? 'danger' : 'warn'}-soft);color:var(--${nang ? 'danger' : 'warn'})">
+      <b>${nang ? 'Người này có thể đã có hồ sơ rồi' : 'Đã có hồ sơ gần giống'}</b>
+      <div style="margin-top:6px">${ds.map(x => `<div>• ${this.moTaTrung(x.c)}
+        <button type="button" class="link-btn" onclick="App.closeModal();Cust.pick('${x.c.id}')">mở hồ sơ này</button>
+        <span class="sub-line">(${x.muc === 'ca' ? 'trùng cả tên và số điện thoại' : x.muc === 'sdt' ? 'trùng số điện thoại' : 'trùng tên'})</span></div>`).join('')}</div>
+      <div class="sub-line" style="margin-top:6px">${nang
+        ? 'Nếu đúng là người đó thì mở hồ sơ cũ ra ghi tiếp. Khác người thật thì cứ lưu — app chỉ nhắc, không cấm.'
+        : 'Trùng tên hoặc chung số máy với người nhà là chuyện thường — cứ lưu bình thường. Đây chỉ là nhắc cho chắc.'}</div></div>`;
+  },
+
   save(ev, id){
     ev.preventDefault();
     const d = Object.fromEntries(new FormData(ev.target).entries());
     d.name = (d.name||'').toUpperCase().trim();
     d.code = (d.code || '').toUpperCase().trim();
+    /* CẢNH BÁO, KHÔNG CHẶN. Trùng tên không thôi là chuyện thường ở phòng khám —
+       tên Việt lặp nhiều, trong kho đã có hàng chục "NGUYỄN THỊ ĐẦM" khác nhau. Hỏi
+       lại mọi trường hợp trùng tên thì lễ tân bị hỏi cả ngày rồi bấm bừa cho qua,
+       tới lúc trùng thật cũng bấm qua nốt.
+       Nên chỉ dựng hộp thoại khi trùng CÙNG LÚC cả tên lẫn số điện thoại — gần như
+       chắc chắn là một người. Các mức nhẹ hơn vẫn hiện nhắc ngay dưới ô nhập, người
+       nhập nhìn thấy và tự quyết. Quyết định cuối cùng luôn là của người nhập. */
+    const nang = this.timTrung(d.name, d.phone, id || null).filter(x => x.muc === 'ca');
+    if (nang.length && this._daHoi !== (d.name + '|' + d.phone)) {
+      this._daHoi = d.name + '|' + d.phone;
+      const hoi = 'Đã có hồ sơ trùng CẢ TÊN LẪN SỐ ĐIỆN THOẠI:\n'
+        + nang.slice(0, 5).map(x => '  • ' + (x.c.code || '') + ' — ' + (x.c.name || '')
+            + (x.c.phone ? ' · ' + x.c.phone : '')).join('\n')
+        + '\n\nNếu đúng là người đó thì nên mở hồ sơ cũ ra ghi tiếp, đừng lập hồ sơ mới —'
+        + '\nlập mới là tiền và quá trình điều trị của họ bị tách làm hai.'
+        + '\n\nVẫn lưu thành hồ sơ riêng?';
+      if (!confirm(hoi)) { this.doTrung(id); return; }
+    }
+    this._daHoi = null;
     /* Mã khách phải là duy nhất — trùng mã thì tra cứu, phiếu thu, bệnh án lẫn hết */
     if (d.code) {
       const trung = db.customers.find(x => x.id !== id && Combo.norm(x.code||'') === Combo.norm(d.code));
@@ -2813,7 +2885,7 @@ const Cust = {
           const k = q ? q.id : '';
           (nhom[k] = nhom[k] || {ten: q ? q.ten : '(chưa gắn quy trình)', ds: []}).ds.push(t);
         });
-        return `<div class="f full"><label>Ghi diễn biến cho dịch vụ nào</label>
+        return `<div class="f full"><label>Ghi diễn biến cho dịch vụ nào <span style="color:var(--danger)">*</span> <span class="sub-line">— bắt buộc chọn</span></label>
           <div id="oDichVu">${Object.entries(nhom).map(([k, g]) => `
             <div style="margin-bottom:6px">
               <div class="sub-line" style="font-weight:600">${h(g.ten)}</div>
@@ -2945,6 +3017,25 @@ const Cust = {
     /* FormData chỉ giữ một giá trị cho các ô trùng tên — công đoạn phải gom tay */
     d.congDoan = this.maBuoc([...ev.target.querySelectorAll('[name="congDoan"]:checked')].map(x => x.value));
     d.treatmentIds = [...ev.target.querySelectorAll('[name="treatmentIds"]:checked')].map(x => x.value);
+    /* BẮT BUỘC chọn dịch vụ. Diễn biến không gắn dịch vụ nào thì công đoạn không biết
+       ghi vào đâu, hoa hồng không tính được, dịch vụ cũng không tự chuyển sang "Đang
+       điều trị" — buổi khám coi như rơi ra ngoài mọi thống kê.
+       Ô tick không dùng được thuộc tính required của HTML (nó đòi TỪNG ô phải tick),
+       nên phải tự kiểm ở đây. */
+    if (!d.treatmentIds.length) {
+      const coViecDangLam = db.treatments.some(t => t.customerId === c.id && t.status !== 'Hoàn tất');
+      App.toast(coViecDangLam
+        ? 'Phải chọn diễn biến này thuộc dịch vụ nào'
+        : 'Khách chưa có dịch vụ nào đang làm dở — thêm dịch vụ ở tab "2. Dịch vụ & điều trị" trước');
+      const o = document.getElementById('oDichVu');
+      if (o) {
+        o.style.outline = '2px solid var(--danger)';
+        o.style.outlineOffset = '4px';
+        o.style.borderRadius = '6px';
+        if (o.scrollIntoView) o.scrollIntoView({block: 'center'});
+      }
+      return;
+    }
     /* Vẫn ghi treatmentId = dịch vụ đầu tiên. Bảng lương, phiếu theo dõi và dòng thời
        gian đều đang đọc trường này; bỏ đi là chúng mất chỗ bám. */
     d.treatmentId = d.treatmentIds[0] || '';
@@ -4170,12 +4261,13 @@ SCREENS.treatment = () => {
         trên sơ đồ phía trên, và ô chẩn đoán khi thêm dịch vụ vẫn còn. */''}
   ${/* Dịch vụ đã dọn hẳn sang trang 2 — trang này chỉ còn khám và chẩn đoán, khỏi phải
         ghi cùng một dịch vụ ở hai chỗ. */''}
-  <div class="card"><div class="card-b" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-    <div style="flex:1;min-width:220px"><b>Dịch vụ</b>
-      <div class="sub-line">Khám xong thì sang trang <b>2. Dịch vụ &amp; điều trị</b> để chọn dịch vụ,
-        chốt giá và ghi diễn biến.${(() => { const n = Treat.keHoachDS(c).length;
-          return n ? ` Khách này đang có <b>${n}</b> dịch vụ.` : ''; })()}</div></div>
-    <button class="btn primary" onclick="Treat.doiTrang('dichvu')">Sang dịch vụ &amp; điều trị →</button>
+  ${/* Chỉ còn cái nút. Dòng chữ giải thích bỏ đi: nó nằm ngay trên cái nút nói đúng
+        việc nó làm, đọc một lần là biết, để mãi chỉ tốn một khoảng màn hình ở cuối
+        trang mà ngày nào cũng phải cuộn qua. Số dịch vụ đang có đưa lên chính cái
+        nút, chỗ mắt nhìn tới. */''}
+  <div class="card"><div class="card-b" style="display:flex;justify-content:flex-end">
+    <button class="btn primary" onclick="Treat.doiTrang('dichvu')">Sang dịch vụ &amp; điều trị${(() => {
+      const n = Treat.keHoachDS(c).length; return n ? ` (${n})` : ''; })()} →</button>
   </div></div>`;
 
   const dau = `
