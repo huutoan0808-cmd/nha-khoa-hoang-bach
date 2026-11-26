@@ -1,4 +1,4 @@
-const CACHE = 'nkhb-app-gq-v1';
+const CACHE = 'nkhb-app-gq-v2';
 /* Phải liệt kê ĐỦ mọi tệp index.html gọi tới. Thiếu một tệp thì lúc mất mạng trình
    duyệt lấy được trang nhưng không lấy được tệp đó, app trắng màn hoặc thiếu hẳn một
    mảng chức năng mà không báo gì. Trước đây thiếu tám tệp: vet, ky, lienthong, pdf,
@@ -9,7 +9,7 @@ const ASSETS = ['.', 'index.html', 'cdha.html', 'app.css',
   'banggia.js', 'banglab.js', 'vet.js', 'ky.js', 'lienthong.js', 'donthuoc.js',
   'pdf.js', 'saoluu.js', 'khoagio.js', 'mahoa.js', 'sync.js', 'importer.js',
   'danhgia.js', 'luong.js', 'minhchung.js', 'congviec.js', 'app.js',
-  'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+  'manifest.webmanifest', 'apple-touch-icon.png', 'icon-gq-192.png', 'icon-gq-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
