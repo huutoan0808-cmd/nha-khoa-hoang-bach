@@ -311,6 +311,7 @@ async function load() {
 function save() {
   /* Bảng phân bổ tiền đã thu tính sẵn cho nhanh — dữ liệu đổi thì phải tính lại */
   if (typeof QT !== 'undefined') QT._thu = null;
+  _noBang = null;          /* dữ liệu vừa đổi — bảng tra công nợ phải dựng lại */
   /* Ghi vết trước khi lưu: quet() so dữ liệu với bản chụp lần trước rồi thêm dòng
      vào db.vet, nên phải chạy trước khi đóng gói db xuống localStorage. */
   if (typeof Vet !== 'undefined') { try { Vet.quet(); } catch(e){} }
@@ -684,11 +685,31 @@ const staffById = id => db.staff.find(s => s.id === id);
    gạch ngang, kèm tên người hủy, giờ hủy và lý do. Xóa hẳn một chứng từ tiền là mất
    dấu, hỏi lại không ai trả lời được; đánh dấu thì vẫn truy được. */
 const ptSong = r => !!r && !r.huy;
+/* Công nợ của từng khách.
+   Trước đây hàm này quét TOÀN BỘ db.treatments và db.receipts mỗi lần được gọi. Với
+   558 khách của Rạch Giá thì không ai thấy gì, nhưng Gò Quao có 6.002 khách và 17.183
+   phiếu thu, mà riêng màn Tổng quan gọi tới ba lần cho mỗi khách — thành hơn 300 triệu
+   phép so sánh, mở màn hình mất hơn 7 giây.
+   Nay quét MỘT lần dựng bảng tra theo mã khách, rồi tra thẳng. Bảng bị xoá mỗi lần
+   save() nên không bao giờ trả về số cũ. */
+let _noBang = null;
+function _dungNoBang(){
+  const b = {}, t = {};
+  (db.treatments || []).forEach(x => {
+    if (!x || !x.customerId || x.status === 'Báo giá') return;
+    b[x.customerId] = (b[x.customerId] || 0) + (+x.price || 0);
+  });
+  (db.receipts || []).forEach(r => {
+    if (!r || !r.customerId || r.old || !ptSong(r)) return;
+    t[r.customerId] = (t[r.customerId] || 0) + (+r.amount || 0);
+  });
+  const m = {};
+  Object.keys(b).forEach(id => { m[id] = Math.max(0, b[id] - (t[id] || 0)); });
+  return (_noBang = m);
+}
 const custDebt = c => {
-  const billed = db.treatments.filter(t => t.customerId === c.id && t.status !== 'Báo giá').reduce((s,t) => s + t.price, 0);
-  /* Bỏ qua phiếu thu nhập từ sổ cũ: khoản nợ mang sang đã là số còn lại sau những lần thu đó */
-  const paid = db.receipts.filter(r => r.customerId === c.id && !r.old && ptSong(r)).reduce((s,r) => s + r.amount, 0);
-  return Math.max(0, billed - paid);
+  if (!c || !c.id) return 0;
+  return (_noBang || _dungNoBang())[c.id] || 0;
 };
 const custLastVisit = c => { const ds = db.receipts.filter(r => r.customerId===c.id).map(r=>r.date).concat(db.appointments.filter(a=>a.customerId===c.id && a.date<=todayISO()).map(a=>a.date)); return ds.sort().pop() || ''; };
 const icdName = code => { const f = ICD.find(i => i[0] === code); return f ? f[0]+' — '+f[1] : (code || ''); };
@@ -1607,7 +1628,28 @@ const Cust = {
       return 0;
     });
   },
+  /* Vẽ tối đa ngần này dòng một lúc. Gò Quao có 6.002 khách; vẽ hết ra là 2,5 MB HTML,
+     mở màn mất 4,7 giây và mỗi phím gõ trong ô tìm đứng gần 2 giây vì phải vẽ lại từ
+     đầu. Không ai đọc tới dòng thứ 300, nên vẽ 300 dòng rồi có nút xem thêm. */
+  SO_DONG: 300,
   hangHTML(list){
+    const het = list.length > this.SO_DONG;
+    const ds = het ? list.slice(0, this.SO_DONG) : list;
+    return this._hang(ds) + (het ? `<tr><td colspan="9" style="text-align:center;padding:14px">
+      <span class="sub-line">Đang hiện ${this.SO_DONG} trong số <b>${list.length}</b> khách —
+      gõ tên hoặc số điện thoại ở ô tìm để lọc nhanh hơn.</span>
+      <div class="form-actions" style="justify-content:center;margin-top:8px">
+        <button class="btn small" onclick="Cust.hienHet()">Hiện tất cả ${list.length} khách</button></div></td></tr>` : '');
+  },
+  /* Bỏ giới hạn, vẽ hết — bấm là chấp nhận chờ */
+  hienHet(){
+    const cu = this.SO_DONG;
+    this.SO_DONG = 1e9;
+    const tb = document.getElementById('custRows');
+    if (tb) tb.innerHTML = this.hangHTML(this.locDS());
+    this.SO_DONG = cu;
+  },
+  _hang(list){
     return list.map(c => {
       const debt = custDebt(c);
       const lastV = custLastVisit(c);
