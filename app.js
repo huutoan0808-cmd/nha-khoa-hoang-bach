@@ -1173,10 +1173,19 @@ const Perm = {
     const s = db.staff.find(x => (x.email || '').trim().toLowerCase() === email);
     return (s && s.active === false) ? null : s;    /* đã nghỉ thì coi như không có quyền */
   },
+  /* Phòng khám mới dựng: chưa một nhân viên nào được điền "Email đăng nhập". Trước
+     đây chỗ này tụt xuống Lễ tân, mà Lễ tân thì không thấy nút sửa nhân viên — nên
+     không ai điền được email cho ai, cả chi nhánh khoá cứng không có đường ra. Chi
+     nhánh Gò Quao vừa dựng đã mắc đúng bẫy này.
+     Hễ CÓ một người được gán email thì cửa đóng lại ngay. Vào được tới đây cũng đã
+     phải là tài khoản chủ phòng khám tự tạo trong Supabase rồi, không phải người lạ. */
+  chuaAiCoEmail(){ return !(db.staff || []).some(x => (x.email || '').trim()); },
   role(){
     if (this.offline()) return 'quanly';
     const s = this.me();
-    return (s && this.roleOf(s)) || 'letan';
+    if (s) return this.roleOf(s) || 'letan';
+    if (this.chuaAiCoEmail()) return 'quanly';
+    return 'letan';
   },
   /* Vai trò của một nhân viên bất kỳ — dùng để lọc danh sách bác sĩ, trợ thủ */
   roleOf(s){ return s ? (s.perm || guessRole(s.role)) : ''; },
@@ -1354,6 +1363,17 @@ SCREENS.dashboard = () => {
     <button class="btn primary" onclick="Cal.form()">${IC.plus} Lịch hẹn mới</button>
     <div class="sub">${WEEKD[new Date().getDay()]}, ${fmtD(T)} · ${apptToday.length} lịch hẹn hôm nay</div></div>
   ${Att.myCardHTML()}
+  ${Perm.chuaAiCoEmail() && !Perm.offline() ? `
+  <div class="card mb" style="border-left:4px solid var(--warn)">
+    <div class="card-b">
+      <b>Chưa nhân viên nào được gán email đăng nhập.</b>
+      <div class="sub-line" style="margin:6px 0 10px">Trong lúc chờ, ai đăng nhập cũng tạm có quyền quản lý.
+        Hãy mở từng người và điền ô <b>Email đăng nhập</b> — điền được một người là dải nhắc này tắt,
+        từ đó mỗi người chỉ còn đúng quyền của mình. Tài khoản của anh đang là
+        <b>${h(Cloud.who() || '(chưa đăng nhập)')}</b>.</div>
+      <button class="btn primary" onclick="HR.dsNhanVien()">Gán email cho nhân viên</button>
+    </div>
+  </div>` : ''}
   ${typeof CV !== 'undefined' ? CV.theTongQuan() : ''}
   <div class="kpis">
     ${Perm.can('thu') ? `<div class="card kpi"><div class="k-label">Doanh thu hôm nay</div><div class="k-value num">${money(revToday)}</div><div class="k-note">${db.receipts.filter(r=>r.date===T && ptSong(r)).length} phiếu thu</div></div>` : ''}
