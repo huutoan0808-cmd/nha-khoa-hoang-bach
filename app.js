@@ -1067,6 +1067,15 @@ const App = {
     await Att.sync();
     if (b) b.style.opacity = '';
   },
+  /* Kéo lại từ đầu, bỏ qua mốc. Dùng khi nghi máy này thiếu hồ sơ so với máy khác.
+     Không xoá gì ở máy: chỉ xin đám mây gửi lại tất cả rồi trộn như thường. */
+  async taiLaiHet(){
+    if (!Cloud.configured() || !Cloud.loggedIn()) { App.toast('Hãy đăng nhập trước'); return; }
+    App.toast('Đang tải lại toàn bộ — có thể mất một lúc…');
+    db.syncMoc = {};
+    await Sync.run(false);
+    App.render();
+  },
   backup(){
     const blob = new Blob([JSON.stringify(db, null, 1)], {type:'application/json'});
     const a = document.createElement('a');
@@ -7505,7 +7514,8 @@ create policy p_rec   on records    for all to authenticated using (true) with c
     save(); App.closeModal(); App.render();
     App.toast(`Tạo ${made} tài khoản, gắn ${linked} email` + (errs.length ? ' · ' + errs.length + ' lỗi' : ' ✓'));
     if (errs.length) App.modal('Một số tài khoản chưa tạo được', errs.map(x => `<div class="alert-line"><span class="alert-ico danger">!</span><div>${h(x)}</div></div>`).join('')
-      + '<div class="note-block" style="margin-top:10px">Lỗi <b>email address is invalid</b> thường do email dùng đuôi lạ — thử đuôi <code>@gmail.com</code>. Lỗi <b>already registered</b> nghĩa là tài khoản đã có sẵn, không cần tạo lại.</div>'
+      + '<div class="note-block" style="margin-top:10px"><b>Signups not allowed</b> nghĩa là dự án Supabase đang khoá việc tạo tài khoản — đây là khoá an toàn, không phải lỗi. Mở tạm để thêm người: Supabase → <b>Authentication → Sign In / Providers</b> → bật <b>Allow new users to sign up</b> → bấm <b>Save changes</b> (nút Save chỉ hiện khi cửa sổ đủ rộng), quay lại đây tạo tài khoản, xong thì <b>TẮT LẠI</b> công tắc đó.<br>'
+      + 'Lỗi <b>email address is invalid</b> thường do email dùng đuôi lạ — thử đuôi <code>@gmail.com</code>. Lỗi <b>already registered</b> nghĩa là tài khoản đã có sẵn, không cần tạo lại — email vẫn được gắn vào hồ sơ.</div>'
       + '<div class="form-actions"><button class="btn" onclick="App.closeModal()">Đóng</button></div>');
   },
 
@@ -9685,6 +9695,8 @@ SCREENS.settings = () => {
     <div class="card-b">
       ${the('Đồng bộ đám mây', (() => { const st = Sync.status(); return `<span class="pill ${st.k}">${h(st.t)}</span>`; })(),
         `<button class="btn small" onclick="App.syncNow()">Đồng bộ ngay</button>`)}
+      ${the('Tải lại toàn bộ từ đám mây', Sync.moTaMoc(),
+        `<button class="btn small" onclick="App.taiLaiHet()">Tải lại toàn bộ</button>`)}
       ${the('Kho dữ liệu bệnh án', `${Sync.moTaKho()} ${Sync.pillKho()}`,
         `<button class="btn small" onclick="Sync.sqlKho()"${khoa}>Xem cách tách kho</button>`)}
       ${the('Sao lưu tự động', `${SL.moTa()} ${SL.pill()}`,

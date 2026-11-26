@@ -170,28 +170,100 @@ const Sync = {
      HTTP vẫn là 200. Máy nào chưa có sẵn dữ liệu thì hiện thiếu khách.
      Phải đọc từng trang cho tới khi hết. */
   TRANG: 1000,
-  async docKho(bang){
-    const ra = [];
-    for (let tu = 0; ; tu += this.TRANG) {
-      /* Bắt buộc có order cố định: không có ORDER BY thì thứ tự giữa hai lần gọi
-         không được đảm bảo, trang sau lặp lại dòng của trang trước và bỏ sót dòng khác. */
-      /* File scan minh chứng (tbl tepMC) nằm chung bảng records nhưng rất nặng — không kéo
-         về mỗi lần đồng bộ, chỉ tải từng file khi bấm xem (xem minhchung.js) */
-      const p = await Cloud.auth('/rest/v1/' + bang + '?select=*&order=id.asc' + (bang === 'records' ? '&tbl=neq.tepMC' : '')
-        + '&limit=' + this.TRANG + '&offset=' + tu, {timeout: 45000}) || [];
-      ra.push(...p);
-      if (p.length < this.TRANG) break;
+
+  /* Số trang xin cùng lúc. Trước đây 24 trang của Gò Quao nối đuôi nhau, trang sau
+     đợi trang trước xong — chờ mạng 24 lần. Xin cùng lúc thì chỉ chờ 4 lượt. */
+  SONG_SONG: 6,
+
+  /* Lùi mốc lại hai phút trước khi cất. Máy khác có thể đang ghi dở một bản ghi mang
+     dấu thời gian sớm hơn mốc ta vừa thấy; lùi lại thì lần sau kéo trùng vài dòng,
+     còn hơn bỏ sót một hồ sơ bệnh nhân. */
+  LUI_MOC: 120000,
+
+  /* Mỗi 24 giờ kéo lại đầy đủ một lần. Kéo theo mốc mà vì lý do nào đó sót một dòng
+     (lệch giờ giữa hai máy, đồng bộ đứt giữa chừng) thì hôm sau nó tự về — không để
+     một hồ sơ mất tăm mà không ai biết. */
+  HAN_DAY_DU: 24 * 3600 * 1000,
+
+  /* ganNhat chỉ được đặt sau một lần kéo đầy đủ TRỌN VẸN, nên chỉ cần nhìn nó.
+     Đừng kiểm thêm "đã có mốc records chưa": kho records của Gò Quao rỗng (bệnh án
+     nằm hết ở kho emr) nên không bao giờ có mốc, và lần nào cũng bị kéo lại đầy đủ. */
+  canDayDu(){
+    const m = db.syncMoc || {};
+    return !m.ganNhat || (Date.now() - m.ganNhat) > this.HAN_DAY_DU;
+  },
+
+  async docTrang(bang, tu, loc){
+    /* Bắt buộc có order cố định: không có ORDER BY thì thứ tự giữa hai lần gọi
+       không được đảm bảo, trang sau lặp lại dòng của trang trước và bỏ sót dòng khác. */
+    /* File scan minh chứng (tbl tepMC) nằm chung bảng records nhưng rất nặng — không kéo
+       về mỗi lần đồng bộ, chỉ tải từng file khi bấm xem (xem minhchung.js) */
+    return await Cloud.auth('/rest/v1/' + bang + '?select=*&order=updated_at.asc,id.asc'
+      + (bang === 'records' ? '&tbl=neq.tepMC' : '') + (loc || '')
+      + '&limit=' + this.TRANG + '&offset=' + tu, {timeout: 45000}) || [];
+  },
+
+  /* tuMoc rỗng = kéo đầy đủ. Có mốc = chỉ xin những dòng sửa sau mốc đó.
+
+     Xin TRANG ĐẦU một mình trước. Lần đồng bộ định kỳ thường chẳng có gì mới, trang
+     đầu về rỗng là xong luôn — một lượt gọi. Bắn sẵn sáu trang song song thì lần nào
+     cũng tốn sáu lượt dù không có dòng nào, mỗi phút một lần, cả ngày. */
+  async docKho(bang, tuMoc){
+    const loc = tuMoc ? '&updated_at=gt.' + encodeURIComponent(tuMoc) : '';
+    const dau = await this.docTrang(bang, 0, loc);
+    if (dau.length < this.TRANG) return dau;
+    /* Còn nhiều thì mới kéo song song cho nhanh — đây là lần đầu máy này lấy dữ liệu,
+       hoặc lần kéo lại đầy đủ định kỳ. */
+    const ra = dau;
+    for (let tu = this.TRANG; ; tu += this.TRANG * this.SONG_SONG) {
+      const lo = [];
+      for (let i = 0; i < this.SONG_SONG; i++) lo.push(this.docTrang(bang, tu + i * this.TRANG, loc));
+      const phan = await Promise.all(lo);
+      phan.forEach(p => ra.push(...p));
+      /* Một trang chưa đầy nghĩa là đã hết dữ liệu — các trang sau chắc chắn rỗng. */
+      if (phan.some(p => p.length < this.TRANG)) break;
       if (ra.length > 500000) break;   /* chặn vòng lặp vô tận nếu máy chủ trả lạ */
     }
     return ra;
   },
-  async pull(){
-    let rows = await this.docKho('records');
+
+  /* Mốc mới = dấu thời gian muộn nhất vừa thấy, lùi lại LUI_MOC. Không thấy dòng nào
+     thì giữ nguyên mốc cũ, đừng đẩy mốc tới trước bằng giờ của máy này — giờ máy này
+     có thể chạy nhanh hơn máy chủ, đẩy tới là bỏ sót. */
+  /* Tính mốc mới nhưng CHƯA cất. Mốc chỉ được cất sau khi đã trộn xong dữ liệu —
+     kéo nửa chừng rồi hỏng mà mốc đã nhích tới thì lần sau bỏ sót đúng những dòng
+     vừa rớt, và không ai biết là đã mất. */
+  mocMoi(rows, mocCu){
+    let max = 0;
+    rows.forEach(r => { const t = Date.parse(r && r.updated_at) || 0; if (t > max) max = t; });
+    if (!max) return mocCu || '';
+    /* Mốc = thời điểm mà ta CHẮC CHẮN đã thấy hết mọi thứ trước nó.
+       Ta đã thấy hết tới max. Còn thứ đang ghi dở ở máy khác thì mang dấu thời gian
+       quanh BÂY GIỜ, nên mọi thứ cũ hơn (bây giờ − 2 phút) coi như đã yên.
+       Lấy số NHỎ HƠN giữa hai cái đó.
+
+       Phải tính theo "bây giờ" chứ không phải lùi thẳng từ max. Lùi thẳng từ max thì
+       một lô nhập liệu cũ — 17.000 phiếu thu Gò Quao ghi trong vòng một phút — sẽ
+       nằm mãi trong cửa sổ 2 phút đó, và cứ mỗi lần đồng bộ lại kéo về đủ 17.000
+       dòng, suốt ngày, dù chẳng ai sửa gì. */
+    const yen = Date.now() - this.LUI_MOC;
+    const moi = new Date(Math.min(max, yen)).toISOString();
+    return (!mocCu || moi > mocCu) ? moi : mocCu;
+  },
+
+  async pull(epDayDu){
+    const dayDu = epDayDu || this.canDayDu();
+    const cu = dayDu ? {} : (db.syncMoc || {});
+    const mocR = dayDu ? '' : (cu.records || ''), mocE = dayDu ? '' : (cu.emr || '');
+    let rows = await this.docKho('records', mocR);
+    const seR = this.mocMoi(rows, mocR);
+    let seE = mocE;
     /* Đọc cả hai kho rồi trộn. Bản ghi bệnh án cũ còn sót trong records sẽ thua bản
        trong emr vì dấu thời gian cũ hơn — thứ tự trộn không ảnh hưởng kết quả. */
     if (this.emrSan !== false) {
       try {
-        const e = await this.docKho('emr');
+        const e = await this.docKho('emr', mocE);
+        seE = this.mocMoi(e, mocE);
         rows = rows.concat(e);
         this.emrSan = true;
       } catch(err){
@@ -235,9 +307,34 @@ const Sync = {
       });
     });
     /* Kết quả của Cơ sở CĐHA (cdha.html ghi). Chỉ đọc: không nằm trong SYNC_TABLES nên
-       không bao giờ bị đẩy ngược lên đè mất kết luận KTV vừa ghi. */
-    const kq = (byTbl.cdha || []).filter(r => !r.deleted).map(r => r.data);
-    if (JSON.stringify(kq) !== JSON.stringify(db.cdhaKQ || [])) { db.cdhaKQ = kq; updated++; }
+       không bao giờ bị đẩy ngược lên đè mất kết luận KTV vừa ghi.
+       Kéo theo mốc thì byTbl.cdha CHỈ có mấy dòng vừa đổi — gán thẳng là xóa sạch các
+       kết quả cũ. Phải trộn theo id, chỉ kéo đầy đủ mới được thay cả danh sách. */
+    const cdha = byTbl.cdha || [];
+    if (dayDu) {
+      const kq = cdha.filter(r => !r.deleted).map(r => r.data);
+      if (JSON.stringify(kq) !== JSON.stringify(db.cdhaKQ || [])) { db.cdhaKQ = kq; updated++; }
+    } else if (cdha.length) {
+      const cu = (db.cdhaKQ || []).slice(), vt = {};
+      cu.forEach((x, i) => { if (x && x.id) vt[x.id] = i; });
+      let doi = false;
+      cdha.forEach(r => {
+        const id = String(r.id).slice('cdha:'.length), at = vt[id];
+        if (r.deleted) { if (at !== undefined) { cu[at] = null; doi = true; } return; }
+        if (at === undefined) { cu.push(r.data); vt[id] = cu.length - 1; } else { cu[at] = r.data; }
+        doi = true;
+      });
+      if (doi) { db.cdhaKQ = cu.filter(Boolean); updated++; }
+    }
+    /* Giờ mới cất mốc: tới đây dữ liệu đã trộn xong xuôi. */
+    db.syncMoc = db.syncMoc || {};
+    /* Kho rỗng thì không có dòng nào để lấy dấu thời gian. Vừa kéo đầy đủ xong mà
+       kho rỗng nghĩa là ta đã thấy hết, cứ đặt mốc ở "bây giờ lùi 2 phút" — không
+       thì kho đó lần nào cũng bị xin lại từ đầu. */
+    const trong = dayDu ? new Date(Date.now() - this.LUI_MOC).toISOString() : '';
+    db.syncMoc.records = seR || trong || db.syncMoc.records;
+    db.syncMoc.emr = seE || trong || db.syncMoc.emr;
+    if (dayDu) db.syncMoc.ganNhat = Date.now();
     return {added, updated, removed};
   },
 
@@ -454,6 +551,17 @@ const Sync = {
       return null;
     } finally { this.busy = false; }
   },
+  /* Mô tả cách đang kéo dữ liệu, cho màn hình Cài đặt */
+  moTaMoc(){
+    const m = db.syncMoc || {};
+    if (!m.ganNhat) return 'Chưa tải đầy đủ lần nào — lần đồng bộ tới sẽ tải hết';
+    const gio = Math.round((Date.now() - m.ganNhat) / 3600000);
+    return 'Bình thường chỉ xin những bản ghi thay đổi sau lần trước, nên rất nhẹ. '
+      + 'Cứ 24 giờ tự tải lại đầy đủ một lần — lần gần nhất '
+      + (gio < 1 ? 'vừa xong' : gio + ' giờ trước') + '. '
+      + 'Nghi máy này thiếu hồ sơ thì bấm nút bên cạnh.';
+  },
+
   /* Mô tả kho dữ liệu bệnh án cho màn hình Cài đặt */
   moTaKho(){
     if (this.emrSan === true)
