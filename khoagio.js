@@ -54,18 +54,46 @@ const KG = {
     return tu <= den ? (bay < tu || bay >= den) : (bay < tu && bay >= den);
   },
 
+  /* ---------- Nhớ trạng thái qua lần tải lại ----------
+     Trước đây "đang khóa" và "lần chạm cuối" chỉ nằm trong bộ nhớ trang: màn hình
+     đang khóa mà bấm F5/Ctrl+F5 là màn khóa biến mất, vào thẳng hồ sơ không cần
+     mật khẩu. Trình duyệt khôi phục tab cũ (mở lại Chrome) cũng vậy. Nay ghi vào
+     sessionStorage, cùng chỗ với phiên đăng nhập, để tải lại vẫn còn khóa. */
+  KHOA_SS: 'nkhb_cloud_kg',
+  docSS(){
+    try { return JSON.parse(sessionStorage.getItem(this.KHOA_SS) || 'null'); } catch(e){ return null; }
+  },
+  ghiSS(){
+    try {
+      sessionStorage.setItem(this.KHOA_SS, JSON.stringify({
+        cham: this.chamCuoi, khoa: this.dangKhoa, ai: Cloud.who(),
+      }));
+    } catch(e){}
+  },
+  xoaSS(){ try { sessionStorage.removeItem(this.KHOA_SS); } catch(e){} },
+
   /* ---------- Vòng canh ---------- */
   khoiDong(){
     if (this._chay) return;
     this._chay = true;
-    this.cham();
+    /* Lấy lại lần chạm cuối của chính phiên này (cùng email). Không có thì tính từ bây giờ. */
+    const cu = this.docSS();
+    const cungPhien = cu && cu.ai && cu.ai === Cloud.who();
+    if (cungPhien && +cu.cham) this.chamCuoi = +cu.cham; else this.cham();
     ['pointerdown','keydown','wheel','touchstart'].forEach(e =>
-      document.addEventListener(e, () => this.cham(), {passive: true, capture: true}));
+      document.addEventListener(e, () => { if (!this.dangKhoa) this.cham(); }, {passive: true, capture: true}));
     document.addEventListener('visibilitychange', () => { if (!document.hidden) this.soat(); });
     setInterval(() => this.soat(), 20000);
+    if (cungPhien && cu.khoa && this.apDung()) { this.khoa(cu.khoa === 'gio' ? 'gio' : 'idle', true); return; }
     this.soat();
   },
-  cham(){ this.chamCuoi = Date.now(); },
+  cham(){
+    const n = Date.now();
+    /* Ghi sessionStorage thưa thôi, khỏi ghi mỗi lần nhấn phím */
+    const ghi = n - (this._ghiLuc || 0) > 5000;
+    this.chamCuoi = n;
+    if (ghi) { this._ghiLuc = n; this.ghiSS(); }
+  },
   soat(){
     if (this.dangKhoa || !this.apDung()) return;
     if (this.ngoaiGio()) { this.khoa('gio'); return; }
@@ -76,13 +104,16 @@ const KG = {
   },
 
   /* ---------- Màn khóa ---------- */
-  khoa(vi){
+  khoa(vi, khoaLai){
     if (this.dangKhoa) return;
-    this.dangKhoa = true;
+    this.dangKhoa = vi === 'gio' ? 'gio' : 'idle';
+    this.ghiSS();
     const c = this.cai();
     const ai = (typeof Vet !== 'undefined') ? Vet.ai() : {ten: Cloud.who()};
     const laGio = vi === 'gio';
-    if (typeof Vet !== 'undefined')
+    if (typeof Vet !== 'undefined' && khoaLai)
+      Vet.ghi('dangxuat', 'Tải lại trang khi màn hình đang khóa — vẫn giữ khóa');
+    else if (typeof Vet !== 'undefined')
       Vet.ghi('dangxuat', laGio
         ? 'Khóa màn hình — ngoài khung giờ được phép truy cập (' + c.tuGio + '–' + c.denGio + ')'
         : 'Khóa màn hình — để không quá ' + c.phutIdle + ' phút');
@@ -133,9 +164,12 @@ const KG = {
     const o = document.getElementById('manKhoa');
     if (o) o.remove();
     this.dangKhoa = false;
+    this._ghiLuc = 0;
     this.cham();
   },
-  thoat(){ this.boKhoa(); App.doLogout(); },
+  /* Đăng xuất từ màn khóa: KHÔNG gỡ màn khóa trước. doLogout hỏi xác nhận, người
+     bấm Hủy thì màn khóa phải còn nguyên; đăng xuất xong trang tự nạp lại. */
+  thoat(){ this.xoaSS(); App.doLogout().then(() => { if (Cloud.loggedIn()) this.ghiSS(); }); },
 
   /* ---------- Cài đặt ---------- */
   moTa(){
