@@ -81,10 +81,22 @@ const Importer = {
   },
 
   /* d/m/yyyy hoặc dd/mm/yyyy → yyyy-mm-dd */
+  /* Sổ cũ trên Google Sheet lẫn HAI kiểu ghi ngày trong cùng một cột: "27/06/2022"
+     là ngày/tháng, còn "6/24/2022" là tháng/ngày — tuỳ máy của người nhập lúc đó
+     đặt ngôn ngữ gì. Bản trước chỉ hiểu ngày/tháng, gặp "tháng 24" là trả về rỗng
+     rồi dòng đó bị bỏ IM LẶNG. Riêng sổ Gò Quao mất 170 lần thu, 217,65 triệu;
+     Thời Đại mất 4 dòng, 3,67 triệu — không ai biết cho tới khi đi dò.
+
+     Cách phân biệt: số nào lớn hơn 12 thì chắc chắn là NGÀY. Cả hai cùng ≤ 12 thì
+     không thể biết, lấy ngày/tháng vì đó là kiểu áp đảo trong cả hai sổ (Gò Quao
+     1.679 dòng ngày/tháng so với 4 dòng tháng/ngày). */
   toISO(s){
     const m = this.norm(s).match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
     if (!m) return '';
-    const d = +m[1], mo = +m[2], y = +m[3];
+    let d = +m[1], mo = +m[2];
+    const y = +m[3];
+    if (d > 12 && mo > 12) return '';            /* cả hai đều không thể là tháng */
+    if (mo > 12) { const t = d; d = mo; mo = t; } /* kiểu tháng/ngày — đảo lại */
     if (d < 1 || d > 31 || mo < 1 || mo > 12) return '';
     return y + '-' + String(mo).padStart(2,'0') + '-' + String(d).padStart(2,'0');
   },
