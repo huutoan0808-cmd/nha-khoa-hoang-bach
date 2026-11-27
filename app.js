@@ -7544,9 +7544,14 @@ create policy p_rec   on records    for all to authenticated using (true) with c
         <td>${off?'<span class="pill danger">Đã khóa</span>':'<span class="pill ok">Đang làm</span>'}</td>
         <td style="white-space:nowrap">
           <button class="btn small" onclick="HR.staffForm('${s.id}','tk')">Sửa</button>
-          ${s.email ? (off
-            ? `<button class="btn small" onclick="Att.setActive('${s.id}',true)">Mở lại</button>`
-            : `<button class="btn small danger" onclick="Att.setActive('${s.id}',false)">Khóa</button>`) : ''}
+          ${/* Nút này trước đây chỉ hiện cho người ĐÃ có email, nên người nghỉ việc mà
+                chưa từng được cấp tài khoản thì không đánh dấu nghỉ được từ đây — phải
+                vào Sửa từng hồ sơ. Gò Quao có 15 người như vậy cùng lúc.
+                Đánh dấu nghỉ không chỉ để chặn đăng nhập: nó còn gỡ người đó khỏi danh
+                sách chọn bác sĩ và khỏi bảng lương. */''}
+          ${off
+            ? `<button class="btn small" onclick="Att.setActive('${s.id}',true)">Nhận lại</button>`
+            : `<button class="btn small danger" onclick="Att.setActive('${s.id}',false)">Đã nghỉ</button>`}
         </td></tr>`;
     }).join('');
     App.modal('Tài khoản truy cập', `
@@ -7569,9 +7574,13 @@ create policy p_rec   on records    for all to authenticated using (true) with c
   },
   setActive(id, on){
     const st = staffById(id); if (!st) return;
-    if (!on && !confirm('Khóa truy cập của "' + st.name + '"? Người này đăng nhập vào sẽ không xem được gì.')) return;
+    if (!on && !confirm('Đánh dấu "' + st.name + '" đã nghỉ việc?\n\n'
+        + '· Không đăng nhập được nữa\n'
+        + '· Không còn trong danh sách chọn bác sĩ, trợ thủ\n'
+        + '· Không còn trong bảng lương\n\n'
+        + 'Hồ sơ cũ vẫn giữ nguyên tên người này. Nhận lại lúc nào cũng được.')) return;
     st.active = on; save(); this.accountsPanel(); App.render();
-    App.toast(on ? 'Đã mở lại quyền cho ' + st.name : 'Đã khóa truy cập của ' + st.name);
+    App.toast(on ? 'Đã nhận lại ' + st.name : 'Đã đánh dấu ' + st.name + ' nghỉ việc');
   },
 
   /* Tạo tài khoản đăng nhập cho nhân viên ngay trong phần mềm */
