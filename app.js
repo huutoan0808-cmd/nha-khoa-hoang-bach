@@ -7591,7 +7591,11 @@ create policy p_rec   on records    for all to authenticated using (true) with c
 
   /* ---------- Quản lý tài khoản truy cập (chỉ quản lý) ---------- */
   accountsPanel(){
-    const rows = db.staff.map(s => {
+    /* Tài khoản đang hoạt động lên trên: đang làm + có email, rồi đang làm mà chưa có
+       tài khoản, cuối cùng là người đã khóa. Trong cùng nhóm giữ thứ tự cũ. */
+    const hang = s => s.active === false ? 2 : (s.email ? 0 : 1);
+    const ds = db.staff.map((s, i) => ({s, i})).sort((a, b) => hang(a.s) - hang(b.s) || a.i - b.i).map(x => x.s);
+    const rows = ds.map(s => {
       const role = s.perm || guessRole(s.role);
       const off = s.active === false;
       return `<tr${off?' style="opacity:.55"':''}>
