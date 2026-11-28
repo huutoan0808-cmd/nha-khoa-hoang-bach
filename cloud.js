@@ -43,7 +43,12 @@ const Cloud = {
        thì tệ hơn nhiều so với việc phiên không được ghi nhớ. */
     try {
       if (s) sessionStorage.setItem(this.CFG_KEY + '_ss', JSON.stringify(s));
-      else sessionStorage.removeItem(this.CFG_KEY + '_ss');
+      else {
+        sessionStorage.removeItem(this.CFG_KEY + '_ss');
+        /* Đăng xuất thì bỏ luôn trạng thái khóa màn hình (khoagio.js), không thì
+           đăng nhập lại cùng tài khoản vẫn bị khóa ngay */
+        sessionStorage.removeItem(this.CFG_KEY + '_kg');
+      }
     } catch(e){}
   },
   configured(){ return !!(this.cfg && this.cfg.url && this.cfg.key); },
@@ -85,6 +90,7 @@ const Cloud = {
       method: 'POST', headers: {Authorization: 'Bearer ' + this.cfg.key},
       body: {email: String(email).trim(), password},
     });
+    try { sessionStorage.removeItem(this.CFG_KEY + '_kg'); } catch(e){}
     this.saveSession({
       access_token: d.access_token, refresh_token: d.refresh_token,
       expires_at: Date.now() + (d.expires_in || 3600) * 1000,

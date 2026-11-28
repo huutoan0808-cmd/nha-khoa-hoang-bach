@@ -602,3 +602,8 @@ input,textarea,[contenteditable]{-webkit-spell-check:none}
 .cv-ph-dau{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:3px}
 .cv-anh{display:block;margin-top:6px;max-width:190px;width:100%;border-radius:8px;
   border:1px solid var(--line);cursor:zoom-in}
+/* Tick chọn cả hàm trên / hàm dưới cạnh sơ đồ răng */
+.tick-ham-nhom{display:inline-flex;flex-wrap:wrap;gap:4px 12px;align-items:center;margin:0 6px}
+.tick-ham{display:inline-flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;white-space:nowrap;user-select:none}
+.tick-ham input{margin:0;width:15px;height:15px;accent-color:var(--accent)}
+.subtabs .tick-ham-nhom{margin-left:auto}

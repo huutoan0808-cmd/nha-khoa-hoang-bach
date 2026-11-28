@@ -1,4 +1,4 @@
-const CACHE = 'nkhb-app-gq-v9';
+const CACHE = 'nkhb-app-gq-v10';
 /* Phải liệt kê ĐỦ mọi tệp index.html gọi tới. Thiếu một tệp thì lúc mất mạng trình
    duyệt lấy được trang nhưng không lấy được tệp đó, app trắng màn hoặc thiếu hẳn một
    mảng chức năng mà không báo gì. Trước đây thiếu tám tệp: vet, ky, lienthong, pdf,

@@ -3713,7 +3713,8 @@ const Treat = {
     }).join('');
     const dem = {};
     Object.values(td).forEach(x => dem[x] = (dem[x] || 0) + 1);
-    return `<div class="arch" style="margin-bottom:10px">${hang(TEETH_UP.slice(0,8))}<span class="gap-mid"></span>${hang(TEETH_UP.slice(8))}</div>
+    return `<div style="margin-bottom:8px">${Tooth.tickHamHTML('rangTri', 'vv')}</div>
+      <div class="arch" style="margin-bottom:10px">${hang(TEETH_UP.slice(0,8))}<span class="gap-mid"></span>${hang(TEETH_UP.slice(8))}</div>
       <div class="arch">${hang(TEETH_DN.slice(0,8))}<span class="gap-mid"></span>${hang(TEETH_DN.slice(8))}</div>
       <div class="legend" style="margin-top:12px">
         ${TIEN_DO.map(([t, k]) => `<span><i class="lg-${k}"></i>${t}${dem[t]?' ('+dem[t]+')':''}</span>`).join('')}
@@ -5855,6 +5856,55 @@ const Tooth = {
      Tìm trong cả hai bộ chứ không theo bộ đang hiện, vì răng đã ghi từ trước vẫn phải
      chọn được. */
   hangCua(n){ return [TEETH_UP, TEETH_DN, TEETH_UP_S, TEETH_DN_S].find(h => h.includes(n)) || null; },
+  /* ---------- Tick "Hàm trên / Hàm dưới" cho sơ đồ ngoài màn chính ----------
+     khoa: tên danh sách đang chọn trong App.state (rangChon ở hồ sơ khách, rangTri ở
+     màn Điều trị). bo: 'vv' = luôn bộ vĩnh viễn (sơ đồ Điều trị chỉ vẽ bộ này),
+     bỏ trống = theo bộ đang hiện. Tick khi chưa bật chọn nhiều thì tự bật luôn. */
+  hamCuaBo(ham, bo){
+    const sua = bo ? bo === 'sua' : this.bo() === 'sua';
+    return ham === 'tren' ? (sua ? TEETH_UP_S : TEETH_UP) : (sua ? TEETH_DN_S : TEETH_DN);
+  },
+  tickHamHTML(khoa, bo){
+    const ds = App.state[khoa] || [];
+    const o = (ham, nhan) => {
+      const hang = this.hamCuaBo(ham, bo);
+      const du = hang.every(n => ds.includes(n));
+      return `<label class="tick-ham"><input type="checkbox"${du ? ' checked' : ''}
+        onchange="Tooth.datHam('${khoa}','${ham}',this.checked,'${bo || ''}')"> ${nhan}</label>`;
+    };
+    return `<span class="tick-ham-nhom">${o('tren', 'Hàm trên')}${o('duoi', 'Hàm dưới')}</span>`;
+  },
+  datHam(khoa, ham, bat, bo){
+    const hang = this.hamCuaBo(ham, bo || '');
+    let ds = (App.state[khoa] || []).slice();
+    if (bat) hang.forEach(n => { if (!ds.includes(n)) ds.push(n); });
+    else ds = ds.filter(n => !hang.includes(n));
+    App.state[khoa] = ds;
+    App.render();
+  },
+  /* Cùng việc đó cho lưới chọn số răng trong hộp thoại: chỉ đụng tới bộ đang hiện,
+     không vẽ lại (vẽ lại là mất phần đang gõ dở trong hộp thoại). */
+  hamTrongHop(cb, ham){
+    const box = cb.closest('.chon-rang-box'); if (!box) return;
+    const bo = [...box.querySelectorAll('div[data-bo]')].find(x => x.style.display !== 'none');
+    if (!bo) return;
+    const hang = bo.querySelector('.hang-rang[data-ham="' + ham + '"]'); if (!hang) return;
+    if (box.dataset.mot) return;
+    hang.querySelectorAll('.chon-rang').forEach(b => b.classList.toggle('primary', cb.checked));
+    const ds = [...box.querySelectorAll('.chon-rang.primary')].map(b => +b.dataset.n).sort((a, b) => a - b);
+    const o = box.querySelector('[name="' + box.dataset.ten + '"]');
+    if (o) o.value = ds.join(', ');
+    Tooth.sauChon(box, ds, true);
+  },
+  /* Tick tự sáng/tắt theo răng đang chọn ở bộ đang hiện (bấm từng răng, gõ tay, đổi bộ) */
+  capNhatTickHop(box){
+    const bo = [...box.querySelectorAll('div[data-bo]')].find(x => x.style.display !== 'none');
+    box.querySelectorAll('.tick-ham input[data-ham]').forEach(cb => {
+      const hang = bo && bo.querySelector('.hang-rang[data-ham="' + cb.dataset.ham + '"]');
+      const nut = hang ? [...hang.querySelectorAll('.chon-rang')] : [];
+      cb.checked = nut.length > 0 && nut.every(b => b.classList.contains('primary'));
+    });
+  },
   /* Vùng nào trên ô ứng với mặt nào của răng này */
   ban(n){
     const tren = this.hamTren(n), phai = this.benPhai(n);
@@ -5997,6 +6047,7 @@ const Tooth = {
     return `<div class="subtabs" style="margin-bottom:8px">
         <button class="subtab ${bo==='vv'?'active':''}" onclick="Tooth.doiBo('vv')">Răng vĩnh viễn</button>
         <button class="subtab ${bo==='sua'?'active':''}" onclick="Tooth.doiBo('sua')">Răng sữa</button>
+        ${lop === 'teethST' ? '' : this.tickHamHTML('rangChon')}
       </div>
       ${soKia ? `<div class="note-block warn-block" style="margin-bottom:8px">Đã ghi <b>${soKia} răng</b>
         ở bộ ${bo==='sua'?'vĩnh viễn':'sữa'} — không hiện trên sơ đồ này.
@@ -6089,8 +6140,10 @@ const Tooth = {
         <span class="cham-hang">${cham.map(k => `<i class="${k}"></i>`).join('')}</span></button>`;
     }).join('');
     const cung = (tren, duoi, nua) =>
-      `<div class="hang-rang">${hang(tren.slice(0,nua))}<span style="flex:none;width:12px"></span>${hang(tren.slice(nua))}</div>
-       <div class="hang-rang">${hang(duoi.slice(0,nua))}<span style="flex:none;width:12px"></span>${hang(duoi.slice(nua))}</div>`;
+      `<div class="hang-rang" data-ham="tren">${hang(tren.slice(0,nua))}<span style="flex:none;width:12px"></span>${hang(tren.slice(nua))}</div>
+       <div class="hang-rang" data-ham="duoi">${hang(duoi.slice(0,nua))}<span style="flex:none;width:12px"></span>${hang(duoi.slice(nua))}</div>`;
+    const tick = (ham, nhan, hangHam) => `<label class="tick-ham"><input type="checkbox" data-ham="${ham}"${
+      hangHam.every(n => chon.includes(n)) ? ' checked' : ''} onchange="Tooth.hamTrongHop(this,'${ham}')"> ${nhan}</label>`;
     /* Răng đã chọn nằm ở bộ nào thì mở sẵn bộ đó, khỏi phải tự đi tìm */
     const bo = chon.length ? (chon.some(n => n >= 51) ? 'sua' : 'vv') : Tooth.bo();
     /* Vẽ sẵn CẢ HAI bộ rồi ẩn một bộ, chứ không vẽ lại khi bấm. Lưới này nằm trong hộp
@@ -6106,6 +6159,7 @@ const Tooth = {
       <div class="subtabs" style="margin-bottom:6px">
         <button type="button" class="subtab ${bo==='vv'?'active':''}" data-bo="vv" onclick="Tooth.doiBoLuoi(this,'vv')">Răng vĩnh viễn</button>
         <button type="button" class="subtab ${bo==='sua'?'active':''}" data-bo="sua" onclick="Tooth.doiBoLuoi(this,'sua')">Răng sữa</button>
+        ${opt.nhieu === false ? '' : `<span class="tick-ham-nhom">${tick('tren', 'Hàm trên', bo === 'sua' ? TEETH_UP_S : TEETH_UP)}${tick('duoi', 'Hàm dưới', bo === 'sua' ? TEETH_DN_S : TEETH_DN)}</span>`}
       </div>
       <div style="overflow-x:auto;max-width:100%">
         <div data-bo="vv"${bo==='vv'?'':' style="display:none"'}>${cung(TEETH_UP, TEETH_DN, 8)}</div>
@@ -6142,6 +6196,8 @@ const Tooth = {
     const hop = btn.closest('.chon-rang-box') || btn.closest('.f') || btn.closest('form') || document;
     hop.querySelectorAll('.subtab[data-bo]').forEach(x => x.classList.toggle('active', x.dataset.bo === b));
     hop.querySelectorAll('div[data-bo]').forEach(x => { x.style.display = x.dataset.bo === b ? '' : 'none'; });
+    hop.querySelectorAll('.chon-rang-box').forEach(x => Tooth.capNhatTickHop(x));
+    if (hop.classList && hop.classList.contains('chon-rang-box')) Tooth.capNhatTickHop(hop);
   },
   chonSo(btn, ten){
     const box = btn.closest('.chon-rang-box');
@@ -6160,6 +6216,7 @@ const Tooth = {
   sauChon(box, ds, chayOnchon){
     const nhan = box.querySelector('.so-rang-da-chon');
     if (nhan) nhan.textContent = ds.length ? ds.map(n => 'R' + n).join(', ') : 'chưa chọn răng nào';
+    Tooth.capNhatTickHop(box);
     const o = box.querySelector('.ho-so-rang');
     if (o) {
       /* Khách lấy từ ô trong form nếu hộp thoại có chọn khách (phiếu lab), không thì
@@ -7534,7 +7591,11 @@ create policy p_rec   on records    for all to authenticated using (true) with c
 
   /* ---------- Quản lý tài khoản truy cập (chỉ quản lý) ---------- */
   accountsPanel(){
-    const rows = db.staff.map(s => {
+    /* Tài khoản đang hoạt động lên trên: đang làm + có email, rồi đang làm mà chưa có
+       tài khoản, cuối cùng là người đã khóa. Trong cùng nhóm giữ thứ tự cũ. */
+    const hang = s => s.active === false ? 2 : (s.email ? 0 : 1);
+    const ds = db.staff.map((s, i) => ({s, i})).sort((a, b) => hang(a.s) - hang(b.s) || a.i - b.i).map(x => x.s);
+    const rows = ds.map(s => {
       const role = s.perm || guessRole(s.role);
       const off = s.active === false;
       return `<tr${off?' style="opacity:.55"':''}>
