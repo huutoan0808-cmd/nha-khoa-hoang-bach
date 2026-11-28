@@ -604,8 +604,16 @@ input,textarea,[contenteditable]{-webkit-spell-check:none}
   border:1px solid var(--line);cursor:zoom-in}
 /* Tick chọn cả hàm trên / hàm dưới cạnh sơ đồ răng */
 .tick-ham-nhom{display:inline-flex;flex-wrap:wrap;gap:4px 12px;align-items:center;margin:0 6px}
-.tick-ham{display:inline-flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;white-space:nowrap;user-select:none}
-.tick-ham input{margin:0;width:15px;height:15px;accent-color:var(--accent)}
+/* Trong hộp thoại, nhãn này nằm trong form .f. Quy tắc `.f label{display:block}` nặng
+   ký hơn `.tick-ham` nên nó thắng: nhãn thành khối, ô tick rơi xuống đường chân chữ,
+   lệch hẳn so với chữ "Hàm trên / Hàm dưới", lại dính luôn cỡ chữ và độ đậm của nhãn
+   form. Phải viết kèm `.f` cho ngang ký mới đè lại được. Ô tick cũng vậy: quy tắc
+   `.f input[type=checkbox]` đặt width:auto, nặng hơn `.tick-ham input`. */
+.tick-ham,.f .tick-ham{display:inline-flex;align-items:center;gap:5px;font-size:13px;
+  font-weight:400;color:inherit;letter-spacing:0;margin:0;cursor:pointer;
+  white-space:nowrap;user-select:none}
+.tick-ham input,.f .tick-ham input[type=checkbox]{margin:0;width:15px;height:15px;
+  flex:none;accent-color:var(--accent)}
 .subtabs .tick-ham-nhom{margin-left:auto}
 /* Báo có người khác đang mở cùng hồ sơ (DangSua, sync.js) */
 #dangSuaBao{position:fixed;top:10px;left:16px;right:16px;margin:0 auto;width:fit-content;z-index:120;display:flex;gap:10px;align-items:flex-start;max-width:680px;background:#FFF4D6;color:#5C3D00;border:1px solid #E8B64A;border-radius:10px;padding:10px 12px;box-shadow:0 6px 20px rgba(0,0,0,.15);font-size:13.5px;line-height:1.45}
