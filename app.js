@@ -10100,6 +10100,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('online', () => { if (typeof DT !== 'undefined') setTimeout(() => DT.tuGuiLai(), 5000); });
   /* Từ nay máy nào nhập gì thì máy khác thấy trong vòng một phút, khỏi bấm nút ⟳ */
   if (typeof Sync !== 'undefined') Sync.khoiDongTuDong();
+  /* Báo khi có người khác đang mở cùng hồ sơ khách (sync.js) */
+  if (typeof DangSua !== 'undefined') DangSua.khoiDong();
   /* Sao lưu: đọc trạng thái để vẽ đúng ô trong Cài đặt, rồi chụp bản của ngày hôm
      nay nếu chưa có. Để chậm một nhịp cho màn hình hiện ra trước. */
   setTimeout(() => {

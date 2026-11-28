@@ -607,3 +607,8 @@ input,textarea,[contenteditable]{-webkit-spell-check:none}
 .tick-ham{display:inline-flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;white-space:nowrap;user-select:none}
 .tick-ham input{margin:0;width:15px;height:15px;accent-color:var(--accent)}
 .subtabs .tick-ham-nhom{margin-left:auto}
+/* Báo có người khác đang mở cùng hồ sơ (DangSua, sync.js) */
+#dangSuaBao{position:fixed;top:10px;left:16px;right:16px;margin:0 auto;width:fit-content;z-index:120;display:flex;gap:10px;align-items:flex-start;max-width:680px;background:#FFF4D6;color:#5C3D00;border:1px solid #E8B64A;border-radius:10px;padding:10px 12px;box-shadow:0 6px 20px rgba(0,0,0,.15);font-size:13.5px;line-height:1.45}
+#dangSuaBao .ds-phu{display:block;font-size:12.5px;opacity:.85;margin-top:2px}
+#dangSuaBao .ds-dong{background:none;border:0;font-size:20px;line-height:1;color:inherit;cursor:pointer;padding:0 2px}
+@media print{#dangSuaBao{display:none!important}}

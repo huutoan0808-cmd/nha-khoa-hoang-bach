@@ -199,7 +199,9 @@ const Sync = {
     /* File scan minh chứng (tbl tepMC) nằm chung bảng records nhưng rất nặng — không kéo
        về mỗi lần đồng bộ, chỉ tải từng file khi bấm xem (xem minhchung.js) */
     return await Cloud.auth('/rest/v1/' + bang + '?select=*&order=updated_at.asc,id.asc'
-      + (bang === 'records' ? '&tbl=neq.tepMC' : '') + (loc || '')
+      /* tbl dangsua = dấu "đang mở hồ sơ" (DangSua bên dưới), 20 giây ghi một lần —
+         kéo về theo đồng bộ thì vô ích mà lần nào cũng có dòng mới */
+      + (bang === 'records' ? '&tbl=not.in.(tepMC,dangsua)' : '') + (loc || '')
       + '&limit=' + this.TRANG + '&offset=' + tu, {timeout: 45000}) || [];
   },
 
@@ -602,5 +604,121 @@ create policy "sua"  on emr for update to authenticated using (true);</textarea>
     if (!this.lastAt) return {k:'info', t:'Đã đăng nhập — chưa đồng bộ lần nào'};
     const m = Math.round((Date.now() - this.lastAt) / 60000);
     return {k:'ok', t: m < 1 ? 'Vừa đồng bộ xong' : 'Đồng bộ ' + m + ' phút trước'};
+  },
+};
+
+/* ---------- Báo khi có người khác đang mở cùng một hồ sơ khách ----------
+   Đồng bộ giữ bản LƯU SAU CÙNG của từng hồ sơ. Hai người sửa cùng một khách trong
+   vòng chưa tới một phút (lễ tân trên máy tính, bác sĩ trên điện thoại) thì phần
+   của người lưu trước bị đè mất mà không ai hay. Cách chặn: mỗi máy cứ 20 giây ghi
+   một dấu "máy này đang mở hồ sơ khách X" vào bảng records (tbl 'dangsua', mỗi máy
+   MỘT dòng, ghi đè lên nhau), rồi đọc xem còn máy nào khác cũng đang mở khách X.
+   Dấu quá 75 giây không được làm mới là coi như máy đó đã rời hồ sơ. */
+const DangSua = {
+  CHU_KY_MS: 20000,
+  CON_SONG_MS: 75000,
+  _cuoi: null, _tu: 0, _khac: [], _an: '', _dang: false,
+
+  maMay(){
+    let m = '';
+    try { m = localStorage.getItem('nkhb_may') || ''; } catch(e){}
+    if (!m) {
+      m = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      try { localStorage.setItem('nkhb_may', m); } catch(e){}
+    }
+    return m;
+  },
+  loaiMay(){
+    const ua = navigator.userAgent || '';
+    if (/iPad|Tablet/i.test(ua)) return 'máy tính bảng';
+    return /Mobi|Android|iPhone/i.test(ua) ? 'điện thoại' : 'máy tính';
+  },
+  /* Hồ sơ khách đang hiện trên màn hình, '' nếu không mở hồ sơ nào */
+  khachDangMo(){
+    if (document.hidden || typeof App === 'undefined' || App.choMoKhoa) return '';
+    if (App.cur === 'customers') return App.state.custSel || '';
+    if (App.cur === 'treatment') return App.state.treatCust || '';
+    return '';
+  },
+  sanSang(){ return Cloud.configured() && Cloud.loggedIn(); },
+
+  async nhip(){
+    if (this._dang || !this.sanSang()) return;
+    const k = this.khachDangMo();
+    if (!k && !this._cuoi) return;          /* không mở gì, cũng chưa báo gì — khỏi gọi mạng */
+    if (k !== this._cuoi) this._tu = Date.now();
+    this._dang = true;
+    try {
+      const me = (typeof Perm !== 'undefined' && Perm.me()) || null;
+      await Cloud.auth('/rest/v1/records?on_conflict=id', {
+        method: 'POST', headers: {Prefer: 'resolution=merge-duplicates'},
+        body: [{id: 'dangsua:' + this.maMay(), tbl: 'dangsua', deleted: false,
+          updated_at: new Date().toISOString(),
+          data: {cust: k, email: Cloud.who() || '', ten: (me && me.name) || '',
+                 loai: this.loaiMay(), tu: new Date(this._tu).toISOString()}}],
+      });
+      this._cuoi = k;
+      if (!k) { this._khac = []; this.ve(); return; }
+      const tuLuc = new Date(Date.now() - this.CON_SONG_MS).toISOString();
+      const rows = await Cloud.auth('/rest/v1/records?select=id,data,updated_at&tbl=eq.dangsua'
+        + '&updated_at=gt.' + encodeURIComponent(tuLuc)) || [];
+      const toi = 'dangsua:' + this.maMay();
+      /* Người dùng có thể đã chuyển sang khách khác trong lúc chờ mạng */
+      if (this.khachDangMo() !== k) return;
+      this._khac = rows.filter(r => r.id !== toi && r.data && r.data.cust === k);
+      this.ve();
+    } catch(e){ /* mất mạng thì thôi, nhịp sau thử lại; đừng làm phiền người dùng */ }
+    finally { this._dang = false; }
+  },
+
+  /* Chỉ gọi mạng khi đổi hồ sơ; đứng yên thì để nhịp 20 giây lo */
+  soat(){
+    const k = this.khachDangMo();
+    if (k !== this._cuoi) {
+      /* Bấm × chỉ ẩn cho lần mở này; rời hồ sơ rồi quay lại thì phải báo lại */
+      this._an = '';
+      if (this._khac.length) { this._khac = []; this.ve(); }
+      this.nhip();
+    }
+  },
+
+  noiDung(){
+    const toiEmail = (Cloud.who() || '').toLowerCase();
+    const gio = s => { const d = new Date(s); return isNaN(d) ? '' : String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+    const ds = this._khac.map(r => {
+      const d = r.data;
+      const ai = (d.email || '').toLowerCase() === toiEmail
+        ? 'Tài khoản của bạn (một máy khác)'
+        : '<b>' + h(d.ten || d.email || 'Một người khác') + '</b>';
+      return ai + ' đang mở trên ' + h(d.loai || 'máy khác') + (gio(d.tu) ? ' từ ' + gio(d.tu) : '');
+    });
+    return '⚠ Hồ sơ này đang có người khác mở: ' + ds.join('; ')
+      + '. <span class="ds-phu">Hai người cùng sửa thì bản lưu sau sẽ đè mất phần của người lưu trước — hãy hỏi nhau trước khi sửa.</span>';
+  },
+  ve(){
+    let el = document.getElementById('dangSuaBao');
+    const k = this.khachDangMo();
+    const khoa = k + '|' + this._khac.map(r => r.id).sort().join(',');
+    const hien = k && this._khac.length && this._an !== khoa;
+    if (!hien) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'dangSuaBao';
+      el.setAttribute('role', 'alert');
+      document.body.appendChild(el);
+    }
+    el.innerHTML = '<div class="ds-chu">' + this.noiDung() + '</div>'
+      + '<button class="ds-dong" title="Ẩn thông báo" onclick="DangSua.an()">×</button>';
+  },
+  an(){
+    this._an = this.khachDangMo() + '|' + this._khac.map(r => r.id).sort().join(',');
+    this.ve();
+  },
+
+  khoiDong(){
+    if (this._timer) return;
+    this._timer = setInterval(() => this.nhip(), this.CHU_KY_MS);
+    setInterval(() => this.soat(), 1500);
+    document.addEventListener('visibilitychange', () => this.nhip());
   },
 };
